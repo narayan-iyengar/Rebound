@@ -57,6 +57,13 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .background(Color(.systemGroupedBackground))
         .navigationBarHidden(true)
+        .alert("Video Not Saved to Photos",
+               isPresented: Binding(get: { appState.photosSaveFailureMessage != nil },
+                                    set: { if !$0 { appState.photosSaveFailureMessage = nil } })) {
+            Button("OK", role: .cancel) { appState.photosSaveFailureMessage = nil }
+        } message: {
+            Text(appState.photosSaveFailureMessage ?? "")
+        }
         .sheet(isPresented: $showStatsSheet) {
             CareerStatsSheet()
         }

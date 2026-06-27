@@ -1332,6 +1332,11 @@ struct UltraMinimalRecordingView: View {
                     debugPrint("📹 Starting save to Photos...")
                     photosSaved = await saveVideoToPhotosAsync(url: url)
                     debugPrint("📹 Photos save: \(photosSaved ? "SUCCESS" : "FAILED")")
+                    if !photosSaved {
+                        await MainActor.run {
+                            appState.photosSaveFailureMessage = "Video saved to the app but NOT to Photos. Check Photos permissions in Settings. Local copy is preserved — upload it from Game Log."
+                        }
+                    }
 
                     // 2. Upload to YouTube - REMOVED (Manual only now)
                     /*

@@ -112,6 +112,10 @@ class AppState: ObservableObject {
     // Pre-fill data from calendar (cleared after use)
     @MainActor @Published var pendingCalendarGame: (opponent: String, location: String, team: String?)?
 
+    /// Set when the post-recording Photos save fails. Surfaced as an alert on
+    /// Home so the user knows the only backup is the local Documents file.
+    @MainActor @Published var photosSaveFailureMessage: String?
+
     // Recent games now come from persistence
     var recentGames: [Game] {
         GamePersistenceManager.shared.savedGames
