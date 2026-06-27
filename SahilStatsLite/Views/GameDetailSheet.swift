@@ -123,6 +123,25 @@ struct GameDetailSheet: View {
                                     .cornerRadius(12)
                                 }
 
+                                // Recovery path: swap in a different video file (e.g. when
+                                // the recorded one is corrupt or already failed YouTube
+                                // server-side processing). Pick from Photos, replace the
+                                // game's videoURL, then the Upload button above retries.
+                                if isImportingVideo {
+                                    ProgressView("Importing replacement…")
+                                } else {
+                                    PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
+                                        Label("Use a different video from Photos", systemImage: "arrow.triangle.2.circlepath")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                    }
+                                    .onChange(of: selectedVideoItem) { _, newItem in
+                                        if let newItem { importVideo(from: newItem) }
+                                    }
+                                }
+
                                 if let error = youtubeService.lastError {
                                     Text(error)
                                         .font(.caption)
