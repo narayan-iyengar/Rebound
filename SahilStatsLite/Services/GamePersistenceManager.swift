@@ -50,25 +50,17 @@ class GamePersistenceManager: ObservableObject {
         var game = savedGames[index]
         
         if success {
-            debugPrint("✅ [Persistence] Upload success for game \(gameID). Starting auto-cleanup.")
+            debugPrint("✅ [Persistence] Upload success for game \(gameID).")
             game.youtubeStatus = .uploaded
-            
+
             if let vid = videoID {
                 game.youtubeVideoId = vid
             }
-            
-            // AUTO-CLEANUP: Delete local file to save space (Jony Ive style)
-            if let url = game.videoURL {
-                do {
-                    if fileManager.fileExists(atPath: url.path) {
-                        try fileManager.removeItem(at: url)
-                        debugPrint("🗑️ [Auto-Cleanup] Deleted local video: \(url.path)")
-                    }
-                    game.videoURL = nil // Clear the link
-                } catch {
-                    debugPrint("⚠️ [Auto-Cleanup] Failed to delete file: \(error)")
-                }
-            }
+
+            // KEEP the local file. YouTube can mark a video as "Processing abandoned"
+            // hours or days after upload — when that happens, the local copy is the
+            // fastest re-upload path (Photos backup may be in iCloud and slow to fetch).
+            // Storage cleanup is handled manually from the Game Details sheet.
         } else {
             debugPrint("❌ [Persistence] Upload failed for game \(gameID).")
             game.youtubeStatus = .failed

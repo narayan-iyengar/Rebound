@@ -126,6 +126,20 @@ struct GameDetailSheet: View {
                                         if let newItem { importVideo(from: newItem) }
                                     }
                                 }
+
+                                // Manual storage cleanup. Local copy is kept after upload
+                                // (in case YouTube fails server-side), but the user can
+                                // free space once they're confident the upload is good.
+                                if let url = resolveVideoURL(for: game),
+                                   let size = localFileSize(at: url) {
+                                    Button(role: .destructive) {
+                                        deleteLocalFile(url: url)
+                                    } label: {
+                                        Label("Delete local file (\(size))", systemImage: "trash")
+                                            .font(.caption)
+                                    }
+                                    .padding(.top, 4)
+                                }
                             }
                         } else if youtubeService.isUploading && youtubeService.currentUploadingGameID == game.id {
                             VStack(spacing: 8) {
@@ -309,6 +323,27 @@ struct GameDetailSheet: View {
             } catch {
                 debugPrint("Failed to import video: \(error)")
             }
+        }
+    }
+
+    private func localFileSize(at url: URL) -> String? {
+        guard let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int else { return nil }
+        let mb = Double(bytes) / 1_000_000
+        if mb >= 1000 {
+            return String(format: "%.1f GB", mb / 1000)
+        }
+        return String(format: "%.0f MB", mb)
+    }
+
+    private func deleteLocalFile(url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+            var updatedGame = game
+            updatedGame.videoURL = nil
+            persistenceManager.saveGame(updatedGame)
+            debugPrint("[Cleanup] Deleted local video: \(url.path)")
+        } catch {
+            debugPrint("[Cleanup] Failed to delete: \(error)")
         }
     }
 
