@@ -85,6 +85,26 @@ struct GameDetailSheet: View {
                                         .padding(.vertical, 8)
                                     }
                                 }
+
+                                // Re-upload recovery: YouTube can flip a video to
+                                // "Processing abandoned" days later, even though we
+                                // recorded it as uploaded. Pick a backup from Photos —
+                                // importVideo() resets youtubeStatus to .local, which
+                                // exposes the Upload button on the next render.
+                                if isImportingVideo {
+                                    ProgressView("Importing replacement…")
+                                } else {
+                                    PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
+                                        Label("Re-upload with a different video", systemImage: "arrow.triangle.2.circlepath")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                    }
+                                    .onChange(of: selectedVideoItem) { _, newItem in
+                                        if let newItem { importVideo(from: newItem) }
+                                    }
+                                }
                             }
                         } else if youtubeService.isUploading && youtubeService.currentUploadingGameID == game.id {
                             VStack(spacing: 8) {
