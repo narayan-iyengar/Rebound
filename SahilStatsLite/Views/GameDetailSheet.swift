@@ -12,6 +12,27 @@
 
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
+
+/// File-URL-based transferable for video import. Avoids loading the entire
+/// multi-GB file into RAM (which `Data.self` does). Photos hands us a temp
+/// file URL we copy into Documents.
+private struct ImportedVideoFile: Transferable {
+    let url: URL
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { video in
+            SentTransferredFile(video.url)
+        } importing: { received in
+            // received.file is a system-managed temp URL that vanishes when this
+            // closure returns. Copy it into our own temp dir so the caller can
+            // move it to its final destination on the main thread.
+            let copy = FileManager.default.temporaryDirectory
+                .appendingPathComponent("picked_\(UUID().uuidString).mov")
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return Self(url: copy)
+        }
+    }
+}
 
 // MARK: - Game Detail Sheet
 
@@ -252,37 +273,41 @@ struct GameDetailSheet: View {
 
     private func importVideo(from item: PhotosPickerItem) {
         isImportingVideo = true
+        selectedVideoItem = nil  // reset so re-picking the same video works
 
-        item.loadTransferable(type: Data.self) { result in
-            DispatchQueue.main.async {
-                isImportingVideo = false
-
-                switch result {
-                case .success(let data):
-                    guard let data = data else { return }
-
-                    // Save to Documents
-                    let filename = "imported_\(game.id).mov"
-                    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                    let destinationURL = documentsPath.appendingPathComponent(filename)
-
-                    do {
-                        try data.write(to: destinationURL)
-
-                        // Update game record
-                        var updatedGame = game
-                        updatedGame.videoURL = destinationURL
-                        updatedGame.youtubeStatus = .local
-                        persistenceManager.saveGame(updatedGame)
-
-                        debugPrint("Video imported successfully: \(destinationURL.path)")
-                    } catch {
-                        debugPrint("Failed to save imported video: \(error)")
-                    }
-
-                case .failure(let error):
-                    debugPrint("Failed to load video from picker: \(error)")
+        Task {
+            defer { Task { @MainActor in isImportingVideo = false } }
+            do {
+                // File-based transfer: no in-memory buffer. For a 4K 41-min game
+                // this used to allocate 3–5 GB of RAM via Data.self and either
+                // hang or get killed by the OS.
+                guard let imported = try await item.loadTransferable(type: ImportedVideoFile.self) else {
+                    debugPrint("Picker returned nil video file")
+                    return
                 }
+
+                // Move into Documents under the game's stable filename
+                let filename = "imported_\(game.id).mov"
+                let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let destinationURL = documentsPath.appendingPathComponent(filename)
+
+                if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                }
+                try FileManager.default.moveItem(at: imported.url, to: destinationURL)
+
+                await MainActor.run {
+                    var updatedGame = game
+                    updatedGame.videoURL = destinationURL
+                    updatedGame.youtubeStatus = .local
+                    // Clear stale YouTube video ID so the next upload registers
+                    // a fresh one (otherwise UI keeps linking to the broken video)
+                    updatedGame.youtubeVideoId = nil
+                    persistenceManager.saveGame(updatedGame)
+                    debugPrint("Video imported successfully: \(destinationURL.path)")
+                }
+            } catch {
+                debugPrint("Failed to import video: \(error)")
             }
         }
     }
