@@ -707,12 +707,15 @@ struct UltraMinimalRecordingView: View {
                 Text(period)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white.opacity(0.7))
-                    .frame(width: 64, alignment: .center)
+                    .frame(width: 64, height: 44, alignment: .center)  // 44pt min for hit target
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .padding(.trailing, 6)
                     .contentShape(Rectangle())
-                    .onTapGesture { advancePeriod() }  // Tap period to advance
+                    .onTapGesture {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        advancePeriod()
+                    }
             }
             .frame(height: 36)
 
@@ -764,9 +767,12 @@ struct UltraMinimalRecordingView: View {
                         .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(clockColor)
                 }
-                .frame(width: 64, alignment: .center)
+                .frame(width: 64, height: 44, alignment: .center)  // 44pt min for hit target
                 .contentShape(Rectangle())
-                .onTapGesture { toggleClock() }
+                .onTapGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    toggleClock()
+                }
                 .padding(.trailing, 6)
             }
             .frame(height: 36)

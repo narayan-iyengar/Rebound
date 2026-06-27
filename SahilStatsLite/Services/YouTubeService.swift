@@ -13,6 +13,7 @@
 
 import Foundation
 import Security
+import AVFoundation
 import GoogleSignIn
 import Combine
 
@@ -117,6 +118,20 @@ class YouTubeService: NSObject, ObservableObject {
             return
         }
 
+        // Verify file is a playable video before uploading. Catches corrupt MOV
+        // files (truncated MOOV atom from app force-quit mid-write) that would
+        // upload "successfully" but get "Processing abandoned" by YouTube.
+        let asset = AVURLAsset(url: url)
+        let isPlayable = (try? await asset.load(.isPlayable)) ?? false
+        let duration = (try? await asset.load(.duration)) ?? .zero
+        let durationSec = CMTimeGetSeconds(duration)
+        guard isPlayable, durationSec.isFinite, durationSec > 1 else {
+            debugPrint("📺 Refusing to upload corrupt/empty video (playable=\(isPlayable), duration=\(durationSec)s)")
+            lastError = "Video file is corrupt or empty — recording may have ended unexpectedly. Re-record or recover from Photos."
+            return
+        }
+        debugPrint("📺 Pre-upload check OK: duration=\(Int(durationSec))s, playable=\(isPlayable)")
+
         isUploading = true
         currentUploadingGameID = gameID
         completedVideoID = nil
@@ -125,14 +140,14 @@ class YouTubeService: NSObject, ObservableObject {
 
         do {
             let accessToken = try await getFreshAccessToken()
-            
+
             // Step 1: Initialize Resumable Upload (Foreground - fast)
             let fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as! Int
             let uploadURL = try await initializeUpload(title: title, description: description, accessToken: accessToken, fileSize: fileSize)
-            
+
             // Step 2: Start Background Upload
             startBackgroundUpload(fileURL: url, uploadURL: uploadURL)
-            
+
         } catch {
             debugPrint("📺 Upload failed to start: \(error.localizedDescription)")
             lastError = error.localizedDescription
@@ -282,7 +297,10 @@ class YouTubeService: NSObject, ObservableObject {
                 "categoryId": "17" // Sports
             ],
             "status": [
-                "privacyStatus": "unlisted"
+                "privacyStatus": "unlisted",
+                // CRITICAL: without this YouTube auto-flags as kids content (channel
+                // context + youth basketball titles) which kills comments/notifications/analytics.
+                "selfDeclaredMadeForKids": false
             ]
         ]
 
@@ -468,25 +486,41 @@ extension YouTubeService: URLSessionDelegate, URLSessionTaskDelegate, URLSession
     }
     
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        let httpStatus = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+        let transportError = error
         Task { @MainActor in
             let gameID = self.currentUploadingGameID
             let videoID = self.completedVideoID
-            
+
             self.isUploading = false
             self.currentUploadingGameID = nil
             self.completedVideoID = nil
-            
-            if let error = error {
-                debugPrint("📺 Background upload failed: \(error.localizedDescription)")
-                self.lastError = error.localizedDescription
-                if let id = gameID {
-                    self.onUploadCompleted?(id, false, nil)
-                }
-            } else {
-                debugPrint("📺 Background upload completed successfully")
+
+            // Real success requires: no transport error + 2xx HTTP status + we got a video ID back.
+            // Previously we only checked transport error, so HTTP 4xx (YouTube rejected) and
+            // missing-ID responses were silently treated as success.
+            let httpOK = (200..<300).contains(httpStatus)
+            let success = transportError == nil && httpOK && videoID != nil
+
+            if success {
+                debugPrint("📺 Background upload completed successfully (id=\(videoID ?? "?"))")
                 self.uploadProgress = 1.0
                 if let id = gameID {
                     self.onUploadCompleted?(id, true, videoID)
+                }
+            } else {
+                let reason: String
+                if let err = transportError {
+                    reason = err.localizedDescription
+                } else if !httpOK {
+                    reason = "YouTube rejected upload (HTTP \(httpStatus))"
+                } else {
+                    reason = "Upload finished but no video ID returned"
+                }
+                debugPrint("📺 Background upload failed: \(reason)")
+                self.lastError = reason
+                if let id = gameID {
+                    self.onUploadCompleted?(id, false, nil)
                 }
             }
         }
