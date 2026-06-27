@@ -52,7 +52,7 @@ A hybrid of **XBotGO** (auto-tracking) + **ScoreCam** (video with score overlay)
 
 <h2>GitHub Repository</h2>
 
-**Public repo**: https://github.com/narayan-iyengar/SahilStatsLite
+**Public repo**: https://github.com/narayan-iyengar/Rebound
 
 ---
 
