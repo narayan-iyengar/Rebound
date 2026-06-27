@@ -14,6 +14,7 @@
 
 import SwiftUI
 import EventKit
+import PhotosUI
 
 // MARK: - Settings View
 
@@ -29,6 +30,13 @@ struct SettingsView: View {
     @State private var newTeamName: String = ""
     @State private var showAddTeam: Bool = false
     @State private var showStreamKey: Bool = false
+
+    // Manual YouTube upload (recovery path when normal flow fails)
+    @State private var manualUploadItem: PhotosPickerItem?
+    @State private var showManualUploadSheet: Bool = false
+    @State private var manualUploadURL: URL?
+    @State private var manualUploadTitle: String = ""
+    @State private var isPreparingManualUpload: Bool = false
 
     var body: some View {
         NavigationView {
@@ -103,6 +111,45 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(.red)
                         }
+
+                        // Manual upload recovery — pick any video from Photos and push it up.
+                        // Use when the normal Game Log upload failed or you want to upload
+                        // an older video that wasn't recorded in the app.
+                        if isPreparingManualUpload {
+                            HStack(spacing: 10) {
+                                ProgressView().scaleEffect(0.8)
+                                Text("Preparing video…")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else if youtubeService.isUploading {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Image(systemName: "arrow.up.circle.fill")
+                                        .foregroundColor(.red)
+                                    Text("Uploading… \(Int(youtubeService.uploadProgress * 100))%")
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Button("Cancel") { youtubeService.cancelUpload() }
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                                ProgressView(value: youtubeService.uploadProgress)
+                            }
+                        } else {
+                            PhotosPicker(selection: $manualUploadItem, matching: .videos) {
+                                Label("Upload Video from Photos", systemImage: "square.and.arrow.up")
+                            }
+                            .onChange(of: manualUploadItem) { _, newItem in
+                                if let newItem { prepareManualUpload(from: newItem) }
+                            }
+                        }
+
+                        if let err = youtubeService.lastError, !err.isEmpty {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
                     } else {
                         Button {
                             Task {
@@ -119,7 +166,10 @@ struct SettingsView: View {
                 } header: {
                     Text("YouTube")
                 } footer: {
-                    Text("Connect to upload game videos manually from the Game Log.")
+                    Text("Connect to upload game videos manually from the Game Log. Use 'Upload Video from Photos' for recovery — e.g., when an upload failed or you want to push an older recording.")
+                }
+                .sheet(isPresented: $showManualUploadSheet) {
+                    manualUploadSheet
                 }
 
                 // My Teams Section (for smart opponent detection)
@@ -405,5 +455,93 @@ struct SettingsView: View {
         }
 
         calendarManager.saveSelectedCalendars(selected)
+    }
+
+    // MARK: - Manual YouTube Upload (recovery path)
+
+    private var manualUploadSheet: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("Title", text: $manualUploadTitle)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Video Title")
+                } footer: {
+                    Text("Uploads as Unlisted to the connected YouTube channel. Description is fixed: 'Uploaded with Rebound'.")
+                }
+            }
+            .navigationTitle("Manual Upload")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        if let url = manualUploadURL {
+                            try? FileManager.default.removeItem(at: url)
+                        }
+                        manualUploadURL = nil
+                        showManualUploadSheet = false
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Upload") {
+                        startManualUpload()
+                    }
+                    .disabled(manualUploadTitle.trimmingCharacters(in: .whitespaces).isEmpty || manualUploadURL == nil)
+                }
+            }
+        }
+    }
+
+    /// Load the picked video into a temp file so YouTubeService can upload it.
+    private func prepareManualUpload(from item: PhotosPickerItem) {
+        isPreparingManualUpload = true
+        manualUploadItem = nil  // reset so re-pick works
+        Task {
+            defer { Task { @MainActor in isPreparingManualUpload = false } }
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    await MainActor.run { youtubeService.lastError = "Could not load video from Photos." }
+                    return
+                }
+                let tmpURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("manual_\(UUID().uuidString).mov")
+                try data.write(to: tmpURL)
+
+                let df = DateFormatter()
+                df.dateStyle = .medium
+                let defaultTitle = "Rebound Upload — \(df.string(from: Date()))"
+
+                await MainActor.run {
+                    manualUploadURL = tmpURL
+                    manualUploadTitle = defaultTitle
+                    showManualUploadSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    youtubeService.lastError = "Failed to load video: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func startManualUpload() {
+        guard let url = manualUploadURL else { return }
+        let title = manualUploadTitle.trimmingCharacters(in: .whitespaces)
+        let gameID = "manual_\(Int(Date().timeIntervalSince1970))"
+        showManualUploadSheet = false
+
+        Task {
+            await youtubeService.uploadVideo(
+                url: url,
+                title: title,
+                description: "Uploaded with Rebound",
+                gameID: gameID
+            )
+            // Note: the temp file is left in place — URLSession's background upload
+            // needs it readable for the lifetime of the task. The system clears the
+            // temp directory periodically; we don't need to delete manually.
+            await MainActor.run { manualUploadURL = nil }
+        }
     }
 }
