@@ -245,16 +245,19 @@ struct UltraMinimalRecordingView: View {
                 )
             }
 
-            // Scoreboard display at bottom-right (clock still tappable)
+            // Scoreboard (bottom-right, display only) + Control Bar (bottom-left)
             if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
                 VStack {
                     Spacer()
-                    HStack(alignment: .bottom) {
-                        // Subtle zoom indicator (shows when zoomed in or out from 1.0x)
-                        if (displayZoom > 1.05 || displayZoom < 0.95) && !appState.isStatsOnly {
-                            zoomIndicator
-                                .padding(.leading, 16)
+                    HStack(alignment: .bottom, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            // Subtle zoom indicator above controls
+                            if (displayZoom > 1.05 || displayZoom < 0.95) && !appState.isStatsOnly {
+                                zoomIndicator
+                            }
+                            gameControlsBar
                         }
+                        .padding(.leading, 12)
 
                         Spacer()
 
@@ -672,6 +675,95 @@ struct UltraMinimalRecordingView: View {
         recordingManager.onFrameForAI = nil
     }
 
+    // MARK: - Game Controls Bar (bottom-left)
+    // Persistent control surface for the phone-as-controller mode (no Watch, manual gimbal).
+    // Replaces hidden gestures and the buried stats-sheet controls. Each button is a real
+    // 60×56pt target with icon + label and haptic feedback. Hidden when the Watch is
+    // actively driving the game (phone reverts to dumb-camera mode).
+    private var gameControlsBar: some View {
+        HStack(spacing: 6) {
+            // Pause / Resume clock
+            controlButton(
+                icon: isClockRunning ? "pause.fill" : "play.fill",
+                label: isClockRunning ? "Pause" : (remainingSeconds > 0 ? "Resume" : "Start"),
+                color: isClockRunning ? .orange : .green
+            ) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                toggleClock()
+            }
+
+            // Period advance
+            controlButton(
+                icon: "forward.fill",
+                label: nextPeriodLabel,
+                color: .blue
+            ) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                advancePeriod()
+            }
+
+            // Time: tap +1:00, long-press -1:00, Add OT when clock=0
+            controlButton(
+                icon: remainingSeconds > 0 ? "clock.arrow.circlepath" : "plus.circle.fill",
+                label: remainingSeconds > 0 ? "+1:00" : "Add OT",
+                color: .purple
+            ) {
+                if remainingSeconds > 0 {
+                    remainingSeconds += 60
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    updateOverlayState()
+                    sendClockToWatch()
+                } else {
+                    addOvertime()
+                }
+            }
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                if remainingSeconds >= 60 {
+                    remainingSeconds -= 60
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                    updateOverlayState()
+                    sendClockToWatch()
+                }
+            })
+
+            // End game
+            controlButton(icon: "stop.fill", label: "End", color: .red) {
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                if hasGameStarted || appState.isStatsOnly {
+                    showEndConfirmation = true
+                } else {
+                    discardGame()
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(white: 0.08, opacity: 0.88))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+    }
+
+    private func controlButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundColor(color)
+            .frame(width: 62, height: 50)
+            .background(color.opacity(0.15))
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Interactive Scoreboard (Jony Ive Style - scoreboard IS the control)
     // Tap team row = add points (multi-tap: 1, 2, or 3)
     // Long press team row = subtract 1 point
@@ -707,15 +799,10 @@ struct UltraMinimalRecordingView: View {
                 Text(period)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white.opacity(0.7))
-                    .frame(width: 64, height: 44, alignment: .center)  // 44pt min for hit target
+                    .frame(width: 64, alignment: .center)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .padding(.trailing, 6)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        advancePeriod()
-                    }
             }
             .frame(height: 36)
 
@@ -767,12 +854,7 @@ struct UltraMinimalRecordingView: View {
                         .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(clockColor)
                 }
-                .frame(width: 64, height: 44, alignment: .center)  // 44pt min for hit target
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    toggleClock()
-                }
+                .frame(width: 64, alignment: .center)
                 .padding(.trailing, 6)
             }
             .frame(height: 36)
@@ -784,23 +866,6 @@ struct UltraMinimalRecordingView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
-        // Stats-only: End button sits right below the scoreboard so it's always visible
-        .overlay(alignment: .bottom) {
-            if appState.isStatsOnly {
-                Button {
-                    showEndConfirmation = true
-                } label: {
-                    Text("END")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.red.opacity(0.8))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.red.opacity(0.15))
-                        .cornerRadius(4)
-                }
-                .offset(y: 22)
-            }
-        }
     }
 
 
@@ -1397,84 +1462,10 @@ struct UltraMinimalRecordingView: View {
                 }
                 
                 Divider()
-                
-                // Camera & Gimbal Controls (Manual Override) - Moved below Game Controls
 
-                // Game Controls
-                HStack(spacing: 10) {
-                    // Next Period
-                    Button(action: { advancePeriod() }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "forward.fill")
-                                .font(.system(size: 16))
-                            Text(nextPeriodLabel)
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(10)
-                    }
+                // Game controls (Pause, Period, +1:00, End) live in the persistent
+                // bottom-left control bar now — this sheet is for player stats + camera only.
 
-                    // Smart time button: tap +1:00, long-press -1:00, Add OT when clock=0
-                    Button(action: {
-                        if remainingSeconds > 0 {
-                            remainingSeconds += 60
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            updateOverlayState()
-                            sendClockToWatch()
-                        } else {
-                            addOvertime()
-                        }
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: remainingSeconds > 0 ? "clock.arrow.circlepath" : "plus.circle.fill")
-                                .font(.system(size: 16))
-                            Text(remainingSeconds > 0 ? "+1:00" : "Add OT")
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .foregroundColor(.purple)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.purple.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                        if remainingSeconds >= 60 {
-                            remainingSeconds -= 60
-                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                            updateOverlayState()
-                            sendClockToWatch()
-                        }
-                    })
-
-                    // End Game — skip dialog if no recording started (warmup only).
-                    // Stats-only mode: always show confirmation (hasGameStarted is never set).
-                    Button(action: {
-                        showSahilStats = false
-                        if hasGameStarted || appState.isStatsOnly {
-                            showEndConfirmation = true
-                        } else {
-                            discardGame()
-                        }
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 16))
-                            Text("End")
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .foregroundColor(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                }
-                
-                Divider()
-                
                 // Camera & Gimbal Controls (Manual Override)
                 if !appState.isStatsOnly {
                     HStack(spacing: 12) {
