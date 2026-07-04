@@ -58,17 +58,18 @@ The paper introduces a two-stage architecture:
 ### 4.1 · TrackNet (spatial detection)
 - **U-Net** with 3 downsampling stages, bottleneck, 3 upsampling stages
 - Encoder: `(in, 64) → (64, 128) → (128, 256) → bottleneck (256, 512)`
-- Decoder: skip-concat + upsample 2× + conv triplets/doublets
+- Block sizes: stages 1-2 use **double** conv, stage 3 and bottleneck use **triple** conv
+- Decoder: symmetric — up_1 triple, up_2/up_3 double, all with skip-concat + upsample 2×
 - **Input:** stack of 3 consecutive RGB frames, 288×512 → 9 input channels
 - **Output:** 3 heatmaps at 288×512 (one per input frame), sigmoid confidence
 - **Loss:** weighted focal MSE on heatmap
-- **Params:** ~11M
+- **Params:** ~11.3M (recomputed from `model.py`)
 
 ### 4.2 · InpaintNet (trajectory rectification)
-- Tiny 1D U-Net over the sequence of `(x, y, visibility)` predictions from TrackNet
-- Input: `(N, L, 3)` — L frames of predicted coordinates + a mask channel indicating "trust this frame"
+- Tiny 1D U-Net over the sequence of `(x, y)` predictions from TrackNet plus a mask
+- Input: `(N, L, 3)` — 2 coord channels (x, y) + 1 mask channel indicating "trust this frame" (mask is the visibility signal — there's no separate visibility channel)
 - Output: `(N, L, 2)` — smoothed, gap-filled coordinates
-- Params: ~500K
+- Params: ~520K (recomputed from `model.py`)
 
 ### 4.3 · Key insights transferable to basketball
 1. **Heatmap output beats bounding boxes at small object sizes.** Basketball at gym distance is 8-15px.
@@ -177,7 +178,7 @@ Two-phase, minimizes tedium:
 1. Run v0 tracker on more Sahil footage
 2. For each frame, log heatmap uncertainty (max value < threshold, or bimodal peaks)
 3. Surface the **most confusing frames** in a labeling UI
-4. Narrayan labels 20-30 frames per session, 10 sessions = 300 more high-value labels
+4. Narayan labels 20-30 frames per session, 10 sessions = 300 more high-value labels
 5. Alternatively: cheap Mechanical Turk / Scale AI ~$0.10 per label = $200 for 2000
 
 **Total budget:** ~$300 in cloud labeling + 5-10 hours of curation.
@@ -196,12 +197,19 @@ Ship it as a subfolder in the repo (`/tools/label/`). ~1 weekend of work.
 
 ## 7 · CoreML Export Path
 
-```
-PyTorch model
-   ↓ torch.onnx.export
-ONNX
-   ↓ coremltools.convert(target="mlprogram", compute_units="cpu_and_neural_engine")
-BallNetR.mlpackage
+```python
+# PyTorch → ONNX → CoreML
+torch.onnx.export(model, dummy_input, "ballnetr.onnx", opset_version=17,
+                  input_names=["frames"], output_names=["heatmap"])
+
+import coremltools as ct
+mlmodel = ct.convert(
+    "ballnetr.onnx",
+    convert_to="mlprogram",
+    compute_units=ct.ComputeUnit.CPU_AND_NE,  # enum, not string
+    minimum_deployment_target=ct.target.iOS17,
+)
+mlmodel.save("BallNetR.mlpackage")
 ```
 
 **Known landmines:**
@@ -209,18 +217,25 @@ BallNetR.mlpackage
 - BatchNorm running stats need to be frozen before export
 - Sigmoid + heatmap output: export the raw logits, apply sigmoid on-device (better numerical range for Neural Engine)
 
-**Performance target:**
+**Performance target (aspirational, verify empirically):**
 - iPhone 16 Pro Max A18 Pro Neural Engine: 35 TOPS
-- 3M-param U-Net at 288×512: **~8ms per inference** — comfortably 60fps
-- At our 15fps AI cadence, this is 12% duty cycle — leaves budget for future rim/shot detectors
+- 3M-param U-Net at 288×512: FLOPs ~5-10 GFLOPs per forward pass
+- **Target: 8-15ms per inference.** Real-world CoreML latency for U-Nets with concat+upsample often lands at the higher end of this range once memory bandwidth and layer-fusion overhead are counted
+- At our 15fps AI cadence (~67ms budget/frame): 12-22% duty cycle — leaves budget for future rim/shot detectors, but empirical measurement is a Phase 1 milestone before committing to further phases
 
 ## 8 · Roadmap
 
 Each phase ships value on its own. You can stop after any phase and still have improved the product.
 
-### Phase 1 — **BallNet-R v1 replaces BallDetector** ⏱ ~6 weeks
+### Phase 1 — **BallNet-R v1 replaces BallDetector** ⏱ **10-14 weeks (realistic)**
 
 Milestone: **reliable ball tracking under AAU chaos**
+
+**Why not 6 weeks:** independent audit flagged the original 6-week estimate as
+optimistic for a solo dev evenings/weekends who isn't primarily an ML engineer.
+Building the labeling tool, labeling ≥2000 frames, training a custom U-Net,
+debugging ONNX→CoreML export landmines, integrating, and validating across
+multiple real games is closer to 100-140 hours at ~10 hrs/wk.
 
 Deliverables:
 - `/tools/label/` labeling tool
@@ -297,12 +312,21 @@ Risk: **low.** All backend data exists by Phase 4. Purely UI/plumbing.
 
 ## 9 · Total Timeline
 
-- **Phase 1 → 3 (product transformation):** ~13 weeks focused evenings/weekends
-- **Phase 4:** +2 weeks
-- **Phase 5 (stretch, high-value):** 2-3 months if attempted
-- **Phase 6:** 1-2 months
+Recalibrated after independent audit flagged the original Phase 1 estimate
+as optimistic. All estimates assume ~10 hrs/wk sustained.
 
-At `~10 hours/week` sustained, **Phase 1-4 lands in ~5 months.** Phase 5 optional.
+- **Phase 1 (BallNet-R):** 10-14 weeks
+- **Phase 2 (rim + shot event):** 4-6 weeks
+- **Phase 3 (team attribution → auto-scoring):** 3-4 weeks
+- **Phase 4 (2 vs 3 pointer):** 2-3 weeks
+
+**Phase 1→3 (product transformation):** ~17-24 weeks = **4-6 months**.
+**Phase 1→4:** 5-7 months.
+**Phase 5 (stretch):** 2-3 months if attempted.
+**Phase 6 (highlights/shot chart):** 1-2 months.
+
+Realistic full-vision timeline: **~9-12 months of dedicated evenings/weekends**
+for Phase 1-4 + Phase 6. Phase 5 is a separate commitment.
 
 ## 10 · Ship-or-Kill Decision Points
 
@@ -338,6 +362,6 @@ None are good enough to skip labeling our own data. But BVD + SportsMOT combined
 ## Appendix B — References
 
 - Chen et al. (2023). *TrackNetV3: Enhancing ShuttleCock Tracking with Augmentations and Trajectory Rectification.* [github.com/qaz812345/TrackNetV3](https://github.com/qaz812345/TrackNetV3)
-- Raj et al. (2024). *TrackNetV4: Enhancing Fast Sports Object Tracking with Motion Attention Maps.* arXiv:2409.14543
+- Raj et al. (2024). *TrackNetV4: Enhancing Fast Sports Object Tracking with Motion Attention Maps.* arXiv:2409.14543 (verified via arxiv abstract in this session)
 - Cioppa et al. (2022). *SoccerNet-v3: Multi-View Sports Videos.*
 - NEX Team. HomeCourt product ([home-court.com](https://home-court.com))
