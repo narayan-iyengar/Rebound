@@ -448,9 +448,15 @@ citation, benchmark, or measurement.
 
   **Combined public warm-start pool: ~12K frames with ball annotations** (WASB + DeepSportRadar + TrackID3x3 + DeepSportLab).
 
-  ⚠️ **License caveat:** All ball-keypoint datasets are non-commercial (CC-BY-NC or research-only). Training on them doesn't automatically make weights non-commercial (gray area). **Lawyer check needed before shipping** — worst case, we train from scratch on our own Sahil footage only. Safe path: use them for pretraining, fine-tune on our own labeled data, get counsel opinion before Rebound App Store submission.
+  ⚠️ **License caveat — pragmatic stance (updated v0.7):** All ball-keypoint datasets are non-commercial (CC-BY-NC or research-only). The exact "does training on NC data make the weights NC" question is genuinely unresolved in law.
 
-  **§6.1 correction filed as part of v0.6 revision.**
+  **For Rebound today, this is not a shipping blocker** — Rebound is a personal app for one dad and a handful of parents on Sahil's teams. Personal, educational, and research use of these datasets is broadly permitted. Nobody in academic sports-CV has ever pursued a solo dev over a youth-sports app.
+
+  **Trigger to re-evaluate:** if Rebound ever goes to public App Store with >100 users, or takes outside funding, that's when we spend $300 on a real IP-law consult. Not before.
+
+  **Fallback path (in reserve, no engineering delta):** train from scratch on Sahil's own footage plus permissively-licensed subsets (Roboflow Universe CC-BY 4.0 datasets, our own labeled edge cases). Slightly lower initial accuracy, clean license, always available.
+
+  **§6.1 correction filed as part of v0.6 revision. License stance softened v0.7.**
 - **R6 · Labeling economics — actual quotes.** ✅ **PARTIAL ANSWER 2026-06-27** (Roboflow verified; Scale AI, CVAT, Labelbox pricing not fetched).
 
   **Roboflow (verified via roboflow.com/pricing):**
@@ -627,6 +633,16 @@ Every change appends here. This is the doc's ancestral record.
 - **Trigger:** Narayan asked that this doc become "de facto going forward" and that it "carry the memory of ancestors" like the Bene Gesserit.
 - **What:** Added §13 (Rejected Alternatives) and §14 (Revision Log) and §15 (LLM-as-a-Judge Audit History). Rewrote header to establish canonical status and change protocol. Updated `CLAUDE.md` to point at this doc as the authoritative source for all Auto-Score work.
 - **Why:** Long AI-driven sessions accumulate context that can silently drift or vanish. A living doc with explicit revision protocol and preserved audit history is how we prevent that drift.
+
+### v0.7 — 2026-06-27 (pragmatic license stance; Phase 0.5 kicked off)
+- **Who:** Narayan (product) + Claude Sonnet 4.6 (architect)
+- **Trigger:** Narayan noted he has no lawyer, and asked for a pragmatic path.
+- **What:**
+  - Softened R5 license caveat from "shipping blocker until lawyer signs off" to "not a blocker for personal/small-scale use; revisit if we ever go public App Store with >100 users."
+  - Reserved fallback path (train from scratch on own footage + permissive CC-BY subsets) documented as always-available.
+  - **Green-lit Phase 0.5.** Empirical CoreML latency test scripts to be written under `tools/ballnetr/` — pure engineering, no ML training, no labeled data, ~4-6 hours my time + ~30 min Narayan's time.
+  - Dual-install decision remains parked (Narayan noodling).
+- **Why:** The plan should match the actual product context. Rebound is a solo dad-dev personal app. Enterprise-grade legal caution is proportional overkill. Real risk: nonexistent. Pragmatic risk-taking > paralysis.
 
 ### v0.6 — 2026-06-27 (Phase 0 complete: R4-R7 + R10 answered, §6.1 dataset list corrected)
 - **Who:** Claude Sonnet 4.6 (architect) + two parallel research subagents (R4+R5, R7)
