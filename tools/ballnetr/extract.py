@@ -48,8 +48,10 @@ def parse_args():
     p.add_argument("--jpeg-quality", type=int, default=85)
     p.add_argument("--min-conf", type=float, default=0.15,
                    help="Skip frames scored below this. Default 0.15.")
-    p.add_argument("--auto-conf", type=float, default=0.6,
-                   help="Frames at/above this confidence go in the auto bucket. Default 0.6.")
+    p.add_argument("--auto-conf", type=float, default=0.5,
+                   help="Frames at/above this confidence go in the auto bucket. Default 0.5.")
+    p.add_argument("--max-per-game", type=int, default=300,
+                   help="Cap per-game candidates via uniform temporal sampling. Default 300.")
     return p.parse_args()
 
 
@@ -71,8 +73,8 @@ def hsv_ball_detect(bgr: np.ndarray) -> tuple[float, float, float] | None:
     H, W = bgr.shape[:2]
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
 
-    # Orange range in OpenCV's 0-180 hue space (5-22 covers red-orange → orange)
-    mask = cv2.inRange(hsv, (5, 100, 60), (22, 255, 255))
+    # Tightened orange range — red-orange only, cuts pure-orange jerseys and dull court markings
+    mask = cv2.inRange(hsv, (8, 130, 60), (20, 255, 255))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
 
@@ -85,25 +87,28 @@ def hsv_ball_detect(bgr: np.ndarray) -> tuple[float, float, float] | None:
 
     for c in contours:
         area = cv2.contourArea(c)
-        if area < 20 or area > 0.15 * frame_area:
-            continue  # too small (noise) or huge (jersey/floor)
+        # Basketball at gym distance in 640x360 is 15-30px diameter → 175-700 px² of bounding box
+        # but the ball itself (contour area) is smaller. Range 30-300 covers most real basketballs.
+        if area < 30 or area > 300:
+            continue
 
         perim = cv2.arcLength(c, True)
         if perim < 1:
             continue
 
         # Circularity: 4π·area / perim² == 1 for a perfect circle
+        # Tightened from 0.4 → 0.55; ball is round, jerseys and floor markings often are not
         circ = 4.0 * np.pi * area / (perim * perim)
-        if circ < 0.4:
+        if circ < 0.55:
             continue
 
         x, y, w, h = cv2.boundingRect(c)
-        if h > 0.4 * H:
-            continue  # too tall — likely a jersey/person
+        if h > 0.15 * H:
+            continue  # too tall — likely a person's jersey; ball can't be > 15% frame height
 
         aspect = w / max(h, 1)
-        if aspect < 0.5 or aspect > 2.0:
-            continue  # not roughly square
+        if aspect < 0.6 or aspect > 1.7:
+            continue  # tighter roughly-square requirement
 
         # Mean saturation inside the contour — the ball is vividly orange
         m2 = np.zeros(mask.shape, np.uint8)
@@ -133,7 +138,15 @@ def bucket(conf: float, auto_threshold: float) -> str:
 
 
 def process_video(video_path: Path, frames_root: Path, jsonl_out, args) -> tuple[int, int]:
-    """Returns (candidates_written, auto_labels_written) for this video."""
+    """
+    Returns (candidates_written, auto_labels_written).
+
+    Two-pass:
+      Pass 1 — scan the whole video at sample_fps, collect all frames that pass
+               the HSV heuristic in memory (just the metadata + the raw frame).
+      Pass 2 — uniformly-in-time subsample down to max_per_game, write the
+               winners to disk + append to JSONL.
+    """
     game_slug = slug(video_path.name)
     frames_dir = frames_root / game_slug
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -150,10 +163,9 @@ def process_video(video_path: Path, frames_root: Path, jsonl_out, args) -> tuple
     print(f"── {video_path.name}")
     print(f"   src_fps={src_fps:.1f}  frames={total_frames}  stride={stride}  slug={game_slug}")
 
-    auto = queue = 0
+    # Pass 1: collect passing frames in memory (small: max ~3000 * (640x360x3) = ~2 GB peak, fine)
+    passing = []  # list of (frame_idx, cx, cy, conf, small_bgr)
     frame_idx = 0
-    written = 0
-
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -162,48 +174,51 @@ def process_video(video_path: Path, frames_root: Path, jsonl_out, args) -> tuple
         if frame_idx % stride == 0:
             small = cv2.resize(frame, (args.target_w, args.target_h), interpolation=cv2.INTER_AREA)
             det = hsv_ball_detect(small)
-
             if det is not None and det[2] >= args.min_conf:
-                cx, cy, conf = det
-                b = bucket(conf, args.auto_conf)
-
-                jpg_name = f"{frame_idx:07d}.jpg"
-                jpg_path = frames_dir / jpg_name
-                cv2.imwrite(str(jpg_path), small,
-                            [int(cv2.IMWRITE_JPEG_QUALITY), args.jpeg_quality])
-
-                record = {
-                    "frame_path": str(jpg_path.relative_to(TRAINING_ROOT)),
-                    "source_video": video_path.name,
-                    "source_frame": frame_idx,
-                    "source_time_sec": round(frame_idx / src_fps, 2),
-                    "resolution": [args.target_w, args.target_h],
-                    "detection": {
-                        "x": round(cx, 2),
-                        "y": round(cy, 2),
-                        "confidence": round(conf, 4),
-                        "bucket": b,
-                    },
-                }
-                jsonl_out.write(json.dumps(record) + "\n")
-                jsonl_out.flush()
-
-                written += 1
-                if b == "auto":
-                    auto += 1
-                else:
-                    queue += 1
+                passing.append((frame_idx, det[0], det[1], det[2], small.copy()))
 
         frame_idx += 1
-
-        # Lightweight progress log every 30 seconds of source video
-        if frame_idx % (int(src_fps) * 30) == 0:
+        if frame_idx % (int(src_fps) * 60) == 0:
             pct = 100.0 * frame_idx / max(total_frames, 1)
-            print(f"   … {frame_idx}/{total_frames} ({pct:.0f}%)  auto={auto} queue={queue}")
+            print(f"   scan… {frame_idx}/{total_frames} ({pct:.0f}%)  passing={len(passing)}")
 
     cap.release()
-    print(f"   ✅ auto={auto}  queue={queue}  total_written={written}")
-    return written, auto
+
+    # Pass 2: uniform temporal subsample to max_per_game
+    if len(passing) > args.max_per_game:
+        idxs = np.linspace(0, len(passing) - 1, args.max_per_game).astype(int)
+        chosen = [passing[i] for i in idxs]
+    else:
+        chosen = passing
+
+    auto = queue = 0
+    for (fidx, cx, cy, conf, small) in chosen:
+        b = bucket(conf, args.auto_conf)
+        jpg_name = f"{fidx:07d}.jpg"
+        jpg_path = frames_dir / jpg_name
+        cv2.imwrite(str(jpg_path), small, [int(cv2.IMWRITE_JPEG_QUALITY), args.jpeg_quality])
+        record = {
+            "frame_path": str(jpg_path.relative_to(TRAINING_ROOT)),
+            "source_video": video_path.name,
+            "source_frame": fidx,
+            "source_time_sec": round(fidx / src_fps, 2),
+            "resolution": [args.target_w, args.target_h],
+            "detection": {
+                "x": round(cx, 2),
+                "y": round(cy, 2),
+                "confidence": round(conf, 4),
+                "bucket": b,
+            },
+        }
+        jsonl_out.write(json.dumps(record) + "\n")
+        if b == "auto":
+            auto += 1
+        else:
+            queue += 1
+    jsonl_out.flush()
+
+    print(f"   ✅ HSV-passed={len(passing)}  kept={len(chosen)}  auto={auto}  queue={queue}")
+    return len(chosen), auto
 
 
 def main():
@@ -227,12 +242,17 @@ def main():
     print("=" * 60)
     print("BallNet-R Phase 1a · Frame extractor")
     print("=" * 60)
-    print(f"videos:      {videos_dir}")
-    print(f"frames:      {frames_dir}")
-    print(f"labels:      {labels_file}")
-    print(f"sample fps:  {args.sample_fps}")
-    print(f"target size: {args.target_w}×{args.target_h}")
-    print(f"videos:      {len(videos)}")
+    print(f"videos:        {videos_dir}")
+    print(f"frames:        {frames_dir}")
+    print(f"labels:        {labels_file}")
+    print(f"sample fps:    {args.sample_fps}")
+    print(f"target size:   {args.target_w}×{args.target_h}")
+    print(f"HSV bounds:    hue 8-20, sat ≥130, val ≥60")
+    print(f"circularity:   ≥0.55")
+    print(f"area:          30-300 px²")
+    print(f"max per game:  {args.max_per_game}")
+    print(f"auto bucket:   confidence ≥ {args.auto_conf}")
+    print(f"videos found:  {len(videos)}")
     print()
 
     total_candidates = total_auto = 0
