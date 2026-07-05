@@ -43,5 +43,12 @@ GoogleService-Info.plist
 # Local AI/IDE tooling configs
 .gemini/
 
+# BallNet-R training data (kids' game footage, kept off-repo)
+# See docs/SKYNET_AUTOSCORE_DESIGN.md §6 for lifecycle
+training-data/videos/
+training-data/frames/
+# labels/ IS tracked — that's the durable artifact we want in git
+!training-data/labels/
+
 # Xcode shared schemes (optional)
 # SahilStatsLite.xcodeproj/xcshareddata/
