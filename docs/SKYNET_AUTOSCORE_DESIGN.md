@@ -233,13 +233,14 @@ mlmodel.save("BallNetR.mlpackage")
 - BatchNorm running stats need to be frozen before export
 - Sigmoid + heatmap output: export the raw logits, apply sigmoid on-device (better numerical range for Neural Engine)
 
-**Performance target (updated after R2 evidence, still needs empirical validation):**
-- iPhone 16 Pro Max A18 Pro Neural Engine: 35 TOPS advertised, ~19 TFLOPS practical FP16 ceiling (per M4 ANE reverse-engineering, comparable architecture)
-- BallNet-R at 288×512, 14 in-ch: FLOPs ~4-6 GFLOPs per forward pass
-- **Expected: 10-18 ms per inference.** 8 ms is a stretch goal contingent on aggressive tuning
-- Anchor points from R2 evidence: Photoroom U-Net segmentation on A17 Pro at ≥512² = 37 ms end-to-end (larger model); Ultralytics YOLOv8n on A17 Pro = 3 ms at 3.2M params, 640² (much smaller resolution work per op)
-- At our 15fps AI cadence (~67 ms budget/frame): 15-27% duty cycle. Leaves budget for future rim/shot detectors, but empirical measurement via Phase 0.5 test (§11a R2) gates Phase 1 commit
-- **Two risk factors identified for empirical test:** GroupNorm CPU fallback, bilinear upsample fusion. See R2 answer for mitigations.
+**Performance — measured 2026-07-04 via Phase 0.5 empirical test (§11a R2 answer):**
+- iPhone 16 Pro Max, A18 Pro Neural Engine, iOS 26.6
+- **Median predict latency: 4.44 ms (p90 4.74 ms, p99 11.5 ms)** — 3-4× better than both my original estimate (8-15 ms) and the R2 audit's tightened range (10-18 ms)
+- **100% of compute ops on ANE** — every conv, upsample, concat, pool, sigmoid. Zero CPU fallback. Both R2 risks (BN/GN fusion, bilinear upsample) did not materialize.
+- Model size: 5.7 MB
+- 2.83M params, 40 top-level compute ops (232 total incl. constants)
+- At 15 fps (67 ms budget/frame): ~7% duty cycle for BallNet-R alone; combined with YOLOv8n (~3 ms), ~11% total ML duty cycle. **Enormous headroom for Phase 2/3.**
+- Could run at 30 fps if desired (~24% duty cycle) — the historical 15 fps ceiling was set by HSV BallDetector unreliability, not compute.
 
 ## 8 · Roadmap
 
@@ -401,14 +402,45 @@ citation, benchmark, or measurement.
 
   **Recommendation:** Language in §7 tightened. Empirical validation added as Phase 0.5 gate (half-day work, ~$0 cost) before Phase 1 code commit — see below.
 
-  **Phase 0.5 · CoreML latency empirical test (0.5 day, blocks Phase 1 commit):**
-  1. Build dummy PyTorch U-Net matching the exact BallNet-R spec (14→32→64→128→256 encoder, GN or BN, mirrored decoder, sigmoid off).
-  2. Export: `torch.onnx.export → coremltools.convert(minimum_deployment_target=iOS17, compute_precision=FP16, compute_units=CPU_AND_NE)`
-  3. Load `.mlpackage` in Xcode 15+, open the **Performance** tab on the iPhone 16 Pro Max, run 100 iterations. Xcode reports median ms/inference + layer-level ANE-vs-CPU breakdown.
-  4. Two hard gates:
-     - Median ≤18 ms end-to-end → **GO**
-     - 90% of layers on ANE (not CPU fallback) → **GO**
-     - Otherwise: fix (BN swap, upsample rewrite) or shrink model (reduce input to 224×384 or channels to 24→48→96→192).
+  **Phase 0.5 · CoreML latency empirical test — ✅ COMPLETED 2026-07-04. BOTH GATES PASSED WITH MASSIVE MARGIN.**
+
+  **Test setup:** Random-weights BallNet-R (14 in-ch, 288×512, BN variant, 2.83M params, 5.7 MB `.mlpackage`). PyTorch 2.12.1 → jit.trace → coremltools 9.x → mlprogram/FP16/CPU_AND_NE/iOS17. Xcode 26 Performance tab on **iPhone 16 Pro Max, iOS 26.6**. Config: 3 experiment iterations × 40 predictions = 120 samples.
+
+  **Result (predict latency, 120 samples):**
+  | Percentile | Latency |
+  |---|---|
+  | min | 4.38 ms |
+  | median | **4.44 ms** |
+  | mean | 4.75 ms |
+  | p90 | 4.74 ms |
+  | p99 | 11.53 ms |
+  | max | 17.10 ms |
+  | steady-state median (after 5-sample warmup) | 4.44 ms |
+
+  **Device breakdown (47 compute ops, excluding 185 constants):**
+  - **Neural Engine: 47 / 47 = 100%**
+  - GPU: 0
+  - CPU: 0
+  - Weighted cost on ANE: **100.0%**
+
+  Every op type fused into ANE cleanly: conv (18), clip (17), concat (3), max_pool (3), bilinear upsample (3), cast (2), sigmoid (1). **The two ANE risks R2 flagged did not materialize:**
+  - BatchNorm was folded into conv weights — no CPU fallback
+  - Bilinear upsample fused correctly onto ANE — the biggest single risk factor is resolved
+
+  **Load time (cold model warmup, 9 samples):** median 33.6 ms, first-run 436 ms, steady 33-72 ms. Amortized across the whole game — irrelevant.
+
+  **Gates vs actual:**
+  | Gate | Threshold | Measured | Verdict |
+  |---|---|---|---|
+  | Median inference | ≤ 18 ms | **4.44 ms** (75% under) | 🟢 PASS |
+  | Layers on ANE | ≥ 90% | **100%** | 🟢 PASS |
+  | Model exports cleanly | no errors | 40 ops, no fallback warnings | 🟢 PASS |
+
+  **Implications for Phase 1 and downstream phases:**
+  1. **The architecture as specified in §5.1-5.3 is validated.** No need to shrink input to 224×384, no need to halve channels, no need to swap norms.
+  2. **Duty cycle is enormous headroom.** At 15 fps (67 ms budget), BallNet-R uses ~7% of frame. Combined with YOLOv8n (~3 ms), total ML = ~7-8 ms = ~11% duty cycle. Plenty of runway for Phase 2 rim detector and Phase 3 shot detector.
+  3. **We could run at 30 fps if needed.** At 33 ms budget/frame, our ~8 ms combined ML still leaves 76% headroom. The old 15 fps ceiling was set by the HSV BallDetector's unreliability, not compute. Reconsider in Phase 1c.
+  4. **Phase 1 unblocked.** All 10 Phase 0 research questions answered with evidence + the mandatory empirical gate cleared. No remaining Phase 0 blockers.
 - **R3 · TrackNetV3 licensing.** ✅ **ANSWERED 2026-06-27.** MIT License, verified via GitHub API: `gh api repos/qaz812345/TrackNetV3/license` → SPDX-ID `MIT`. This means we can (a) reuse their PyTorch code, (b) seed BallNet-R from their pretrained weights, (c) ship commercially without royalty or share-alike obligation. Only requirement is attribution — we include their MIT copyright notice in our third-party licenses list. **Implication:** the "training from scratch" fallback in §6 becomes optional, not required. Fine-tuning from their init cuts labeled-data requirements by an estimated 50-70% based on general transfer-learning heuristics. Actual reduction to be measured in Phase 1.
 - **R4 · Court-quad-conditioned tracking prior art.** ✅ **ANSWERED 2026-06-27. Not novel but not naive — the pattern is standard practice. Recommendation: do BOTH input channel AND auxiliary loss term.**
 
@@ -633,6 +665,23 @@ Every change appends here. This is the doc's ancestral record.
 - **Trigger:** Narayan asked that this doc become "de facto going forward" and that it "carry the memory of ancestors" like the Bene Gesserit.
 - **What:** Added §13 (Rejected Alternatives) and §14 (Revision Log) and §15 (LLM-as-a-Judge Audit History). Rewrote header to establish canonical status and change protocol. Updated `CLAUDE.md` to point at this doc as the authoritative source for all Auto-Score work.
 - **Why:** Long AI-driven sessions accumulate context that can silently drift or vanish. A living doc with explicit revision protocol and preserved audit history is how we prevent that drift.
+
+### v0.8 — 2026-07-04 (Phase 0.5 measured — both gates passed by 3-4× margin)
+- **Who:** Narayan (ran the export + Xcode measurement) + Claude Sonnet 4.6 (interpretation)
+- **Trigger:** Narayan ran `python export.py` (after fixing Python 3.14 → 3.12 venv) and Xcode 26 Performance tab on iPhone 16 Pro Max iOS 26.6.
+- **What:**
+  - Measured median inference latency: **4.44 ms** vs 18 ms gate → 75% under threshold
+  - Measured device assignment: **47/47 compute ops on Neural Engine (100%)** vs 90% gate
+  - Both R2-flagged risk factors (BatchNorm CPU fallback, bilinear upsample fusion) did not materialize — coremltools fused BN into conv weights, and bilinear upsample landed cleanly on ANE
+  - Updated §7 Performance section with actual numbers (was aspirational, now empirical)
+  - Updated §11a R2 answer with the full measurement report (percentiles, device breakdown, cost weighting)
+  - Task tracker: Phase 0.5 marked complete
+- **Why this matters:**
+  1. The single biggest engineering risk in the whole plan is retired. Latency was the only architectural uncertainty that could have killed Phase 1 before we started.
+  2. Duty cycle is now ~11% total ML (BallNet-R 4.4ms + YOLOv8n ~3ms), leaving ~90% frame-budget headroom for Phase 2/3 add-ons.
+  3. No need to shrink the model — the design as specified in §5.1-5.3 is validated on real hardware.
+  4. We could run at 30 fps if we wanted. The 15 fps ceiling was set by the old HSV BallDetector's unreliability, not compute.
+- **Status:** Phase 0 100% complete. Phase 1 unblocked. Awaiting Narayan's decision on Phase 1 commit.
 
 ### v0.7 — 2026-06-27 (pragmatic license stance; Phase 0.5 kicked off)
 - **Who:** Narayan (product) + Claude Sonnet 4.6 (architect)
