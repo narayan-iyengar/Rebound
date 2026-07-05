@@ -1,9 +1,14 @@
-# SahilStatsLite - Project Context
+# Rebound (née SahilStatsLite) — Project Context
 
-> **UPDATED (2026-04-03):** Skynet v5.1 — Major tracking and performance overhaul.
-> 1. **Current Status:** Build clean. YOLOv8n CoreML active. Vision runs off main thread. All critical bugs fixed.
-> 2. **Latest Wins:** YOLOv8n sports-optimized detector, body pose ankle-based court contact, team jersey color learning, Vision off main thread, pan-only gimbal, age classifier removed.
-> 3. **Next Step:** Field test at next game. Watch thermal budget and Watch sync.
+> **UPDATED (2026-06-27):** Skynet v5.2 shipped. Next initiative: **Auto-Score**.
+> 1. **Current Status:** Build clean, zero warnings. YOLOv8n CoreML active. Auto court calibration live. YouTube upload safety nets in place. Persistent game-controls bar shipped (phone-as-controller mode).
+> 2. **Latest Wins:** Auto court quad from IMU-compensated ankle heatmap, YOLO/Vision + court calibration % indicators, YouTube COPPA + processing-abandoned + silent-failure fixes, PhotosPicker FileRepresentation (no more multi-GB RAM buffer on video import).
+> 3. **Next Step:** Field test at next game. Begin Auto-Score Phase 1 (BallNet-R).
+
+## Canonical Design Docs
+
+**Auto-Score / ball tracking / shot detection roadmap:**
+👉 [`docs/SKYNET_AUTOSCORE_DESIGN.md`](docs/SKYNET_AUTOSCORE_DESIGN.md) — canonical, versioned, carries its own history (§13 rejected alternatives, §14 revision log, §15 LLM-as-a-judge audit history). Any Auto-Score work MUST read this first. Any change MUST append to §14, not overwrite silently. This is the Other Memory.
 
 ---
 
