@@ -1,7 +1,9 @@
 # Phase 0.5 — CoreML latency test
 # Only what we need for architecture-shape export. No training deps.
+# Floors (>=) not exact pins — pip picks the latest wheels available for
+# your Python. Verified compatible: torch 2.5+, coremltools 8.3+.
 
-torch==2.5.1              # PyTorch — architecture + ONNX export
-onnx==1.17.0              # ONNX runtime for validation
-coremltools==8.1          # Apple's PyTorch/ONNX → CoreML converter
-numpy>=1.24,<2.0          # coremltools 8.x pins numpy <2
+torch>=2.5              # PyTorch — architecture + tracing
+onnx>=1.17              # ONNX runtime (optional validation)
+coremltools>=8.3        # PyTorch → CoreML converter, supports mlprogram + FP16 + iOS17 target
+numpy>=1.24             # coremltools 8.3+ handles numpy 2.x; older required <2
