@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 
-# Test artifacts — regeneratable via export.py
+# Test artifacts — regeneratable via export.py + Xcode Performance tab
 *.mlpackage/
+*.mlperf/
 *.onnx
