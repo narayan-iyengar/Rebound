@@ -9,3 +9,6 @@ numpy>=1.24             # coremltools 8.3+ handles numpy 2.x
 
 # Phase 1a — frame extractor
 opencv-python>=4.10     # video decode, HSV heuristic, JPEG write
+
+# Phase 1a — labeling tool (Tkinter comes with Python)
+Pillow>=10.0            # image loading/display in Tkinter canvas
