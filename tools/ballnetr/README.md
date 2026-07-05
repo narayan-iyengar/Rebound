@@ -16,16 +16,28 @@ See `docs/SKYNET_AUTOSCORE_DESIGN.md` §11a R2 for the two hard gates this test 
 ## Prereqs
 
 - macOS with Xcode 15+ (you have this)
-- Python 3.10+ (you have `/opt/homebrew/bin/python3`)
+- **Python 3.12 specifically** — coremltools ships native binaries per Python minor version and lags the latest Python release by 3-6 months. Using system Python 3.13+ will fail with `BlobWriter not loaded` at export time.
 - ~2 GB disk for PyTorch install
 - iPhone 16 Pro Max (or any iOS 17+ device — but numbers are only meaningful on 16 Pro Max A18 Pro since that's the deployment target)
+
+### Getting Python 3.12 via Homebrew
+
+```bash
+brew install python@3.12
+/opt/homebrew/bin/python3.12 -m venv .venv
+```
 
 ## Step 1 · Install Python deps (one-time, ~2 min)
 
 ```bash
 cd /Users/narayan/SahilStats/SahilStatsLite/SahilStatsLite/tools/ballnetr
-python3 -m venv .venv
+
+# Use Python 3.12 specifically — see Prereqs above for why
+/opt/homebrew/bin/python3.12 -m venv .venv
 source .venv/bin/activate
+python --version    # confirm 3.12.x
+
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
