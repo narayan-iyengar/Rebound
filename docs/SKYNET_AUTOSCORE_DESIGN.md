@@ -14,7 +14,7 @@
 **Canonical URL:** `docs/SKYNET_AUTOSCORE_DESIGN.md` (this file)
 **Authors:** Claude Sonnet 4.6 (architect); Claude Sonnet 4.6 (LLM-as-a-judge verifier)
 **Owner:** Narayan (Rebound PM)
-**Current revision:** v0.2 · 2026-06-27
+**Current revision:** v1.0 · 2026-07-06 (v0 model trained + evaluated; v1 temporal next)
 **Change protocol:** Any modification MUST append to §14 with (a) what changed, (b) why, (c) who noticed it, (d) date. Deletions are conversions to strikethrough with a §14 entry, never silent removal.
 
 ---
@@ -665,6 +665,31 @@ Every change appends here. This is the doc's ancestral record.
 - **Trigger:** Narayan asked that this doc become "de facto going forward" and that it "carry the memory of ancestors" like the Bene Gesserit.
 - **What:** Added §13 (Rejected Alternatives) and §14 (Revision Log) and §15 (LLM-as-a-Judge Audit History). Rewrote header to establish canonical status and change protocol. Updated `CLAUDE.md` to point at this doc as the authoritative source for all Auto-Score work.
 - **Why:** Long AI-driven sessions accumulate context that can silently drift or vanish. A living doc with explicit revision protocol and preserved audit history is how we prevent that drift.
+
+### v1.0 — 2026-07-06 (Phase 1a + 1b complete — v0 model trained and evaluated)
+- **Who:** Narayan (video gathering, 5.7 hrs of labeling, ran training) + Claude (pipeline, eval)
+- **Phase 1a done:**
+  - 8 games downloaded from two YouTube channels via yt-dlp (~10 GB, 1080p). 7 opponents, 2 age groups (9U + Elements), 6-month span. All verified 1080p H.264 30fps.
+  - Frame extractor (`tools/ballnetr/extract.py`) with HSV orange-blob triage heuristic. First run was 10× too permissive (20,764 candidates); retuned (tighter hue 8-20, sat ≥130, area 30-300px², circularity ≥0.55, bbox <15% frame height) + added per-game temporal subsample cap. Second run: clean 2,400 candidates (300/game).
+  - Labeling tool (`tools/ballnetr/label.py`, Tkinter). Narayan labeled all 2,404 in ~5.7 hrs (8.5 sec/frame): **1,189 visible (49.5%) + 1,026 not_visible (42.7%) + 189 occluded (7.9%)**. The 43% not_visible confirms HSV's queue was ~half false-positives — legit hard negatives.
+- **Phase 1b done (v0):**
+  - Training pipeline (`dataset.py` + `train.py`). Held-out val split BY GAME (Yellow Jackets @ Oakland Tech) so neighboring frames don't leak. Focal-weighted BCE, AdamW + cosine LR, best-by-val checkpoint, auto CoreML export.
+  - **v0 SIMPLIFICATIONS (important for v1):** single-frame input (past/future channels zero-filled), no court/player prior channels, no TrackNetV3 warm-init (trained from scratch), no auxiliary court-quad loss. Only 4 of 14 input channels carried signal.
+  - Trained 40 epochs, ~2.9 min/epoch on M-series MPS. Best val loss 0.00019 @ epoch 19. Exported `BallNetR_v0.mlpackage`.
+  - Eval script (`tools/ballnetr/eval.py`) — text report + side-by-side heatmap PNGs.
+- **v0 RESULTS (the mean is misleading — distribution is bimodal):**
+  - **Peak error on VISIBLE samples: 55.2% < 10px, 67% < 30px, 72% < 50px, 80.9% < 100px. Mean 61px** (dragged up by a ~20% tail of catastrophic whiffs).
+  - Interpretation: when the model finds the ball it's often pixel-precise (many 0-1px hits); when confused among orange jerseys it whiffs entirely (one sample 520px). Classic single-frame failure mode.
+  - Occluded broken (174px mean) — expected, single frame can't find hidden ball.
+  - **Confidence is weak and undiscriminating** — peak heatmap conf ~0.25 for visible AND not_visible. Can't threshold on confidence yet. Fixes: smaller target Gaussian sigma (peakier heatmaps) + court-quad gate.
+- **Verdict:** v0 is a legitimate baseline, not a toy. Proves pipeline end-to-end + architecture can localize (55% <10px from scratch on 1,189 positives). Failure modes are exactly what temporal input (v1) fixes.
+- **Next:** v1 with 3-frame temporal stacks. `extract_triplets.py` already built (v0.9 work). Zero new labeling. Expected: whiff tail collapses, mean → 25-35px.
+- **Also filed:** Bug #17 (Rebound YouTube uploads land on wrong default channel @narayaniyengar6773 instead of @RealDeadlSahil — needs channel picker on OAuth). Not urgent.
+
+### v0.9 — 2026-07-05 (Phase 1a/1b tooling built)
+- **Who:** Claude (autopilot while Narayan made dinner)
+- **What:** Built the full Phase 1 toolchain in `tools/ballnetr/`: extract.py (frame triage), label.py (Tkinter labeler), dataset.py + train.py (training + CoreML export), eval.py (visualization), extract_triplets.py (3-frame stacks for v1). Disk cleanup: freed ~200 GB (Xcode DeviceSupport 180GB, DerivedData, old Catalyst container, stray videos).
+- **Why:** Get Phase 1 unblocked and moving the same day Phase 0 completed.
 
 ### v0.8 — 2026-07-04 (Phase 0.5 measured — both gates passed by 3-4× margin)
 - **Who:** Narayan (ran the export + Xcode measurement) + Claude Sonnet 4.6 (interpretation)

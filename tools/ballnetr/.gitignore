@@ -6,3 +6,8 @@ __pycache__/
 *.mlpackage/
 *.mlperf/
 *.onnx
+
+# Training artifacts — regeneratable via train.py (large binary)
+checkpoints/
+eval/
+*.log
