@@ -14,8 +14,67 @@
 **Canonical URL:** `docs/SKYNET_AUTOSCORE_DESIGN.md` (this file)
 **Authors:** Claude Sonnet 4.6 (architect); Claude Sonnet 4.6 (LLM-as-a-judge verifier)
 **Owner:** Narayan (Rebound PM)
-**Current revision:** v1.0 · 2026-07-06 (v0 model trained + evaluated; v1 temporal next)
+**Current revision:** v2.0 · 2026-07-07 (STRATEGIC PIVOT — rim-region shot detection, not full-court ball tracking)
 **Change protocol:** Any modification MUST append to §14 with (a) what changed, (b) why, (c) who noticed it, (d) date. Deletions are conversions to strikethrough with a §14 entry, never silent removal.
+
+---
+
+## 0 · STRATEGIC PIVOT (2026-07-07) — read this first
+
+**We spent Phase 1 chasing full-court ball tracking (BallNet-R) and hit a hard
+wall. Four controlled experiments (v0-v3) all plateaued at ~40-55% precise
+localization. The pivot: STOP tracking the ball across the court. Detect
+scoring events AT THE RIM.**
+
+### Why full-court ball tracking failed (and always would)
+
+We borrowed TrackNetV3's approach from badminton. It doesn't transfer:
+
+| | Badminton (TrackNetV3) | AAU basketball (us) |
+|---|---|---|
+| Training data | tens of thousands of pro-broadcast frames | 1,189 |
+| Camera | fixed, one professional angle | gimbal, varying bleacher spots, every gym different |
+| Object color | white shuttlecock — unique in frame | orange ball — same color as jerseys, refs, court markings |
+| Background | clean court, 2-4 players | 10 players, reflective hardwood, crowds, adjacent courts |
+| Motion | dramatic deceleration (distinctive) | moves like everything around it |
+| Scale | constant (fixed camera) | 5-30px depending on court position + zoom |
+
+Their object is a distinct white dot on a clean background with 100× the data
+and a fixed camera. Ours is a camouflaged orange blob among orange distractors,
+in clutter, 1% of the data, on a moving camera. The technique looked applicable
+but the problem structure is fundamentally harder. See §14 v1.1 for the four
+experiments' data.
+
+### The reframe
+
+The product needs two things, and NEITHER requires full-court ball tracking:
+
+1. **Camera auto-tracking** — the gimbal already aims off the *player-cluster
+   centroid* (existing Skynet). It never needed the ball.
+2. **Auto-scoring** (the moat) — needs to detect **makes**, which means detecting
+   the ball **at the rim, at the moment of a shot** — NOT tracking it across the
+   court.
+
+Detecting a make at the rim is a far narrower, more tractable problem:
+- The rim is a **fixed location** (find it once)
+- Only look at a **small ROI** around the rim, not the full court
+- Only fire at **shot moments** (gated by pose or ball-enters-rim-zone)
+- In that ROI the ball is bigger, the background is constrained, and "did an
+  orange thing pass down through this hoop" is a narrow question
+
+This is exactly what HomeCourt's patent (US10748376B2, see §13.10/R1) does —
+trajectory backtrack *from the rim* — and it's why their solution runs on a phone.
+They never track the ball everywhere.
+
+### What this changes
+
+- ❌ BallNet-R full-court tracker — **shelved.** Not deleted (code + models kept
+  for reference), but off the critical path.
+- ✅ **Rim-region shot detection** becomes the real Phase 1 (see §16).
+- ✅ Camera tracking stays as-is (player centroid), but gets a **robustness fix**
+  for foreground occlusion (someone walking in front of the lens) — see §17.
+- ✅ The 4 failed BallNet experiments weren't wasted — they *proved* full-court
+  localization is wrong for this data, redirecting us to the right architecture.
 
 ---
 
@@ -569,6 +628,123 @@ Codename **Skynet Ball v2** during development, matching existing Skynet brandin
 
 ---
 
+## 16 · Rim-Region Shot Detection (the new Phase 1, post-pivot)
+
+Replaces full-court BallNet-R. Confines all the hard ML to a small, fixed
+region around each rim. Four stages, each shippable/testable on its own.
+
+### 16.1 · Rim localization (once, at warmup)
+
+The two rims are near-static in frame (gimbal pans, but slowly). Options, in
+order of preference:
+
+1. **User taps each rim once** during setup. Two taps, static, done. We rejected
+   4-corner court tapping because it was fiddly and had to be redone — but two
+   rim taps are trivial and the rims don't move. Least ML, most reliable. Start here.
+2. **Backboard detection** — the backboard is a large, high-contrast rectangle
+   (white/clear against gym wall). Detect it, rim hangs below center. More
+   automatic, moderate reliability.
+3. **Learned rim detector** — small CNN, but this is the thing we just learned is
+   data-hungry. Defer.
+
+Store each rim as an ROI box. Track its position across gimbal pan using the
+existing IMU yaw compensation (same mechanism as CourtHeatmapAccumulator), or
+re-confirm every few seconds.
+
+### 16.2 · Shot-moment gating (cheap, always on)
+
+Don't run make/miss detection every frame. Fire it only when a shot is plausible:
+- An orange blob enters the "above rim" zone of a rim ROI, OR
+- A tracked player near a rim shows shooting pose (VNDetectHumanBodyPoseRequest —
+  wrists above head, already in our pipeline)
+
+Gating keeps compute near-zero except in the ~1-2 second windows that matter.
+
+### 16.3 · Make/miss classification (in the rim ROI, when gated)
+
+The narrow question: *did an orange object pass downward through the hoop?*
+
+**v1 heuristic (no neural net):** track the orange centroid inside the rim ROI
+over ~10-15 frames. MAKE if it enters from above the rim plane, passes through
+the rim-center box, and exits below (clean downward pass). MISS if it contacts
+the rim/backboard and departs sideways/upward (bounce). This is tractable because:
+- The ROI is small and the background (backboard + net) is constrained
+- The ball is bigger near the rim (shots arc up, rim is often closer to camera)
+- We only classify during gated windows, not continuously
+
+**v2 (if the heuristic is noisy):** a tiny CNN on the rim-ROI over N frames,
+trained on labeled shot clips. Because the ROI is small and constrained, this
+needs far less data than full-court BallNet-R did — the exact wall we hit.
+
+### 16.4 · Team attribution + scoring
+
+- Each rim belongs to a team's *offense* (you score on the opponent's basket).
+  After tip-off, rim identity → scoring team, directly. No jersey ID needed for
+  the basic case.
+- Fallback / refinement: shooter's jersey color at ball-release (existing
+  team-color learning).
+- On a detected make: auto-increment that team's score, show a 3-second undo on
+  the Watch (respects the existing manual-override model).
+
+### 16.5 · Why this dodges the data wall
+
+Full-court BallNet-R needed to localize an 8-15px camouflaged ball anywhere among
+10 players in any gym — a problem that ate 1,189 labels for breakfast. Rim-region
+detection asks a bounded question in a fixed, constrained ROI, gated to shot
+moments. Even a heuristic may suffice for v1. If ML is needed, the constrained
+ROI slashes the data requirement.
+
+### 16.6 · Roadmap (revised)
+
+- **Phase 1 (new):** rim tap-to-locate + heuristic make/miss + team attribution.
+  Weeks, not months. Mostly Swift, minimal/no training.
+- **Phase 2:** if heuristic is noisy, small rim-ROI CNN (labeled shot clips —
+  a few hundred, not thousands).
+- **Phase 3:** shot chart, highlights, season stats (backend data now exists).
+
+BallNet-R full-court tracking: **shelved**, code kept under `tools/ballnetr/` for
+reference (§14 v2.0).
+
+---
+
+## 17 · Player-Centroid Tracking Robustness (immediate, ship-now)
+
+Independent of the auto-score pivot. The gimbal aims off the player-cluster
+centroid today, but two failure modes hurt at real games:
+
+1. **Foreground occlusion** — a parent/ref walks in front of the lens. Their huge
+   bounding box dominates, and the action center jumps to them / the gimbal lurches.
+2. **Sideline/bench pull** — covered earlier (court-quad gate, feet-only fallback,
+   tighter default bounds), but foreground occlusion is the remaining big one.
+
+### 17.1 · Fixes
+
+- **Reject sudden-large detections harder.** We already drop boxes >50% frame
+  height (`isMassiveForegroundObject`). Add a *temporal* rule: a box that jumps
+  from small/absent to very large in 1-3 frames is someone walking into frame —
+  reject regardless of exact size.
+- **Hold, don't chase.** When the on-court detection set collapses (foreground
+  object dominates, or detections drop below a threshold), FREEZE the gimbal on
+  the last stable action center instead of recomputing from garbage. Use the
+  Kalman-predicted center for a short coast, then hold.
+- **Centroid inertia.** Cap the per-frame action-center velocity so a single bad
+  frame can't yank the camera. Momentum smoothing already exists; tighten the cap
+  and make it asymmetric (resist large jumps, allow smooth follows).
+- **Occlusion recovery via Re-ID.** DeepTracker already has appearance Re-ID —
+  when the foreground object clears, re-lock onto the same team tracks rather than
+  re-initializing.
+
+### 17.2 · Files touched
+
+- `AutoZoomManager.swift` — action-center hold/coast logic, velocity cap
+- `PersonClassifier.swift` — temporal sudden-large rejection
+- `DeepTracker.swift` — occlusion-aware track persistence (mostly exists)
+
+This is real Swift work on the shipping app, gated behind the usual ship-or-kill
+(works across 3 games, no worse than today). See §14 v2.0.
+
+---
+
 ## Appendix A — Existing datasets audit (as of Jun 2026)
 
 - **BVD (Basketball Video Dataset)** — collegiate, 4K frames, boxes not points
@@ -665,6 +841,24 @@ Every change appends here. This is the doc's ancestral record.
 - **Trigger:** Narayan asked that this doc become "de facto going forward" and that it "carry the memory of ancestors" like the Bene Gesserit.
 - **What:** Added §13 (Rejected Alternatives) and §14 (Revision Log) and §15 (LLM-as-a-Judge Audit History). Rewrote header to establish canonical status and change protocol. Updated `CLAUDE.md` to point at this doc as the authoritative source for all Auto-Score work.
 - **Why:** Long AI-driven sessions accumulate context that can silently drift or vanish. A living doc with explicit revision protocol and preserved audit history is how we prevent that drift.
+
+### v2.0 — 2026-07-07 (STRATEGIC PIVOT — rim-region shot detection replaces full-court ball tracking)
+- **Who:** Narayan (PM call) + Claude (analysis)
+- **Trigger:** v3 eval confirmed the plateau. Narayan: "let's reassess if ball tracking is even critical... we got distracted by the badminton usecase."
+- **The four-experiment verdict (v1.1 detail below):** full-court BallNet-R plateaus at ~40-55% precise localization regardless of temporal frames / loss function / resolution / source quality. It's a data-volume + pretraining wall (1,189 positives vs TrackNetV3's 100k+), compounded by a fundamentally harder problem than badminton (camouflaged orange ball vs distinct white shuttlecock, moving camera vs fixed, cluttered gym vs clean court).
+- **The pivot:** stop tracking the ball across the court. Detect scoring events AT THE RIM (§0, §16). Narrower, bounded, gated to shot moments, may not even need a neural net for v1. Mirrors HomeCourt's patent (trajectory backtrack from rim). Camera tracking stays on player centroid — never needed the ball.
+- **Added §0** (pivot summary, read-first), **§16** (rim-region shot detection architecture), **§17** (player-centroid robustness fix for foreground occlusion — someone walking in front of the lens).
+- **Shelved (not deleted):** BallNet-R full-court tracker. Code + models kept under `tools/ballnetr/` for reference. The 4 experiments proved the approach wrong for this data — valuable negative result.
+- **Cleanup:** training-data videos/frames removed (10 GB freed) — the labeling + models are captured; raw footage regenerable from YouTube/Photos if ever needed again.
+
+### v1.1 — 2026-07-06/07 (BallNet-R v0-v3 — four experiments, the plateau)
+- **v0** (1-frame, focal BCE, 512×288, from scratch): 55.2% <10px on visible, mean 61px, confidence collapsed (~0.25, undiscriminating). Legit baseline.
+- **v1** (3-frame temporal, focal BCE, 512): regressed slightly (52.6% <10px). Temporal didn't help.
+- **v2** (3-frame, weighted MSE, 512): same localization plateau, BUT confidence magnitude fixed (0.25 → 0.85). Loss wasn't the localization bottleneck.
+- **v3** (3-frame, weighted MSE, 960×544, 4K source): 41.2% precise hits (<1.95% width) — worse. Resolution + 4K source didn't break the plateau. (Caveat: v3 val game was 4K-sourced vs 1080p prior, minor confound.)
+- **Conclusion:** ~40-55% precise-localization wall across all four. Not frames, not loss, not resolution, not source. Data volume + no pretraining. → pivot (v2.0).
+- **One durable win:** weighted MSE (v2/v3) fixed confidence collapse — worth remembering if we ever revisit ROI-scale ball detection.
+- **Tooling built (kept):** extract.py, label.py, dataset*.py, train*.py, eval*.py, extract_triplets.py under tools/ballnetr/. The labeling tool + 2,404 labels are reusable if rim-ROI detection ever needs a small trained model.
 
 ### v1.0 — 2026-07-06 (Phase 1a + 1b complete — v0 model trained and evaluated)
 - **Who:** Narayan (video gathering, 5.7 hrs of labeling, ran training) + Claude (pipeline, eval)
