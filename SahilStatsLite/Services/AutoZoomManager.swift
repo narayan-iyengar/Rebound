@@ -156,6 +156,16 @@ private actor SkynetProcessor {
     private var lastProcessTime: CFAbsoluteTime = 0
     private var isProcessing: Bool = false
 
+    // MARK: - Foreground-occlusion robustness (§17)
+    // Rolling count of on-court players, used to detect a sudden collapse (someone
+    // walks in front of the lens / tracks drop). When collapse is detected we HOLD
+    // the last stable action center instead of chasing garbage.
+    private var stablePlayerCount: Int = 0
+    // Max the action center may move per AI frame (normalized units). 0.08 at 15fps
+    // ≈ 1.2/s pan — comfortably faster than a real fast break (~0.3/s) but blocks
+    // teleport-jumps from a bad frame.
+    private let maxCenterStepPerFrame: CGFloat = 0.08
+
     /// Entry point for each camera frame. Returns nil if throttled or already processing.
     /// Takes UnsafeSendableBuffer so CVPixelBuffer never crosses the actor boundary directly.
     func tryCompute(_ wrapper: UnsafeSendableBuffer) -> SkynetResult? {
@@ -187,6 +197,7 @@ private actor SkynetProcessor {
         frameCount = 0
         lastFrameTime = 0
         isProcessing = false
+        stablePlayerCount = 0
     }
 
     // MARK: - Core Computation
@@ -245,11 +256,42 @@ private actor SkynetProcessor {
             // Y stays on player cluster — we're pan-only and players define the vertical framing
         }
 
-        let distance = hypot(rawActionCenter.x - currentCenter.x, rawActionCenter.y - currentCenter.y)
+        // ── Foreground-occlusion robustness (§17) ────────────────────────────
+        // Detect a sudden collapse of the on-court player set — the signature of
+        // someone walking in front of the lens, or tracks dropping in a scrum.
+        // When it happens, HOLD: don't recompute the center from an unreliable
+        // frame; coast on the last stable center (bgActionCenter) and let the
+        // gimbal deadband keep it steady.
+        let onCourtCount = players.count
+        let collapsed = stablePlayerCount >= 3 && onCourtCount <= stablePlayerCount / 2
+        // Very low track reliability = the tracker isn't confident about anything
+        // (scrum, heavy occlusion). Hold rather than chase.
+        let unreliable = deepTracker.averageReliability < 0.25
+
         var newActionCenter: CGPoint? = nil
-        if distance > 0.03 {
-            newActionCenter = rawActionCenter
-            bgActionCenter = rawActionCenter
+        if collapsed || unreliable {
+            // Hold — emit no new center. Gimbal coasts on last stable aim.
+            // Do NOT update stablePlayerCount here, so we recover the moment the
+            // occluder clears and the real players are seen again.
+            if frameCount % 30 == 0 {
+                debugPrint("🛡️ [Skynet] HOLD — occlusion/low-reliability (players \(onCourtCount) vs stable \(stablePlayerCount), rel \(String(format: "%.2f", deepTracker.averageReliability)))")
+            }
+        } else {
+            // Velocity-cap the move so a single noisy frame can't yank the gimbal.
+            let dx = rawActionCenter.x - currentCenter.x
+            let dy = rawActionCenter.y - currentCenter.y
+            let distance = hypot(dx, dy)
+            var capped = rawActionCenter
+            if distance > maxCenterStepPerFrame {
+                let s = maxCenterStepPerFrame / distance
+                capped = CGPoint(x: currentCenter.x + dx * s, y: currentCenter.y + dy * s)
+            }
+            if distance > 0.03 {
+                newActionCenter = capped
+                bgActionCenter = capped
+            }
+            // Update the stable baseline only on healthy frames.
+            stablePlayerCount = onCourtCount
         }
 
         let edgePlayers = players.filter { $0.boundingBox.midX < 0.15 || $0.boundingBox.midX > 0.85 }
