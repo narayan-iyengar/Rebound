@@ -48,7 +48,11 @@ class TripletDatasetV3(Dataset):
     def _load_rgb_and_mask(self, rel_path: str):
         bgr = cv2.imread(str(self.frames_root / rel_path))
         if bgr is None:
-            raise RuntimeError(f"Failed to read {rel_path}")
+            # Graceful fallback — a missing/corrupt frame (e.g. end-of-game frames
+            # where the 4K original ended a frame or two before the YouTube version
+            # the labels were made against) must NOT crash a multi-hour training run.
+            # Return a black frame; it's a handful of samples out of thousands.
+            bgr = np.zeros((MODEL_H, MODEL_W, 3), dtype=np.uint8)
         bgr_r = cv2.resize(bgr, (MODEL_W, MODEL_H), interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(bgr_r, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         rgb_chw = np.transpose(rgb, (2, 0, 1))
