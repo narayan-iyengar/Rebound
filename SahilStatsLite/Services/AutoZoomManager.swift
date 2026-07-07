@@ -278,13 +278,15 @@ private actor SkynetProcessor {
             }
         } else {
             // Velocity-cap the move so a single noisy frame can't yank the gimbal.
-            let dx = rawActionCenter.x - currentCenter.x
-            let dy = rawActionCenter.y - currentCenter.y
-            let distance = hypot(dx, dy)
+            let dx: CGFloat = rawActionCenter.x - currentCenter.x
+            let dy: CGFloat = rawActionCenter.y - currentCenter.y
+            let distance: CGFloat = (dx * dx + dy * dy).squareRoot()
             var capped = rawActionCenter
             if distance > maxCenterStepPerFrame {
-                let s = maxCenterStepPerFrame / distance
-                capped = CGPoint(x: currentCenter.x + dx * s, y: currentCenter.y + dy * s)
+                let s: CGFloat = maxCenterStepPerFrame / distance
+                let cappedX: CGFloat = currentCenter.x + dx * s
+                let cappedY: CGFloat = currentCenter.y + dy * s
+                capped = CGPoint(x: cappedX, y: cappedY)
             }
             if distance > 0.03 {
                 newActionCenter = capped
