@@ -39,3 +39,21 @@ Examples:
 - `2026-06-14_[other-dad]_bulls-vs-hawks.mp4`
 
 Consistent naming makes it easier to spot-check gym/opponent variety later.
+
+## v3 hi-res sources (2026-07-06)
+
+`videos_hires/` symlinks map 4K original recordings (exported from Photos,
+`videos/originals/`) to their YouTube label filenames. 5 of 8 games have
+frame-aligned 4K originals (verified by exact duration match); the other 3
+fall back to YouTube 1080p. This matches Rebound's actual deployment
+distribution (the app records 4K → downsamples for the AI pipeline), so
+4K-sourced training frames are the correct distribution, not just higher quality.
+
+4K-sourced (frame-aligned, exact duration match):
+  Mar 22 Elements, Apr 18 Yellow Jackets (VAL), May 2 Midtown,
+  Jun 21 Cal swoosh, Jun 27 SF Rebels
+YouTube 1080p (no aligned original):
+  Feb 8 East Bay, Feb 12 SJ Spartans, May 9 PA Flight
+
+Regenerate symlinks: see git history for the ln -s block, or the
+originals/ + sahil/ dirs.
