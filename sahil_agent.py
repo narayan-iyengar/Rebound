@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """
-Rebound Agent — Zero-intervention remote build + deploy.
+Rebound Agent — Zero-intervention build + deploy (local, on the personal Mac).
 
-Runs on any machine (e.g. work laptop). Uses the Anthropic API to:
-  1. Read and edit Swift files (locally, on the machine running the agent)
+Uses the Anthropic API to:
+  1. Read and edit Swift files
   2. Commit and push to GitHub
-  3. Remote build-check on the personal Mac over SSH (fast, no device)
+  3. Compile-check (fast generic Release, no device)
   4. If errors: read affected files, fix, commit, rebuild — loop until clean
-  5. Deploy via deploy.sh on the personal Mac (pull + Release build + install
-     to iPhone; the Watch companion auto-pushes to the active paired Watch)
+  5. Deploy via deploy.sh (Release build + install to iPhone; the Watch
+     companion auto-pushes to the active paired Watch)
 
-No per-command approval. Describe a task; the agent does everything.
+No per-command approval. Describe a task; the agent does everything. Runs
+entirely on the personal Mac — no SSH, no remote trigger.
 
 MODERNIZED 2026-07-07 (was sahil_agent v2):
   - Model → claude-opus-4-8 (env REBOUND_AGENT_MODEL overrides)
-  - Deploy now uses deploy.sh (xcodebuild) — the reliable pipeline. The old
-    ios-deploy + devicectl-for-Watch path broke; devicectl timed out on WiFi
-    after the paid-account switch. deploy.sh installs via xcodebuild targeting
-    the iPhone UDID and the Watch companion auto-pushes to the active Watch.
+  - Local-only: dropped the SSH-to-personal-Mac layer (deploying from the
+    Mac itself, so it's dead weight).
+  - Deploy uses deploy.sh (xcodebuild) — the reliable pipeline. The old
+    ios-deploy + devicectl-for-Watch path broke (devicectl timed out on WiFi
+    after the paid-account switch). deploy.sh installs via xcodebuild
+    targeting the iPhone UDID; the Watch companion auto-pushes to the active
+    Watch.
   - Build-check is a fast generic Release compile (no device) for the fix loop.
   - Canonical design context: docs/SKYNET_AUTOSCORE_DESIGN.md.
 
@@ -25,8 +29,7 @@ Usage:
   python3 sahil_agent.py                       # interactive
   python3 sahil_agent.py "fix X and deploy"    # single-shot
 
-Requires: ANTHROPIC_API_KEY env var, SSH access to the personal Mac,
-          `pip install anthropic truststore`.
+Requires: ANTHROPIC_API_KEY, `pip install anthropic`.
 """
 
 import json
@@ -43,20 +46,14 @@ except Exception:
 import anthropic
 
 # ── Config ────────────────────────────────────────────────────────────────────
-# REPO: where THIS agent reads/edits Swift (the machine running the agent).
-# On the personal Mac itself, that's the same path as REMOTE_REPO.
-# On a work laptop with a separate clone, point REPO at that clone.
-REPO         = Path(os.environ.get("REBOUND_REPO", "/Users/narayan/SahilStats/SahilStatsLite/SahilStatsLite"))
-PERSONAL_MAC = os.environ.get("REBOUND_MAC", "narayan@Narayans-MacBook-Pro.local")
-REMOTE_REPO  = "/Users/narayan/SahilStats/SahilStatsLite/SahilStatsLite"
-DEPLOY_SH    = "/Users/narayan/SahilStats/deploy.sh"
-IPHONE_UDID  = "E52AFF08-9E71-52C0-8608-A9A529C5205C"   # xcrun devicectl / xcodebuild ID
-MODEL        = os.environ.get("REBOUND_AGENT_MODEL", "claude-opus-4-8")
+REPO      = Path(os.environ.get("REBOUND_REPO", "/Users/narayan/SahilStats/SahilStatsLite/SahilStatsLite"))
+DEPLOY_SH = "/Users/narayan/SahilStats/deploy.sh"
+MODEL     = os.environ.get("REBOUND_AGENT_MODEL", "claude-opus-4-8")
 
-# Fast compile-check: generic iOS Release, no device needed. Same config as
-# deploy.sh so errors match what a real deploy would hit.
+# Fast compile-check: generic iOS Release, no device. Same config as deploy.sh
+# so the errors match what a real deploy would hit.
 BUILD_CHECK = f"""
-cd {REMOTE_REPO}
+cd {REPO}
 git pull --rebase origin main 2>&1 | tail -2
 echo '--- BUILD START ---'
 xcodebuild \\
@@ -73,21 +70,9 @@ echo '--- BUILD END ---'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _local(cmd: str, cwd=None) -> str:
-    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd or str(REPO))
-    out = (r.stdout or "").strip()
-    err = (r.stderr or "").strip()
-    return (out + ("\n" + err if err else "")).strip() or "(no output)"
-
-def _ssh(cmd: str, timeout=300) -> str:
-    r = subprocess.run(["ssh", PERSONAL_MAC, cmd], capture_output=True, text=True, timeout=timeout)
-    out = (r.stdout or "").strip()
-    err = (r.stderr or "").strip()
-    return (out + ("\n" + err if err else "")).strip() or "(no output)"
-
-def _ssh_script(script: str, timeout=900) -> str:
-    r = subprocess.run(["ssh", PERSONAL_MAC, "bash", "-s"],
-                       input=script, capture_output=True, text=True, timeout=timeout)
+def _local(cmd: str, cwd=None, timeout=None) -> str:
+    r = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                       cwd=cwd or str(REPO), timeout=timeout)
     out = (r.stdout or "").strip()
     err = (r.stderr or "").strip()
     return (out + ("\n" + err if err else "")).strip() or "(no output)"
@@ -129,21 +114,17 @@ def git_commit_and_push(files: list[str], message: str) -> str:
     return "\n".join(staged + [commit, push])
 
 def build() -> str:
-    """Pull latest on the personal Mac and compile-check (generic Release, no device)."""
-    return _ssh_script(BUILD_CHECK)
+    """Pull latest and compile-check (generic Release, no device)."""
+    return _local(BUILD_CHECK, timeout=900)
 
 def deploy() -> str:
-    """Run deploy.sh on the personal Mac: pull + Release build + install to iPhone.
-    The Watch companion auto-pushes to whichever Watch is the active paired Watch."""
-    return _ssh(f"bash {DEPLOY_SH}", timeout=900)
+    """Run deploy.sh: pull + Release build + install to iPhone. The Watch
+    companion auto-pushes to whichever Watch is the active paired Watch."""
+    return _local(f"bash {DEPLOY_SH}", timeout=900)
 
 def check_devices() -> str:
     """Which devices are reachable (iPhone + both Watches)."""
-    return _ssh("xcrun devicectl list devices 2>&1 | grep -E 'iPhone|Watch|iPad'")
-
-def ssh_run(command: str) -> str:
-    """Run an arbitrary command on the personal Mac."""
-    return _ssh(command)
+    return _local("xcrun devicectl list devices 2>&1 | grep -E 'iPhone|Watch|iPad'")
 
 # ── Tool definitions ───────────────────────────────────────────────────────────
 
@@ -154,25 +135,22 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}},
     {"name": "list_files", "description": "List files in the repo or a subdirectory.",
      "input_schema": {"type": "object", "properties": {"directory": {"type": "string"}}}},
-    {"name": "run_local", "description": "Run a shell command where the agent runs (git status, diff, log, grep).",
+    {"name": "run_local", "description": "Run a shell command (git status, diff, log, grep, xcrun).",
      "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
     {"name": "git_commit_and_push", "description": "Stage files, commit, push to GitHub.",
      "input_schema": {"type": "object", "properties": {"files": {"type": "array", "items": {"type": "string"}}, "message": {"type": "string"}}, "required": ["files", "message"]}},
     {"name": "build", "description": (
-        "Pull latest on the personal Mac and compile-check (generic Release, no device — fast). "
+        "Pull latest and compile-check (generic Release, no device — fast). "
         "Returns errors AND warnings. If errors exist: read the affected files, fix with write_file, "
         "commit with git_commit_and_push, call build again. Repeat until 'BUILD SUCCEEDED' with no errors."),
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "deploy", "description": (
-        "Run deploy.sh on the personal Mac: pull + Release build + install to iPhone. The Watch "
-        "companion auto-pushes to the active paired Watch. Call build first and confirm it's clean. "
-        "To deploy to the OTHER Watch, the user must switch the active Watch in the iPhone Watch app, "
-        "then deploy again."),
+        "Run deploy.sh: pull + Release build + install to iPhone. The Watch companion auto-pushes to "
+        "the active paired Watch. Call build first and confirm it's clean. To deploy to the OTHER Watch, "
+        "the user must switch the active Watch in the iPhone Watch app, then deploy again."),
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "check_devices", "description": "Which devices are reachable (iPhone, both Watches).",
      "input_schema": {"type": "object", "properties": {}}},
-    {"name": "ssh_run", "description": "Run an arbitrary command on the personal Mac.",
-     "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
 ]
 
 DISPATCH = {
@@ -184,7 +162,6 @@ DISPATCH = {
     "build":               lambda i: build(),
     "deploy":              lambda i: deploy(),
     "check_devices":       lambda i: check_devices(),
-    "ssh_run":             lambda i: ssh_run(i["command"]),
 }
 
 # ── System prompt ──────────────────────────────────────────────────────────────
