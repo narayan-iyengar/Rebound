@@ -32,8 +32,6 @@ struct GameSetupView: View {
 
     @FocusState private var isOpponentFocused: Bool
 
-    private let teamsKey = "myTeams"
-
     var body: some View {
         VStack(spacing: 24) {
             // Header
@@ -364,16 +362,17 @@ struct GameSetupView: View {
     }
 
     private func loadTeams() {
-        if let data = UserDefaults.standard.data(forKey: teamsKey),
-           let decoded = try? JSONDecoder().decode([String].self, from: data) {
-            teams = decoded
+        // Single source of truth: the same list Settings ("My Teams") edits via
+        // GameCalendarManager.knownTeamNames. Previously this read an orphaned
+        // "myTeams" key that nothing ever wrote — so teams added in Settings
+        // (a 4th team, etc.) never showed up here.
+        let known = GameCalendarManager.shared.knownTeamNames
+        if !known.isEmpty {
+            teams = known
+        } else if let oldTeam = UserDefaults.standard.string(forKey: "myTeamName"), !oldTeam.isEmpty {
+            teams = [oldTeam]
         } else {
-            // Fallback: check old single team key or use default
-            if let oldTeam = UserDefaults.standard.string(forKey: "myTeamName"), !oldTeam.isEmpty {
-                teams = [oldTeam]
-            } else {
-                teams = ["Wildcats"]
-            }
+            teams = ["Wildcats"]
         }
         // Select first team by default
         if selectedTeam.isEmpty, let first = teams.first {
