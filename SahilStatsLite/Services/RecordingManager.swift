@@ -208,10 +208,33 @@ class RecordingManager: NSObject, ObservableObject {
             debugPrint("📹 Using 720p preset")
         }
 
-        // Add video input (back camera)
-        if let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+        // Add video input (back camera).
+        // NOTE: .builtInWideAngleCamera is Apple's MAIN 1× lens (misleading name).
+        // .builtInUltraWideCamera is the actual 0.5× / ~120° wide lens — used for the
+        // fixed-tripod full-court capture mode. It cannot be reached by zooming the
+        // main camera below 1× (impossible); it's a separate AVCaptureDevice.
+        //
+        // Log everything the device exposes so the ultrawide is visibly available.
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInUltraWideCamera, .builtInWideAngleCamera, .builtInDualWideCamera, .builtInTripleCamera],
+            mediaType: .video,
+            position: .back
+        )
+        for d in discovery.devices {
+            debugPrint("📹 available back camera: \(d.localizedName) — \(d.deviceType.rawValue)")
+        }
+
+        // Toggle: Settings-backed flag. When ON, prefer the ultrawide lens (full-court
+        // capture from an elevated fixed tripod). Falls back to the main lens if the
+        // ultrawide is unavailable on the device.
+        let preferUltraWide = UserDefaults.standard.bool(forKey: "useUltraWideCamera")
+        let ultraWide = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back)
+        let mainWide = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+
+        if let videoDevice = (preferUltraWide ? (ultraWide ?? mainWide) : mainWide) {
             currentVideoDevice = videoDevice
-            debugPrint("📹 Found back camera: \(videoDevice.localizedName)")
+            let isUW = videoDevice.deviceType == .builtInUltraWideCamera
+            debugPrint("📹 Using \(isUW ? "ULTRA-WIDE (0.5×)" : "main (1×)") camera: \(videoDevice.localizedName)")
 
             do {
                 let videoInput = try AVCaptureDeviceInput(device: videoDevice)
@@ -220,11 +243,12 @@ class RecordingManager: NSObject, ObservableObject {
                     debugPrint("📹 Added video input")
                 }
 
-                // Reset zoom to 1.0x (widest) on camera setup
+                // Reset zoom to the lens's native widest (1.0× = the full sensor for
+                // whichever lens is active; on the ultrawide that IS the ~120° view).
                 try videoDevice.lockForConfiguration()
                 videoDevice.videoZoomFactor = 1.0
                 videoDevice.unlockForConfiguration()
-                debugPrint("📹 Zoom reset to 1.0x (wide angle)")
+                debugPrint("📹 Zoom reset to 1.0x (\(isUW ? "ultra-wide native" : "main native"))")
             } catch {
                 debugPrint("❌ Failed to create video input: \(error)")
                 self.error = "Failed to setup camera: \(error.localizedDescription)"

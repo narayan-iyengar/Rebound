@@ -82,10 +82,33 @@ struct SettingsView: View {
                         .pickerStyle(.menu)
                         .labelsHidden()
                     }
+
+                    // Ultra-wide capture — for the fixed elevated-tripod full-court
+                    // experiment (BallerTV-style). Uses the 0.5× / ~120° lens instead
+                    // of the main 1× lens. Restart recording after toggling.
+                    Toggle(isOn: Binding(
+                        get: { UserDefaults.standard.bool(forKey: "useUltraWideCamera") },
+                        set: { UserDefaults.standard.set($0, forKey: "useUltraWideCamera") }
+                    )) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "camera.aperture")
+                                .font(.title2)
+                                .foregroundColor(.blue)
+                                .frame(width: 32)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ultra-Wide Lens (0.5×)")
+                                    .font(.body)
+                                Text("Full-court capture from a fixed elevated tripod")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .tint(.blue)
                 } header: {
                     Text("Recording")
                 } footer: {
-                    Text("Skynet uses AI to track players and adjust zoom automatically. These settings apply to all recordings.")
+                    Text("Skynet uses AI to track players and adjust zoom automatically. Ultra-Wide is experimental — for a fixed tall-tripod full-court setup, no gimbal. Restart recording after changing.")
                 }
 
                 // YouTube Section
