@@ -69,6 +69,10 @@ struct UltraMinimalRecordingView: View {
     // UI state
     @State private var showSahilStats: Bool = false
     @State private var showEndConfirmation: Bool = false
+    // Collapsing clock chip (top-center). Collapsed = one-tap pause/resume;
+    // expand chevron reveals Period / +1:00 / End. Auto-collapses when idle.
+    @State private var controlsExpanded: Bool = false
+    @State private var autoCollapseWork: DispatchWorkItem?
     @State private var isFinishingRecording: Bool = false
     @State private var isPortrait: Bool = true
     @State private var hasCameraStarted: Bool = false
@@ -162,29 +166,40 @@ struct UltraMinimalRecordingView: View {
             // Full screen camera
             cameraPreview
 
-            // Top bar: REC dot (left) + Menu icon (right)
+            // Top bar: REC dot (left) + clock chip (center) + Stats (right)
             VStack {
-                HStack {
-                    recIndicator
-                        .padding(.leading, 20)
+                ZStack {
+                    // Side items
+                    HStack {
+                        recIndicator
+                            .padding(.leading, 20)
 
-                    trackingStatus
+                        trackingStatus
 
-                    Spacer()
+                        Spacer()
 
-                    // Stats button - frosted glass style for visibility against any background
-                    Button(action: { showSahilStats = true }) {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-                            )
+                        // Stats button - frosted glass style for visibility against any background
+                        Button(action: { showSahilStats = true }) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                                )
+                        }
+                        .padding(.trailing, 16)
                     }
-                    .padding(.trailing, 16)
+
+                    // Centered clock control chip (only once the game is live)
+                    if (hasGameStarted || appState.isStatsOnly), !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
+                        VStack {
+                            clockControlChip
+                            Spacer(minLength: 0)
+                        }
+                    }
                 }
                 .padding(.top, 12)
                 Spacer()
@@ -250,14 +265,13 @@ struct UltraMinimalRecordingView: View {
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom, spacing: 8) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            // Subtle zoom indicator above controls
-                            if (displayZoom > 1.05 || displayZoom < 0.95) && !appState.isStatsOnly {
-                                zoomIndicator
-                            }
-                            gameControlsBar
+                        // Subtle zoom indicator (bottom-left). Game controls moved to
+                        // the collapsing clock chip at top-center — the bottom corners
+                        // are the thumb-grip zone in landscape (accidental-tap source).
+                        if (displayZoom > 1.05 || displayZoom < 0.95) && !appState.isStatsOnly {
+                            zoomIndicator
+                                .padding(.leading, 12)
                         }
-                        .padding(.leading, 12)
 
                         Spacer()
 
@@ -675,75 +689,131 @@ struct UltraMinimalRecordingView: View {
         recordingManager.onFrameForAI = nil
     }
 
-    // MARK: - Game Controls Bar (bottom-left)
-    // Persistent control surface for the phone-as-controller mode (no Watch, manual gimbal).
-    // Replaces hidden gestures and the buried stats-sheet controls. Each button is a real
-    // 60×56pt target with icon + label and haptic feedback. Hidden when the Watch is
-    // actively driving the game (phone reverts to dumb-camera mode).
-    private var gameControlsBar: some View {
-        HStack(spacing: 6) {
-            // Pause / Resume clock
-            controlButton(
-                icon: isClockRunning ? "pause.fill" : "play.fill",
-                label: isClockRunning ? "Pause" : (remainingSeconds > 0 ? "Resume" : "Start"),
-                color: isClockRunning ? .orange : .green
-            ) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                toggleClock()
-            }
+    // MARK: - Clock Control Chip (top-center, collapsing)
+    // Default state is a single glanceable clock that is ALSO the one-tap pause/resume
+    // button — the 95% action. A distinct chevron reveals Period / +1:00 / End inline
+    // (no modal, no navigation — stays on the recording canvas). Auto-collapses when idle.
+    // Lives top-center because the bottom corners are the thumb-grip zone in landscape,
+    // where the old always-visible bar caused accidental taps (including "End").
+    private var clockControlChip: some View {
+        VStack(spacing: 6) {
+            // Collapsed chip: [ ⏸ 12:34 | ⌄ ]
+            HStack(spacing: 0) {
+                // Primary: one-tap pause/resume — big, forgiving target
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    toggleClock()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: isClockRunning ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(isClockRunning ? .orange : .green)
+                        Text(clockTime)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                            .foregroundColor(clockColor)
+                    }
+                    .padding(.leading, 14)
+                    .padding(.trailing, 12)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
-            // Period advance
-            controlButton(
-                icon: "forward.fill",
-                label: nextPeriodLabel,
-                color: .blue
-            ) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                advancePeriod()
-            }
+                Rectangle()
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: 1, height: 26)
 
-            // Time: tap +1:00, long-press -1:00, Add OT when clock=0
-            controlButton(
-                icon: remainingSeconds > 0 ? "clock.arrow.circlepath" : "plus.circle.fill",
-                label: remainingSeconds > 0 ? "+1:00" : "Add OT",
-                color: .purple
-            ) {
-                if remainingSeconds > 0 {
-                    remainingSeconds += 60
+                // Secondary: deliberate edge target to reveal the rest
+                Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    updateOverlayState()
-                    sendClockToWatch()
-                } else {
-                    addOvertime()
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                        controlsExpanded.toggle()
+                    }
+                    if controlsExpanded { scheduleAutoCollapse() } else { cancelAutoCollapse() }
+                } label: {
+                    Image(systemName: controlsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(width: 40, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
-            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                if remainingSeconds >= 60 {
-                    remainingSeconds -= 60
-                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                    updateOverlayState()
-                    sendClockToWatch()
-                }
-            })
+            .background(Color(white: 0.08, opacity: 0.9))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
 
-            // End game
-            controlButton(icon: "stop.fill", label: "End", color: .red) {
-                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                if hasGameStarted || appState.isStatsOnly {
-                    showEndConfirmation = true
-                } else {
-                    discardGame()
+            // Expanded controls — spring down, inline, auto-collapse
+            if controlsExpanded {
+                HStack(spacing: 6) {
+                    // Period advance
+                    controlButton(icon: "forward.fill", label: nextPeriodLabel, color: .blue) {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        advancePeriod()
+                        scheduleAutoCollapse()
+                    }
+
+                    // Time: tap +1:00, long-press -1:00, Add OT when clock=0
+                    controlButton(
+                        icon: remainingSeconds > 0 ? "clock.arrow.circlepath" : "plus.circle.fill",
+                        label: remainingSeconds > 0 ? "+1:00" : "Add OT",
+                        color: .purple
+                    ) {
+                        if remainingSeconds > 0 {
+                            remainingSeconds += 60
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            updateOverlayState()
+                            sendClockToWatch()
+                        } else {
+                            addOvertime()
+                        }
+                        scheduleAutoCollapse()
+                    }
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                        if remainingSeconds >= 60 {
+                            remainingSeconds -= 60
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                            updateOverlayState()
+                            sendClockToWatch()
+                        }
+                        scheduleAutoCollapse()
+                    })
+
+                    // End game — never one-tap; requires expand + confirmation
+                    controlButton(icon: "stop.fill", label: "End", color: .red) {
+                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                        cancelAutoCollapse()
+                        if hasGameStarted || appState.isStatsOnly {
+                            showEndConfirmation = true
+                        } else {
+                            discardGame()
+                        }
+                    }
                 }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(white: 0.08, opacity: 0.88))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
+    }
+
+    // Auto-collapse the expanded controls after a few idle seconds. Any control
+    // interaction calls this to restart the timer so the row stays open while in use.
+    private func scheduleAutoCollapse() {
+        autoCollapseWork?.cancel()
+        let work = DispatchWorkItem {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                controlsExpanded = false
+            }
+        }
+        autoCollapseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0, execute: work)
+    }
+
+    private func cancelAutoCollapse() {
+        autoCollapseWork?.cancel()
+        autoCollapseWork = nil
     }
 
     private func controlButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -1049,10 +1119,16 @@ struct UltraMinimalRecordingView: View {
                         self.remainingSeconds -= 1
                         self.remainingTenths = 9
                     } else {
-                        // Time's up
+                        // Time's up — surface the contextual next action (Next Period /
+                        // Add OT) by auto-expanding the chip. It stays open (no auto-collapse)
+                        // until the user acts.
                         self.remainingSeconds = 0
                         self.remainingTenths = 0
                         self.isClockRunning = false
+                        self.cancelAutoCollapse()
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                            self.controlsExpanded = true
+                        }
                     }
                 } else {
                     // Over 1 minute: decrement seconds normally

@@ -290,7 +290,7 @@ final class GimbalTrackingManager: ObservableObject {
                 do {
                     try await accessory.setAngularVelocity(velocity)
                     #if DEBUG
-                    debugPrint("[Gimbal] PID pan → err:\(String(format: "%.3f", error)) vel:\(String(format: "%.2f", panVelocity)) rad/s")
+                    debugPrint("[Gimbal] PID pan → err:\(String(format: "%.3f", panError)) vel:\(String(format: "%.2f", panVelocity)) rad/s")
                     #endif
                 } catch {
                     // setAngularVelocity unsupported or failed — fall back to ROI hint (old method).
