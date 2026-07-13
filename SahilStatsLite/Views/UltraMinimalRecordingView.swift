@@ -698,7 +698,9 @@ struct UltraMinimalRecordingView: View {
     // where the old always-visible bar caused accidental taps (including "End").
     private var clockControlChip: some View {
         VStack(spacing: 6) {
-            // Collapsed chip: [ ⏸ 12:34 | ⌄ ]
+            // Collapsed chip: [ ⏸ Pause | ⌄ ] — no clock number here; the clock lives
+            // only at the scoreboard (bottom-right), which is what's burned into the
+            // video. This chip is purely the control, so there's no double clock.
             HStack(spacing: 0) {
                 // Primary: one-tap pause/resume — big, forgiving target
                 Button {
@@ -707,11 +709,11 @@ struct UltraMinimalRecordingView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: isClockRunning ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(isClockRunning ? .orange : .green)
-                        Text(clockTime)
-                            .font(.system(size: 20, weight: .bold, design: .monospaced))
-                            .foregroundColor(clockColor)
+                        Text(isClockRunning ? "Pause" : (remainingSeconds > 0 ? "Resume" : "Start"))
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
                     }
                     .padding(.leading, 14)
                     .padding(.trailing, 12)
