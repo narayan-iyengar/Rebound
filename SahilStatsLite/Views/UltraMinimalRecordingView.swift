@@ -73,6 +73,9 @@ struct UltraMinimalRecordingView: View {
     // expand chevron reveals Period / +1:00 / End. Auto-collapses when idle.
     @State private var controlsExpanded: Bool = false
     @State private var autoCollapseWork: DispatchWorkItem?
+    // True once the clock has been started at least once (any mode) — drives the chip's
+    // "Start" vs "Pause"/"Resume" label. hasGameStarted only covers recording mode.
+    @State private var clockEverStarted: Bool = false
     @State private var isFinishingRecording: Bool = false
     @State private var isPortrait: Bool = true
     @State private var hasCameraStarted: Bool = false
@@ -714,7 +717,7 @@ struct UltraMinimalRecordingView: View {
                         Image(systemName: isClockRunning ? "pause.fill" : "play.fill")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(isClockRunning ? .orange : .green)
-                        Text(isClockRunning ? "Pause" : (remainingSeconds > 0 ? "Resume" : "Start"))
+                        Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Start")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.white)
                     }
@@ -1067,6 +1070,8 @@ struct UltraMinimalRecordingView: View {
         debugPrint("🕐 [toggleClock] called - isClockRunning: \(isClockRunning)")
 
         isClockRunning.toggle()
+
+        if isClockRunning { clockEverStarted = true }
 
         // First clock start = game start → begin recording
         if isClockRunning && !hasGameStarted && !appState.isStatsOnly {
