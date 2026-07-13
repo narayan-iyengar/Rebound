@@ -166,43 +166,44 @@ struct UltraMinimalRecordingView: View {
             // Full screen camera
             cameraPreview
 
-            // Top bar: REC dot (left) + clock chip (center) + Stats (right)
+            // Top bar: REC dot (left) + Stats button (right)
             VStack {
-                ZStack(alignment: .top) {
-                    // Side items
-                    HStack {
-                        recIndicator
-                            .padding(.leading, 20)
+                HStack {
+                    recIndicator
+                        .padding(.leading, 20)
 
-                        trackingStatus
+                    trackingStatus
 
-                        Spacer()
+                    Spacer()
 
-                        // Stats button - frosted glass style for visibility against any background
-                        Button(action: { showSahilStats = true }) {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-                                )
-                        }
-                        .padding(.trailing, 16)
+                    // Stats button - frosted glass style for visibility against any background
+                    Button(action: { showSahilStats = true }) {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                            )
                     }
-
-                    // Centered clock control chip (only once the game is live).
-                    // Top-aligned by the ZStack; must NOT wrap in a VStack+Spacer or it
-                    // expands the ZStack to full height and drags the side items (REC /
-                    // person) down to vertical center.
-                    if (hasGameStarted || appState.isStatsOnly), !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
-                        clockControlChip
-                    }
+                    .padding(.trailing, 16)
                 }
                 .padding(.top, 12)
                 Spacer()
+            }
+
+            // Clock control chip — its OWN top-center overlay, fully independent of the
+            // REC/person row so its expansion never shifts other elements (a wrapping
+            // Spacer previously dragged the side icons to screen center).
+            if (hasGameStarted || appState.isStatsOnly), !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
+                VStack {
+                    clockControlChip
+                        .padding(.top, 12)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
             // Full-screen tap zones for scoring (Jony Ive style - simple, forgiving)
