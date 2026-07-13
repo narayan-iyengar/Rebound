@@ -197,21 +197,6 @@ struct UltraMinimalRecordingView: View {
                 Spacer()
             }
 
-            // Clock control chip — its OWN top-center overlay, fully independent of the
-            // REC/person row so its expansion never shifts other elements (a wrapping
-            // Spacer previously dragged the side icons to screen center).
-            // Gate matches the old control bar exactly: show whenever the scoring UI is
-            // active (landscape / simulator / stats-only). NOT gated on hasGameStarted —
-            // the chip is how you START the clock, so it must appear during warmup.
-            if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
-                VStack {
-                    clockControlChip
-                        .padding(.top, 12)
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
-
             // Full-screen tap zones for scoring (Jony Ive style - simple, forgiving)
             // Left half = your team, Right half = opponent
             // Tap to add points, Swipe OUTWARD to subtract (away from center), Pinch to zoom
@@ -327,6 +312,21 @@ struct UltraMinimalRecordingView: View {
             if showSahilStats {
                 sahilStatsOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
+            // Clock control chip — its OWN top-center overlay, fully independent of the
+            // REC/person row so its expansion never shifts other elements.
+            // Placed AFTER the full-screen scoring tap-zones so the chip (and its
+            // expanded Period/+1:00/End buttons that spring down into the tap-zone
+            // region) win hit-testing — otherwise taps fell through and just scored.
+            // Gate matches the old control bar: show whenever the scoring UI is active.
+            if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
+                VStack {
+                    clockControlChip
+                        .padding(.top, 12)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
             // End game confirmation
