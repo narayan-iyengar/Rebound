@@ -168,7 +168,7 @@ struct UltraMinimalRecordingView: View {
 
             // Top bar: REC dot (left) + clock chip (center) + Stats (right)
             VStack {
-                ZStack {
+                ZStack(alignment: .top) {
                     // Side items
                     HStack {
                         recIndicator
@@ -193,12 +193,12 @@ struct UltraMinimalRecordingView: View {
                         .padding(.trailing, 16)
                     }
 
-                    // Centered clock control chip (only once the game is live)
+                    // Centered clock control chip (only once the game is live).
+                    // Top-aligned by the ZStack; must NOT wrap in a VStack+Spacer or it
+                    // expands the ZStack to full height and drags the side items (REC /
+                    // person) down to vertical center.
                     if (hasGameStarted || appState.isStatsOnly), !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
-                        VStack {
-                            clockControlChip
-                            Spacer(minLength: 0)
-                        }
+                        clockControlChip
                     }
                 }
                 .padding(.top, 12)
