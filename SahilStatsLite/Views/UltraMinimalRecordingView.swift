@@ -197,7 +197,10 @@ struct UltraMinimalRecordingView: View {
             // Clock control chip — its OWN top-center overlay, fully independent of the
             // REC/person row so its expansion never shifts other elements (a wrapping
             // Spacer previously dragged the side icons to screen center).
-            if (hasGameStarted || appState.isStatsOnly), !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
+            // Gate matches the old control bar exactly: show whenever the scoring UI is
+            // active (landscape / simulator / stats-only). NOT gated on hasGameStarted —
+            // the chip is how you START the clock, so it must appear during warmup.
+            if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
                 VStack {
                     clockControlChip
                         .padding(.top, 12)
