@@ -29,6 +29,8 @@ struct HomeView: View {
     @State private var hiddenGameID: String? = nil
     @State private var showUndoToast = false
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -87,6 +89,17 @@ struct HomeView: View {
         .onAppear {
             // Sync calendar games to Watch when home view appears
             WatchConnectivityService.shared.syncCalendarGames()
+            calendarManager.loadUpcomingGames()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Returning to the app re-evaluates the calendar so games that ended while
+            // we were away drop off (no more stale hero after a game passes).
+            if phase == .active { calendarManager.loadUpcomingGames() }
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+            // Keep the list fresh while the user sits on Home — a game rolls off within
+            // a minute of its scheduled end.
+            calendarManager.loadUpcomingGames()
         }
     }
 
@@ -283,13 +296,19 @@ struct HomeView: View {
 
     private var upcomingGamesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            let todayGames = calendarManager.gamesToday()
-            let laterGames = calendarManager.gamesAfterToday()
-            let allGames = calendarManager.upcomingGames
+            // Wall-clock LIVE filter (evaluated at render, not just at load): a game
+            // drops out the moment its scheduled end passes, so an ended-but-unrecorded
+            // game never sticks around as the big hero card. Everything below derives
+            // from this one live list so the hero, today, and later stay consistent.
+            let now = Date()
+            let calendar = Calendar.current
+            let liveGames = calendarManager.upcomingGames.filter { $0.endTime > now }
+            let todayGames = liveGames.filter { calendar.isDateInToday($0.startTime) }
+            let laterGames = liveGames.filter { !calendar.isDateInToday($0.startTime) }
 
-            if allGames.isEmpty {
+            if liveGames.isEmpty {
                 emptyGamesCard
-            } else if let nextGame = allGames.first {
+            } else if let nextGame = liveGames.first {
                 NextGameHeroCard(
                     game: nextGame,
                     todayCount: todayGames.count,
