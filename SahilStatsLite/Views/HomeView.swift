@@ -108,7 +108,7 @@ struct HomeView: View {
     private var undoToast: some View {
         HStack(spacing: 16) {
             Text("Game hidden")
-                .font(.chalkHand(16))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundColor(Chalk.chalk)
 
             Button {
@@ -119,7 +119,7 @@ struct HomeView: View {
                 hiddenGameID = nil
             } label: {
                 Text("Undo")
-                    .font(.chalkHand(16))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(Chalk.yellow)
             }
         }
@@ -166,7 +166,7 @@ struct HomeView: View {
                 ReboundWordmark(size: 44)
 
                 Text("Record. Track. Share.")
-                    .font(.chalkHand(15))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Chalk.dust)
             }
 
@@ -199,7 +199,7 @@ struct HomeView: View {
                     Spacer()
 
                     Text("\(persistenceManager.careerGames) games")
-                        .font(.chalkHand(14))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Chalk.dust)
 
                     Image(systemName: "chevron.right")
@@ -226,7 +226,7 @@ struct HomeView: View {
                 .monospacedDigit()
                 .foregroundColor(color)
             Text(label)
-                .font(.chalkHand(13))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
@@ -251,7 +251,7 @@ struct HomeView: View {
                             .foregroundColor(Chalk.chalk)
 
                         Text("\(persistenceManager.careerGames) games recorded")
-                            .font(.chalkHand(13))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(Chalk.dust)
                     }
 
@@ -275,7 +275,7 @@ struct HomeView: View {
                         .font(.title2)
                         .foregroundColor(Chalk.yellow)
                     Text("Add")
-                        .font(.chalkHand(12))
+                        .font(.system(size: 12))
                         .foregroundColor(Chalk.dust)
                 }
                 .frame(width: 56)
@@ -335,7 +335,7 @@ struct HomeView: View {
                 .foregroundColor(Chalk.chalk)
 
             Text("Calendar events with your team names will appear here automatically")
-                .font(.chalkHand(15))
+                .font(.system(size: 15))
                 .foregroundColor(Chalk.dust)
                 .multilineTextAlignment(.center)
 
@@ -343,7 +343,7 @@ struct HomeView: View {
                 showSettings = true
             } label: {
                 Text("Configure Teams")
-                    .font(.chalkHand(15))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(Chalk.yellow)
             }
         }
@@ -360,7 +360,7 @@ struct HomeView: View {
                 Image(systemName: "calendar")
                     .foregroundColor(Chalk.dust)
                 Text("\(count) more game\(count == 1 ? "" : "s") this month")
-                    .font(.chalkHand(15))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Chalk.dust)
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -383,7 +383,7 @@ struct HomeView: View {
                 .foregroundColor(Chalk.chalk)
 
             Text("See upcoming games from your calendar")
-                .font(.chalkHand(14))
+                .font(.system(size: 15))
                 .foregroundColor(Chalk.dust)
                 .multilineTextAlignment(.center)
 

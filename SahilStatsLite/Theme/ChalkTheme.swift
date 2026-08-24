@@ -92,6 +92,20 @@ extension Color {
 }
 
 // MARK: - Fonts (hand-chalk, with graceful system fallback)
+//
+// FONT ROLES (the accent rule — keeps the app polished, not childish):
+//   The hand-chalk face (chalkScript / chalkHand) is an ACCENT, used ONLY on:
+//     • the app wordmark (ReboundWordmark)
+//     • primary screen titles + section headers ("New Game", "Career Stats",
+//       "Game Log", …) and empty-state headlines ("No games scheduled")
+//     • ChalkButton CTA labels (its title is an intentional accent)
+//   EVERYTHING ELSE uses a clean SYSTEM font (with the Chalk COLOR tokens kept
+//   for color): field labels, captions, hints, list-row text (opponent names,
+//   dates), status pills/chips, toggle + picker labels, and all data/numbers.
+//   System type scale: title-ish 17 semibold · body 15 regular/medium ·
+//   label 13 medium · caption 12 regular. Muted = Chalk.dust, primary = Chalk.chalk;
+//   keep semantic accent colors (yellow/coral/sky/green) where they carry meaning,
+//   and monospacedDigit on numbers.
 
 extension Font {
     /// Display face (headings, wordmark, big labels). Now Gochi Hand — its printed

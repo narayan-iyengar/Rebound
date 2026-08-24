@@ -575,7 +575,8 @@ struct UltraMinimalRecordingView: View {
                         .fill(isClockRunning ? Chalk.green : Chalk.yellow)
                         .frame(width: 8, height: 8)
                     Text("LIVE")
-                        .font(.chalkHand(13))
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(0.5)
                         .foregroundColor(isClockRunning ? Chalk.green : Chalk.yellow)
                     // Simple YT LIVE indicator — no tap needed, phone is on gimbal
                     if streamingService.health.isActive {
@@ -584,7 +585,7 @@ struct UltraMinimalRecordingView: View {
                                 .font(.system(size: 8))
                                 .foregroundColor(Chalk.coral)
                             Text("YT")
-                                .font(.chalkHand(11))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(Chalk.coral)
                         }
                     }
@@ -604,7 +605,7 @@ struct UltraMinimalRecordingView: View {
                     // Stream health — always visible so you know what's happening
                     if recordingManager.isStreamingActive {
                         Text(streamingService.health.label)
-                            .font(.chalkHand(12))
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(streamingService.health.isActive ? Chalk.coral : Chalk.yellow)
                     }
                 }
@@ -722,7 +723,7 @@ struct UltraMinimalRecordingView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(isClockRunning ? Chalk.coral : Chalk.green)
                         Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Start")
-                            .font(.chalkHand(18))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(Chalk.yellow)
                     }
                     .padding(.leading, 14)
@@ -835,7 +836,7 @@ struct UltraMinimalRecordingView: View {
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .semibold))
                 Text(label)
-                    .font(.chalkHand(12))
+                    .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -864,7 +865,7 @@ struct UltraMinimalRecordingView: View {
                     .frame(width: 6)
 
                 Text((appState.currentGame?.teamName ?? "HOME").prefix(4).uppercased())
-                    .font(.chalkHand(17))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(Chalk.chalk)
                     .frame(width: 54, alignment: .leading)
                     .padding(.leading, 8)
@@ -880,7 +881,7 @@ struct UltraMinimalRecordingView: View {
                     .padding(.horizontal, 8)
 
                 Text(period)
-                    .font(.chalkHand(13))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Chalk.chalkDim)
                     .frame(width: 64, alignment: .center)
                     .lineLimit(1)
@@ -901,7 +902,7 @@ struct UltraMinimalRecordingView: View {
                     .frame(width: 6)
 
                 Text((appState.currentGame?.opponent ?? "AWAY").prefix(4).uppercased())
-                    .font(.chalkHand(17))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(Chalk.chalk)
                     .frame(width: 54, alignment: .leading)
                     .padding(.leading, 8)

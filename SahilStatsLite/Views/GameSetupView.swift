@@ -84,12 +84,12 @@ struct GameSetupView: View {
                             ChalkSegmentedPicker(
                                 options: teams.map { (label: $0, value: $0) },
                                 selection: $selectedTeam,
-                                useChalkFont: true
+                                useChalkFont: false
                             )
                         } else {
                             // Single team - just show it
                             Text(selectedTeam.isEmpty ? "No team configured" : selectedTeam)
-                                .font(.chalkHand(18))
+                                .font(.system(size: 15, weight: .medium))
                                 .foregroundColor(Chalk.chalk)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(12)
@@ -129,7 +129,7 @@ struct GameSetupView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("record video")
-                                    .font(.chalkHand(17))
+                                    .font(.system(size: 15, weight: .semibold))
                                     .foregroundColor(Chalk.chalk)
                                 Text(recordVideo ? "Game will be recorded" : "Stats only, no video")
                                     .font(.system(size: 12))
@@ -151,7 +151,7 @@ struct GameSetupView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("stream live")
-                                        .font(.chalkHand(17))
+                                        .font(.system(size: 15, weight: .semibold))
                                         .foregroundColor(Chalk.chalk)
                                     Text(streamLive ? "YouTube • parents can watch" : "Record only, no stream")
                                         .font(.system(size: 12))
@@ -183,7 +183,7 @@ struct GameSetupView: View {
                                     HStack(spacing: 8) {
                                         ProgressView().scaleEffect(0.8).tint(Chalk.chalk)
                                         Text("Getting your link…")
-                                            .font(.chalkHand(15))
+                                            .font(.system(size: 15))
                                             .foregroundColor(Chalk.dust)
                                     }
                                 } else if let err = broadcastError {
@@ -191,7 +191,7 @@ struct GameSetupView: View {
                                         Image(systemName: "exclamationmark.triangle.fill")
                                             .foregroundColor(Chalk.coral)
                                         Text(err)
-                                            .font(.chalkHand(14))
+                                            .font(.system(size: 13))
                                             .foregroundColor(Chalk.dust)
                                     }
                                 } else if !broadcastURL.isEmpty {
@@ -299,7 +299,7 @@ struct GameSetupView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(gimbalManager.isDockKitAvailable ? "gimbal connected" : "no gimbal detected")
-                    .font(.chalkHand(16))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Chalk.chalk)
 
                 Text(gimbalManager.isDockKitAvailable ? "Auto-tracking ready" : "Recording will work, but no auto-tracking")
@@ -314,10 +314,10 @@ struct GameSetupView: View {
 
     // MARK: - Chalk helpers (presentation only)
 
-    /// Lowercase hand-chalk field label, per the coach's-board language.
+    /// Clean system field label (accent rule: chalk stays on titles/CTAs only).
     private func fieldLabel(_ text: String) -> some View {
         Text(text)
-            .font(.chalkHand(16))
+            .font(.system(size: 13, weight: .medium))
             .foregroundColor(Chalk.dust)
     }
 
@@ -406,8 +406,8 @@ struct GameSetupView: View {
 //
 // Drives the same binding a SwiftUI segmented Picker would; only the look changes.
 // Selected chip = Chalk.yellow fill with board-dark text; unselected = chalkDim on
-// dark. Team names use the hand-chalk face; the half-length value stays crisp system
-// font (a data value the user reads), per the chalk/crisp split.
+// dark. Labels use a clean SYSTEM font (accent rule: picker labels are controls, not
+// headings) — `useChalkFont` is retained for call-site compatibility.
 
 private struct ChalkSegmentedPicker<T: Hashable>: View {
     let options: [(label: String, value: T)]

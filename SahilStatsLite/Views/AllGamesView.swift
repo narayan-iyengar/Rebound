@@ -80,6 +80,25 @@ struct AllGamesView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Chalk header (title + Done) — replaces the system nav bar so the whole
+                // screen reads as the green board (no white title / blue Done island).
+                HStack {
+                    Text("All Games")
+                        .font(.chalkScript(30))
+                        .foregroundColor(Chalk.chalk)
+
+                    Spacer()
+
+                    Button { dismiss() } label: {
+                        Text("Done")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Chalk.chalk)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
                 // Filter bar
                 filterBar
                     .padding(.horizontal)
@@ -88,21 +107,26 @@ struct AllGamesView: View {
                 // Search bar
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    TextField("Search opponent...", text: $searchText)
+                        .foregroundColor(Chalk.dust)
+                    TextField("", text: $searchText,
+                              prompt: Text("Search opponent...").foregroundColor(Chalk.dust))
                         .textFieldStyle(.plain)
+                        .font(.system(size: 15))
+                        .foregroundColor(Chalk.crisp)
+                        .tint(Chalk.yellow)
                     if !searchText.isEmpty {
                         Button {
                             searchText = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Chalk.dust)
                         }
                     }
                 }
                 .padding(10)
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
+                .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
                 .padding(.horizontal)
                 .padding(.bottom, 8)
 
@@ -144,14 +168,16 @@ struct AllGamesView: View {
                             } label: {
                                 HStack {
                                     Text("Load More")
+                                        .foregroundColor(Chalk.chalk)
                                     Text("(\(filteredGames.count - displayedCount) remaining)")
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(Chalk.dust)
                                 }
-                                .font(.subheadline)
+                                .font(.system(size: 15, weight: .medium))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(10)
+                                .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
                             }
                         }
 
@@ -166,7 +192,7 @@ struct AllGamesView: View {
                                     .foregroundColor(Chalk.chalk)
                                 if !searchText.isEmpty {
                                     Text("Try a different search term")
-                                        .font(.chalkHand(14))
+                                        .font(.system(size: 15))
                                         .foregroundColor(Chalk.dust)
                                 }
                             }
@@ -178,13 +204,7 @@ struct AllGamesView: View {
                 }
             }
             .chalkBoard()
-            .navigationTitle("All Games")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .navigationBarHidden(true)
             .sheet(item: $selectedGameForDetail) { game in
                 GameDetailSheet(gameId: game.id)
             }
@@ -219,15 +239,18 @@ struct AllGamesView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: filter.icon)
-                            .font(.caption)
+                            .font(.system(size: 12, weight: .semibold))
                         Text(filter.rawValue)
-                            .font(.subheadline)
+                            .font(.system(size: 13, weight: .medium))
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(selectedFilter == filter ? Color.orange : Color(.systemGray6))
-                    .foregroundColor(selectedFilter == filter ? .white : .primary)
-                    .cornerRadius(20)
+                    .background(selectedFilter == filter ? Chalk.yellow : Chalk.board2,
+                                in: Capsule())
+                    .foregroundColor(selectedFilter == filter ? Chalk.board : Chalk.chalkDim)
+                    .overlay(Capsule().strokeBorder(
+                        selectedFilter == filter ? Color.clear : Chalk.chalk.opacity(0.2),
+                        lineWidth: 1.5))
                 }
             }
             Spacer()
@@ -239,7 +262,7 @@ struct AllGamesView: View {
     private var filterSummary: some View {
         HStack {
             Text("\(filteredGames.count) games")
-                .font(.chalkHand(15))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundColor(Chalk.dust)
 
             Spacer()

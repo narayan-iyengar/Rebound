@@ -29,17 +29,17 @@ struct GameRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("vs \(game.opponent)")
-                    .font(.chalkHand(18))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Chalk.chalk)
 
                 if !game.teamName.isEmpty {
                     Text(game.teamName)
-                        .font(.chalkHand(13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Chalk.sky)
                 }
 
                 Text(game.date, style: .date)
-                    .font(.chalkHand(12))
+                    .font(.system(size: 12))
                     .foregroundColor(Chalk.dust)
             }
 
@@ -67,7 +67,8 @@ struct GameRow: View {
                     }
 
                     Text("\(game.playerStats.points) pts")
-                        .font(.chalkHand(13))
+                        .font(.system(size: 13, weight: .medium))
+                        .monospacedDigit()
                         .foregroundColor(Chalk.yellow)
                 }
             }

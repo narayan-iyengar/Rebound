@@ -56,7 +56,8 @@ struct NextGameHeroCard: View {
                         .fill(isToday ? Chalk.green : Chalk.yellow)
                         .frame(width: 8, height: 8)
                     Text("NEXT GAME")
-                        .font(.chalkHand(14))
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(0.8)
                         .foregroundColor(isToday ? Chalk.green : Chalk.yellow)
                 }
 
@@ -65,7 +66,7 @@ struct NextGameHeroCard: View {
                 // Tournament day indicator
                 if todayCount > 1 && isToday {
                     Text("1 of \(todayCount) today")
-                        .font(.chalkHand(13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Chalk.dust)
                 }
 
@@ -87,12 +88,13 @@ struct NextGameHeroCard: View {
                 // Day and Date
                 VStack(spacing: 2) {
                     Text(dayLabel)
-                        .font(.chalkHand(16))
+                        .font(.system(size: 15, weight: .semibold))
+                        .tracking(0.5)
                         .foregroundColor(isToday ? Chalk.green : Chalk.yellow)
 
                     if !isToday && !isTomorrow {
                         Text(dateLabel)
-                            .font(.chalkHand(13))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(Chalk.dust)
                     }
                 }
@@ -105,7 +107,7 @@ struct NextGameHeroCard: View {
 
                 // Opponent - the main info
                 Text(game.opponent)
-                    .font(.chalkHand(24))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(Chalk.chalk)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -113,7 +115,7 @@ struct NextGameHeroCard: View {
                 // Which of Sahil's teams is playing
                 if let team = game.detectedTeam {
                     Text(team)
-                        .font(.chalkHand(15))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Chalk.sky)
                 }
 
@@ -123,7 +125,7 @@ struct NextGameHeroCard: View {
                         Image(systemName: "mappin")
                             .font(.caption2)
                         Text(game.location)
-                            .font(.chalkHand(13))
+                            .font(.system(size: 13))
                     }
                     .foregroundColor(Chalk.dust)
                     .lineLimit(1)
@@ -155,7 +157,8 @@ struct LaterTodaySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LATER TODAY")
-                .font(.chalkHand(14))
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(0.8)
                 .foregroundColor(Chalk.dust)
                 .padding(.leading, 4)
 
@@ -202,12 +205,12 @@ struct LaterTodayRow: View {
                 // Opponent
                 VStack(alignment: .leading, spacing: 2) {
                     Text(game.opponent)
-                        .font(.chalkHand(16))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundColor(Chalk.chalk)
 
                     if !game.location.isEmpty {
                         Text(game.location)
-                            .font(.chalkHand(12))
+                            .font(.system(size: 12))
                             .foregroundColor(Chalk.dust)
                             .lineLimit(1)
                     }
@@ -253,7 +256,7 @@ struct UpcomingGamesSheet: View {
                 } else {
                     ForEach(groupedGames, id: \.0) { date, games in
                         Section(header: Text(sectionHeader(for: date))
-                            .font(.chalkHand(14))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(Chalk.dust)) {
                             ForEach(games) { game in
                                 UpcomingGameListRow(game: game, appState: appState, dismiss: dismiss)
@@ -317,12 +320,12 @@ struct UpcomingGameListRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(game.opponent)
-                        .font(.chalkHand(18))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundColor(Chalk.chalk)
 
                     if !game.location.isEmpty {
                         Text(game.location)
-                            .font(.chalkHand(13))
+                            .font(.system(size: 13))
                             .foregroundColor(Chalk.dust)
                             .lineLimit(1)
                     }
