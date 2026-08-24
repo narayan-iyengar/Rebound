@@ -1275,40 +1275,31 @@ struct UltraMinimalRecordingView: View {
                         .tint(.white)
 
                     Text(appState.isStatsOnly ? "Saving stats..." : "Finishing recording...")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                        .font(.chalkScript(26))
+                        .foregroundColor(Chalk.chalk)
                 } else {
                     Text("End Game?")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                        .font(.chalkScript(30))
+                        .foregroundColor(Chalk.chalk)
 
                     Text("\(appState.currentGame?.teamName ?? "Home") \(myScore) - \(opponentScore) \(appState.currentGame?.opponent ?? "Away")")
-                        .font(.title)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .font(.system(size: 22, weight: .semibold)).monospacedDigit()
+                        .foregroundColor(Chalk.crisp)
+                        .multilineTextAlignment(.center)
 
                     VStack(spacing: 12) {
-                        Button(appState.isStatsOnly ? "Save Stats" : "End & Save") {
+                        ChalkButton(title: appState.isStatsOnly ? "Save Stats" : "End & Save", color: Chalk.yellow) {
                             endGame()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.orange)
-                        .frame(maxWidth: .infinity)
-
-                        Button("Cancel & Discard") {
+                        ChalkButton(title: "Cancel & Discard", color: Chalk.coral, filled: false) {
                             discardGame()
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                        .frame(maxWidth: .infinity)
-                        
                         Button("Keep Recording") {
                             showEndConfirmation = false
                         }
                         .buttonStyle(.plain)
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Chalk.dust)
                         .padding(.top, 4)
                     }
                     .padding(.top, 8)
@@ -1318,8 +1309,9 @@ struct UltraMinimalRecordingView: View {
             .padding(30)
             .background(
                 RoundedRectangle(cornerRadius: 24)
-                    .fill(.ultraThinMaterial)
+                    .fill(Chalk.board2)
             )
+            .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
         }
     }
 
@@ -1519,23 +1511,24 @@ struct UltraMinimalRecordingView: View {
                 HStack {
                     HStack(spacing: 8) {
                         Image(systemName: "person.fill")
-                            .foregroundColor(.orange)
+                            .foregroundColor(Chalk.coral)
                         Text("Player Stats")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.chalkScript(22))
+                            .foregroundColor(Chalk.chalk)
                     }
 
                     Spacer()
 
                     Text("\(sahilPoints) pts")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.orange)
+                        .font(.system(size: 24, weight: .bold)).monospacedDigit()
+                        .foregroundColor(Chalk.yellow)
 
                     Spacer()
 
                     Button(action: { showSahilStats = false }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 26))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Chalk.dust)
                     }
                 }
 
@@ -1543,19 +1536,19 @@ struct UltraMinimalRecordingView: View {
 
                 // Shooting stats
                 HStack(spacing: 12) {
-                    shootingTile("2PT", made: $fg2Made, att: $fg2Att, pts: 2, color: .blue)
-                    shootingTile("3PT", made: $fg3Made, att: $fg3Att, pts: 3, color: .purple)
-                    shootingTile("FT", made: $ftMade, att: $ftAtt, pts: 1, color: .cyan)
+                    shootingTile("2PT", made: $fg2Made, att: $fg2Att, pts: 2, color: Chalk.sky)
+                    shootingTile("3PT", made: $fg3Made, att: $fg3Att, pts: 3, color: Chalk.yellow)
+                    shootingTile("FT", made: $ftMade, att: $ftAtt, pts: 1, color: Chalk.green)
                 }
 
                 // Other stats
                 HStack(spacing: 8) {
-                    statTile("AST", $playerStats.assists, .green)
-                    statTile("REB", $playerStats.rebounds, .orange)
-                    statTile("STL", $playerStats.steals, .teal)
-                    statTile("BLK", $playerStats.blocks, .indigo)
-                    statTile("TO", $playerStats.turnovers, .red)
-                    statTile("PF", $playerStats.fouls, .gray)
+                    statTile("AST", $playerStats.assists, Chalk.green)
+                    statTile("REB", $playerStats.rebounds, Chalk.yellow)
+                    statTile("STL", $playerStats.steals, Chalk.sky)
+                    statTile("BLK", $playerStats.blocks, Chalk.coral)
+                    statTile("TO", $playerStats.turnovers, Chalk.coral)
+                    statTile("PF", $playerStats.fouls, Chalk.dust)
                 }
                 
                 Divider()
@@ -1575,10 +1568,10 @@ struct UltraMinimalRecordingView: View {
                                 Text(autoZoomManager.mode == .auto ? "Skynet ON" : "Skynet OFF")
                             }
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(autoZoomManager.mode == .auto ? .white : .secondary)
+                            .foregroundColor(autoZoomManager.mode == .auto ? Chalk.board : Chalk.dust)
                             .padding(.vertical, 8)
                             .padding(.horizontal, 12)
-                            .background(autoZoomManager.mode == .auto ? Color.purple : Color.gray.opacity(0.2))
+                            .background(autoZoomManager.mode == .auto ? Chalk.yellow : Chalk.board.opacity(0.6))
                             .cornerRadius(8)
                         }
                         
@@ -1597,10 +1590,10 @@ struct UltraMinimalRecordingView: View {
                                     .font(.caption2)
                             }
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(gimbalManager.gimbalMode == .track ? .white : .secondary)
+                            .foregroundColor(gimbalManager.gimbalMode == .track ? Chalk.board : Chalk.dust)
                             .padding(.vertical, 8)
                             .padding(.horizontal, 12)
-                            .background(gimbalManager.gimbalMode == .track ? Color.green : Color.gray.opacity(0.2))
+                            .background(gimbalManager.gimbalMode == .track ? Chalk.green : Chalk.board.opacity(0.6))
                             .cornerRadius(8)
                         }
                     }
@@ -1608,9 +1601,9 @@ struct UltraMinimalRecordingView: View {
                 }
             }
             .padding(18)
-            .background(.regularMaterial)
-            .cornerRadius(20)
-            .shadow(color: Color.black.opacity(0.15), radius: 20, y: 5)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
+            .shadow(color: Color.black.opacity(0.35), radius: 20, y: 5)
             .padding(.horizontal, 40)
         }
     }
@@ -1675,8 +1668,8 @@ struct UltraMinimalRecordingView: View {
                 .foregroundColor(color)
 
             Text("\(made.wrappedValue)/\(att.wrappedValue)")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
+                .font(.system(size: 20, weight: .bold)).monospacedDigit()
+                .foregroundColor(Chalk.crisp)
 
             HStack(spacing: 6) {
                 // Made shot - only tracks stats, does NOT add to game score
@@ -1688,9 +1681,9 @@ struct UltraMinimalRecordingView: View {
                 }) {
                     Image(systemName: "checkmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(Chalk.board)
                         .frame(width: 32, height: 26)
-                        .background(Color.green)
+                        .background(Chalk.green)
                         .cornerRadius(6)
                 }
 
@@ -1698,16 +1691,16 @@ struct UltraMinimalRecordingView: View {
                 Button(action: { att.wrappedValue += 1 }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(Chalk.board)
                         .frame(width: 32, height: 26)
-                        .background(Color.red.opacity(0.85))
+                        .background(Chalk.coral)
                         .cornerRadius(6)
                 }
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(Color.gray.opacity(0.08))
+        .background(Chalk.board.opacity(0.55))
         .cornerRadius(10)
     }
 
