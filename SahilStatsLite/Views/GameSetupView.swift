@@ -20,6 +20,10 @@ struct GameSetupView: View {
     // Teams loaded from UserDefaults
     @State private var teams: [String] = []
     @State private var selectedTeam: String = ""
+    // One-off guest team (Sahil guesting for another team) — used for THIS game only,
+    // never saved to knownTeamNames.
+    @State private var isGuest: Bool = false
+    @State private var guestTeam: String = ""
 
     @State private var opponent: String = ""
     @State private var location: String = ""
@@ -76,26 +80,38 @@ struct GameSetupView: View {
                             .focused($isOpponentFocused)
                     }
 
-                    // Your Team
+                    // Your Team — known teams + a one-off "Other" (guest) chip
                     VStack(alignment: .leading, spacing: 8) {
                         fieldLabel("your team")
 
-                        if teams.count > 1 {
-                            ChalkSegmentedPicker(
-                                options: teams.map { (label: $0, value: $0) },
-                                selection: $selectedTeam,
-                                useChalkFont: false
-                            )
-                        } else {
-                            // Single team - just show it
-                            Text(selectedTeam.isEmpty ? "No team configured" : selectedTeam)
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(Chalk.chalk)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            ForEach(Array(teams.enumerated()), id: \.offset) { _, team in
+                                teamChip(label: team, selected: !isGuest && selectedTeam == team) {
+                                    isGuest = false
+                                    selectedTeam = team
+                                }
+                            }
+                            teamChip(label: "+ Other", selected: isGuest) {
+                                isGuest = true
+                                selectedTeam = guestTeam.trimmingCharacters(in: .whitespaces)
+                            }
+                        }
+
+                        if isGuest {
+                            TextField("", text: $guestTeam, prompt: chalkPrompt("Guest team name"))
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(Chalk.crisp)
+                                .tint(Chalk.yellow)
                                 .padding(12)
                                 .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
                                 .overlay(RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
+                                    .strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
+                                .onChange(of: guestTeam) { _, v in
+                                    selectedTeam = v.trimmingCharacters(in: .whitespaces)
+                                }
+                            Text("Used for this game only — not saved to your teams")
+                                .font(.system(size: 12))
+                                .foregroundColor(Chalk.dust)
                         }
                     }
 
@@ -324,6 +340,24 @@ struct GameSetupView: View {
     /// Dimmed placeholder that reads on the dark board.
     private func chalkPrompt(_ text: String) -> Text {
         Text(text).foregroundColor(Chalk.dust)
+    }
+
+    /// One team chip (matches ChalkSegmentedPicker styling).
+    private func teamChip(label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 15, weight: selected ? .bold : .medium))
+                .foregroundColor(selected ? Chalk.board : Chalk.chalkDim)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(selected ? Chalk.yellow : Chalk.board2,
+                            in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(selected ? Color.clear : Chalk.chalk.opacity(0.2), lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Actions
