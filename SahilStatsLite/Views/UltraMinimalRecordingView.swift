@@ -258,28 +258,31 @@ struct UltraMinimalRecordingView: View {
                 )
             }
 
-            // Scoreboard (bottom-right, display only) + Control Bar (bottom-left)
+            // Scoreboard: full-screen big layout in stats-only mode (no video); the small
+            // corner board when recording. Both keep the fouls/timeout tally.
             if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
-                VStack {
-                    Spacer()
-                    HStack(alignment: .bottom, spacing: 8) {
-                        // Subtle zoom indicator (bottom-left). Game controls moved to
-                        // the collapsing clock chip at top-center — the bottom corners
-                        // are the thumb-grip zone in landscape (accidental-tap source).
-                        if (displayZoom > 1.05 || displayZoom < 0.95) && !appState.isStatsOnly {
-                            zoomIndicator
-                                .padding(.leading, 12)
-                        }
-
+                if appState.isStatsOnly {
+                    fullScreenStatsLayout
+                } else {
+                    VStack {
                         Spacer()
+                        HStack(alignment: .bottom, spacing: 8) {
+                            // Subtle zoom indicator (bottom-left).
+                            if displayZoom > 1.05 || displayZoom < 0.95 {
+                                zoomIndicator
+                                    .padding(.leading, 12)
+                            }
 
-                        VStack(alignment: .trailing, spacing: 6) {
-                            foulsTimeoutStrip
-                            scoreboardDisplay
+                            Spacer()
+
+                            VStack(alignment: .trailing, spacing: 6) {
+                                foulsTimeoutStrip
+                                scoreboardDisplay
+                            }
+                            .padding(.trailing, 8)
                         }
-                        .padding(.trailing, 8)
+                        .padding(.bottom, 16)
                     }
-                    .padding(.bottom, 16)
                 }
             }
 
@@ -520,23 +523,10 @@ struct UltraMinimalRecordingView: View {
     @ViewBuilder
     private var cameraPreview: some View {
         if appState.isStatsOnly {
-            // Stats-only mode - no camera, just a nice background
-            LinearGradient(
-                colors: [Color(white: 0.15), Color(white: 0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            .overlay(
-                VStack(spacing: 12) {
-                    Image(systemName: "sportscourt.fill")
-                        .font(.system(size: 50))
-                        .foregroundColor(.orange.opacity(0.3))
-                    Text("Live Stats")
-                        .font(.headline)
-                        .foregroundColor(.white.opacity(0.3))
-                }
-            )
+            // Stats-only mode - no camera: green chalk board is the ground; the
+            // full-screen scoreboard (fullScreenStatsLayout) fills it.
+            LinearGradient(colors: [Chalk.board, Chalk.board2], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
         } else if recordingManager.isSimulator {
             LinearGradient(
                 colors: [Color(white: 0.92), Color(white: 0.85)],
@@ -864,6 +854,65 @@ struct UltraMinimalRecordingView: View {
     // Tap period = advance period
 
     // MARK: - Scoreboard Display (clean, minimal - only clock is tappable)
+
+    // MARK: - Full-screen stats scoreboard (stats-only mode, no video)
+    // Big team names (chalk) + CRISP scores fill the screen. The scores are DISPLAY ONLY
+    // (allowsHitTesting=false) so the left/right scoring tap-zones underneath still work.
+    // The fouls/timeout tallies + clock live in the BOTTOM band, outside the scoring
+    // zones (which are padded away from the bottom), so tapping a tally never scores.
+    private var fullScreenStatsLayout: some View {
+        ZStack {
+            // Big scores — non-interactive so taps pass through to the scoring halves.
+            HStack(spacing: 0) {
+                statColumn(name: appState.currentGame?.teamName ?? "HOME",
+                           score: myScore, accent: Chalk.yellow)
+                Rectangle().fill(Chalk.chalk.opacity(0.15))
+                    .frame(width: 1.5)
+                    .padding(.vertical, 70)
+                statColumn(name: appState.currentGame?.opponent ?? "AWAY",
+                           score: opponentScore, accent: Chalk.sky)
+            }
+            .padding(.top, 58)
+            .padding(.bottom, 96)
+            .allowsHitTesting(false)
+
+            // Bottom band: fouls/timeout tallies (home left, away right) + clock/period
+            // (center). Interactive tallies, but below the scoring zones → no interference.
+            VStack {
+                Spacer()
+                HStack(alignment: .center, spacing: 8) {
+                    teamFT(fouls: $homeFouls, timeouts: $homeTimeouts, accent: Chalk.yellow)
+                    Spacer(minLength: 8)
+                    VStack(spacing: 2) {
+                        Text(period)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Chalk.chalkDim)
+                        Text(clockTime)
+                            .font(.system(size: 19, weight: .bold)).monospacedDigit()
+                            .foregroundColor(isClockRunning ? Chalk.crisp : Chalk.yellow)
+                    }
+                    Spacer(minLength: 8)
+                    teamFT(fouls: $awayFouls, timeouts: $awayTimeouts, accent: Chalk.sky)
+                }
+                .padding(.horizontal, 22)
+                .padding(.bottom, 14)
+            }
+        }
+    }
+
+    private func statColumn(name: String, score: Int, accent: Color) -> some View {
+        VStack(spacing: 6) {
+            Text(name.prefix(8).uppercased())
+                .font(.chalkHand(30))
+                .foregroundColor(accent)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text("\(score)")
+                .font(.system(size: 90, weight: .heavy)).monospacedDigit()
+                .foregroundColor(Chalk.crisp)
+                .minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     // Fouls + timeouts tally strip (sits above the corner scoreboard; also reused in the
     // full-screen stats layout). Tap a tally to add one, long-press to remove one.
