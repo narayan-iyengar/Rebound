@@ -163,9 +163,7 @@ struct HomeView: View {
             Spacer()
 
             VStack(spacing: 0) {
-                Text("Rebound")
-                    .font(.chalkScript(46))
-                    .foregroundColor(Chalk.chalk)
+                ReboundWordmark(size: 44)
 
                 Text("Record. Track. Share.")
                     .font(.chalkHand(15))
@@ -389,7 +387,7 @@ struct HomeView: View {
                 .foregroundColor(Chalk.dust)
                 .multilineTextAlignment(.center)
 
-            ChalkButton(title: "Allow Access") {
+            ChalkButton(title: "Allow Access", icon: "calendar") {
                 Task {
                     await calendarManager.requestCalendarAccess()
                 }

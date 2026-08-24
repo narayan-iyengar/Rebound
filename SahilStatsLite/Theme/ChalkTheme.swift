@@ -95,9 +95,17 @@ extension Color {
 
 extension Font {
     /// Caveat — the soft-chalk display face. Wordmark, headings, hints, big labels.
-    /// Confirmed family name: "Caveat" (variable font, default weight 400).
-    static func chalkScript(_ size: CGFloat) -> Font {
-        .custom(ChalkFonts.scriptFamily, size: size)
+    /// Caveat is a VARIABLE font whose Font.custom default is wght=400 — thin and
+    /// hard to read on device. Push the wght axis up (default ~640) for legibility.
+    static func chalkScript(_ size: CGFloat, weight: CGFloat = 640) -> Font {
+        let wghtAxis: Int = 0x77676874  // 'wght'
+        if let base = UIFont(name: ChalkFonts.scriptFamily, size: size) {
+            let desc = base.fontDescriptor.addingAttributes([
+                .init(rawValue: kCTFontVariationAttribute as String): [wghtAxis: weight]
+            ])
+            return Font(UIFont(descriptor: desc, size: size))
+        }
+        return .custom(ChalkFonts.scriptFamily, size: size)
     }
     /// Gochi Hand — printed-chalk face. Labels, pills, team names, captions.
     /// Confirmed family name: "Gochi Hand".
@@ -196,24 +204,76 @@ struct ScoreText: View {
 
 struct ChalkButton: View {
     let title: String
+    var icon: String? = nil   // optional SF Symbol shown before the title
     var color: Color = Chalk.yellow
     var filled: Bool = true
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.chalkHand(17))
-                .fontWeight(filled ? .bold : .regular)
-                .foregroundColor(filled ? Chalk.board : Chalk.chalk)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .background(filled ? color : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 11))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 11)
-                        .strokeBorder(filled ? Color.clear : Chalk.chalk.opacity(0.4), lineWidth: 2)
-                )
+            HStack(spacing: 8) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                Text(title)
+                    .font(.chalkHand(17))
+                    .fontWeight(filled ? .bold : .regular)
+            }
+            .foregroundColor(filled ? Chalk.board : Chalk.chalk)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(filled ? color : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 11))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .strokeBorder(filled ? Color.clear : Chalk.chalk.opacity(0.4), lineWidth: 2)
+            )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Basketball glyph + wordmark (the little ball between "Re" and "bound")
+
+struct BasketballGlyph: View {
+    var size: CGFloat = 22
+    var color: Color = Chalk.coral
+    private var lw: CGFloat { max(1.4, size * 0.085) }
+    var body: some View {
+        ZStack {
+            Circle().stroke(color, lineWidth: lw)
+            // seams, clipped inside the ball
+            ZStack {
+                Path { p in
+                    p.move(to: CGPoint(x: size / 2, y: 0)); p.addLine(to: CGPoint(x: size / 2, y: size))
+                    p.move(to: CGPoint(x: 0, y: size / 2)); p.addLine(to: CGPoint(x: size, y: size / 2))
+                }.stroke(color, lineWidth: lw * 0.85)
+                Path { p in
+                    p.addArc(center: CGPoint(x: -size * 0.18, y: size / 2), radius: size * 0.66,
+                             startAngle: .degrees(-48), endAngle: .degrees(48), clockwise: false)
+                }.stroke(color, lineWidth: lw * 0.85)
+                Path { p in
+                    p.addArc(center: CGPoint(x: size * 1.18, y: size / 2), radius: size * 0.66,
+                             startAngle: .degrees(132), endAngle: .degrees(228), clockwise: false)
+                }.stroke(color, lineWidth: lw * 0.85)
+            }
+            .clipShape(Circle().inset(by: lw / 2))
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+struct ReboundWordmark: View {
+    var size: CGFloat = 46
+    var color: Color = Chalk.chalk
+    var body: some View {
+        HStack(spacing: size * 0.02) {
+            Text("Re").font(.chalkScript(size)).foregroundColor(color)
+            BasketballGlyph(size: size * 0.5)
+                .padding(.horizontal, size * 0.03)
+                .offset(y: size * 0.06)
+            Text("bound").font(.chalkScript(size)).foregroundColor(color)
+        }
+        .fixedSize()
     }
 }

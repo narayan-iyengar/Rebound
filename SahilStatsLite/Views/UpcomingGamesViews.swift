@@ -133,7 +133,7 @@ struct NextGameHeroCard: View {
             .padding(.bottom, 20)
 
             // Record Game button
-            ChalkButton(title: "Record Game", color: Chalk.yellow) {
+            ChalkButton(title: "Record Game", icon: "video.fill", color: Chalk.yellow) {
                 appState.pendingCalendarGame = (opponent: game.opponent, location: game.location, team: game.detectedTeam)
                 appState.isLogOnly = false
                 appState.currentScreen = .setup
