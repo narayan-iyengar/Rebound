@@ -343,3 +343,149 @@ struct UpcomingGameListRow: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Upcoming Games Stack (flip-through deck of chalk cards)
+
+struct UpcomingGamesStack: View {
+    let games: [GameCalendarManager.CalendarGame]
+    let appState: AppState
+    let onHide: (String) -> Void
+
+    @State private var order: [Int] = []      // game indices; order[0] = top card
+    @State private var viewedIndex: Int = 0   // which card you're on (for the "N / total")
+    @State private var drag: CGSize = .zero
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                ForEach(Array(order.enumerated()), id: \.element) { depth, gi in
+                    if depth < 3 {
+                        GameStackCard(game: games[gi], appState: appState, onHide: onHide)
+                            .scaleEffect(1 - CGFloat(depth) * 0.05)
+                            .offset(y: CGFloat(depth) * 14)
+                            .rotationEffect(.degrees(depth == 0 ? 0 : (depth.isMultiple(of: 2) ? 2 : -2)))
+                            .offset(depth == 0 ? drag : .zero)
+                            .opacity(depth == 0 ? 1 : (depth == 1 ? 0.85 : 0.5))
+                            .zIndex(Double(order.count - depth))
+                            .allowsHitTesting(depth == 0)
+                            .gesture(depth == 0 && games.count > 1 ? dragGesture : nil)
+                    }
+                }
+            }
+
+            if games.count > 1 {
+                HStack(spacing: 20) {
+                    Button { advance(-1) } label: { chevron("chevron.left") }
+                    Text("\(viewedIndex + 1) / \(games.count)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Chalk.dust)
+                        .frame(minWidth: 54)
+                    Button { advance(1) } label: { chevron("chevron.right") }
+                }
+            }
+        }
+        .onAppear { if order.isEmpty { order = Array(games.indices) } }
+        .onChange(of: games.count) { _, _ in order = Array(games.indices); viewedIndex = 0 }
+    }
+
+    private func chevron(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(Chalk.chalk)
+            .frame(width: 44, height: 44)
+            .overlay(Circle().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { drag = $0.translation }
+            .onEnded { value in
+                if abs(value.translation.width) > 90 {
+                    let dir = value.translation.width > 0 ? -1 : 1
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                        drag = CGSize(width: dir > 0 ? -620 : 620, height: 0)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+                        advance(dir)
+                        drag = .zero
+                    }
+                } else {
+                    withAnimation(.spring()) { drag = .zero }
+                }
+            }
+    }
+
+    private func advance(_ dir: Int) {
+        guard games.count > 1 else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            if dir > 0 { order.append(order.removeFirst()) }
+            else { order.insert(order.removeLast(), at: 0) }
+            viewedIndex = (viewedIndex + dir + games.count) % games.count
+        }
+    }
+}
+
+// One game card face for the stack.
+struct GameStackCard: View {
+    let game: GameCalendarManager.CalendarGame
+    let appState: AppState
+    let onHide: (String) -> Void
+
+    private var isToday: Bool { Calendar.current.isDateInToday(game.startTime) }
+    private var isTomorrow: Bool { Calendar.current.isDateInTomorrow(game.startTime) }
+    private var dayLabel: String {
+        if isToday { return "TODAY" }
+        if isTomorrow { return "TOMORROW" }
+        let f = DateFormatter(); f.dateFormat = "EEE, MMM d"
+        return f.string(from: game.startTime).uppercased()
+    }
+    private var accent: Color { isToday ? Chalk.green : Chalk.yellow }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                HStack(spacing: 6) {
+                    Circle().fill(accent).frame(width: 8, height: 8)
+                    Text(dayLabel)
+                        .font(.system(size: 12, weight: .semibold)).tracking(0.8)
+                        .foregroundColor(accent)
+                }
+                Spacer()
+                Button { onHide(game.id) } label: {
+                    Image(systemName: "eye.slash")
+                        .font(.footnote).foregroundColor(Chalk.dust.opacity(0.7))
+                }
+            }
+            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 10)
+
+            VStack(spacing: 12) {
+                Text(game.timeString)
+                    .font(.system(size: 44, weight: .bold)).monospacedDigit()
+                    .foregroundColor(Chalk.crisp)
+                Text(game.opponent)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(Chalk.chalk)
+                    .multilineTextAlignment(.center).lineLimit(2)
+                if let team = game.detectedTeam {
+                    Text(team).font(.system(size: 13, weight: .medium)).foregroundColor(Chalk.sky)
+                }
+                if !game.location.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "mappin").font(.caption2)
+                        Text(game.location).font(.system(size: 13)).lineLimit(1)
+                    }
+                    .foregroundColor(Chalk.dust)
+                }
+            }
+            .padding(.horizontal, 20).padding(.bottom, 16)
+
+            ChalkButton(title: "Record Game", icon: "video.fill", color: Chalk.yellow) {
+                appState.pendingCalendarGame = (opponent: game.opponent, location: game.location, team: game.detectedTeam)
+                appState.isLogOnly = false
+                appState.currentScreen = .setup
+            }
+            .padding(.horizontal, 20).padding(.bottom, 18)
+        }
+        .chalkCard(padding: 0)
+    }
+}

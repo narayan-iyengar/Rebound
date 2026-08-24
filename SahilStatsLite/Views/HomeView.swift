@@ -294,32 +294,13 @@ struct HomeView: View {
             // game never sticks around as the big hero card. Everything below derives
             // from this one live list so the hero, today, and later stay consistent.
             let now = Date()
-            let calendar = Calendar.current
             let liveGames = calendarManager.upcomingGames.filter { $0.endTime > now }
-            let todayGames = liveGames.filter { calendar.isDateInToday($0.startTime) }
-            let laterGames = liveGames.filter { !calendar.isDateInToday($0.startTime) }
 
             if liveGames.isEmpty {
                 emptyGamesCard
-            } else if let nextGame = liveGames.first {
-                NextGameHeroCard(
-                    game: nextGame,
-                    todayCount: todayGames.count,
-                    appState: appState,
-                    onHide: hideGame
-                )
-
-                if todayGames.count > 1 {
-                    LaterTodaySection(
-                        games: Array(todayGames.dropFirst()),
-                        appState: appState,
-                        onHide: hideGame
-                    )
-                }
-
-                if !laterGames.isEmpty {
-                    upcomingGamesLink(count: laterGames.count)
-                }
+            } else {
+                // Flip-through deck of chalk game cards (swipe or arrows).
+                UpcomingGamesStack(games: liveGames, appState: appState, onHide: hideGame)
             }
         }
     }
