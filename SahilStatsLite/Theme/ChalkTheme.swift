@@ -252,6 +252,53 @@ struct BasketballGlyph: View {
     }
 }
 
+// MARK: - Tally marks (chalk strokes, groups of 5 with a diagonal slash)
+// Fouls/timeouts count up as tallies — no tournament-specific bonus logic; the
+// scorekeeper reads the count against whatever rule is in effect.
+
+struct TallyMarks: View {
+    let count: Int
+    var color: Color = Chalk.chalk
+    var barHeight: CGFloat = 18
+
+    private var groups: Int { max(1, (count + 4) / 5) }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            if count == 0 {
+                // Empty placeholder so the row keeps its height / tap target.
+                Rectangle().fill(color.opacity(0.25))
+                    .frame(width: barHeight * 0.9, height: 2)
+            } else {
+                ForEach(0..<groups, id: \.self) { g in
+                    TallyGroup(n: min(5, count - g * 5), color: color, barHeight: barHeight)
+                }
+            }
+        }
+    }
+}
+
+private struct TallyGroup: View {
+    let n: Int
+    var color: Color
+    var barHeight: CGFloat
+    private var bw: CGFloat { max(2, barHeight * 0.13) }
+    var body: some View {
+        ZStack {
+            HStack(spacing: bw + 1.5) {
+                ForEach(0..<min(n, 4), id: \.self) { _ in
+                    Capsule().fill(color).frame(width: bw, height: barHeight)
+                }
+            }
+            if n >= 5 {
+                Capsule().fill(color)
+                    .frame(width: bw, height: barHeight * 1.35)
+                    .rotationEffect(.degrees(62))
+            }
+        }
+    }
+}
+
 struct ReboundWordmark: View {
     var size: CGFloat = 44
     var color: Color = Chalk.chalk

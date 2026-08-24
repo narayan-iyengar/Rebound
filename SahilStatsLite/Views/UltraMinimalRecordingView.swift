@@ -32,6 +32,12 @@ struct UltraMinimalRecordingView: View {
     // Game state
     @State private var myScore: Int = 0
     @State private var opponentScore: Int = 0
+    // Team fouls + timeouts as tally marks (ephemeral per game — bonus/timeout rules
+    // vary by tournament, so these just count up; the scorekeeper reads them).
+    @State private var homeFouls: Int = 0
+    @State private var awayFouls: Int = 0
+    @State private var homeTimeouts: Int = 0
+    @State private var awayTimeouts: Int = 0
     @State private var remainingSeconds: Int = 0
     @State private var remainingTenths: Int = 0  // 0-9, for sub-minute display
     @State private var period: String = "1st Half"
@@ -267,8 +273,11 @@ struct UltraMinimalRecordingView: View {
 
                         Spacer()
 
-                        scoreboardDisplay
-                            .padding(.trailing, 8)
+                        VStack(alignment: .trailing, spacing: 6) {
+                            foulsTimeoutStrip
+                            scoreboardDisplay
+                        }
+                        .padding(.trailing, 8)
                     }
                     .padding(.bottom, 16)
                 }
@@ -855,6 +864,49 @@ struct UltraMinimalRecordingView: View {
     // Tap period = advance period
 
     // MARK: - Scoreboard Display (clean, minimal - only clock is tappable)
+
+    // Fouls + timeouts tally strip (sits above the corner scoreboard; also reused in the
+    // full-screen stats layout). Tap a tally to add one, long-press to remove one.
+    private var foulsTimeoutStrip: some View {
+        HStack(spacing: 10) {
+            teamFT(fouls: $homeFouls, timeouts: $homeTimeouts, accent: Chalk.yellow)
+            Rectangle().fill(Chalk.chalk.opacity(0.15)).frame(width: 1, height: 24)
+            teamFT(fouls: $awayFouls, timeouts: $awayTimeouts, accent: Chalk.sky)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color(white: 0.08, opacity: 0.7))
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+    }
+
+    private func teamFT(fouls: Binding<Int>, timeouts: Binding<Int>, accent: Color) -> some View {
+        HStack(spacing: 9) {
+            ftItem(label: "FOULS", count: fouls, color: Chalk.coral)
+            ftItem(label: "T.O.", count: timeouts, color: accent)
+        }
+    }
+
+    private func ftItem(label: String, count: Binding<Int>, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundColor(Chalk.dust)
+            TallyMarks(count: count.wrappedValue, color: color, barHeight: 13)
+                .frame(minWidth: 22, minHeight: 15, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            count.wrappedValue += 1
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        .onLongPressGesture {
+            if count.wrappedValue > 0 {
+                count.wrappedValue -= 1
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            }
+        }
+    }
 
     private var scoreboardDisplay: some View {
         VStack(spacing: 0) {
