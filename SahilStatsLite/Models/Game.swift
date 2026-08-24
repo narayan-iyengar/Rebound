@@ -23,6 +23,27 @@ struct Game: Identifiable, Codable {
     var location: String?
     var date: Date
 
+    // Season aggregation dimensions (Optional → safe to decode older saved games).
+    // teamName already carries which team he played for (incl. one-off guest teams).
+    var ageLevel: String?   // e.g. "3rd grade", "U10"; nil = unset/current default
+
+    /// Season bucket derived from the game date. AAU: Fall = Aug–Nov, Winter = Dec–Feb
+    /// (labeled by the year it began), Spring = Mar–May, Summer = Jun–Jul. Tunable.
+    var season: String { Self.seasonLabel(for: date) }
+
+    static func seasonLabel(for date: Date) -> String {
+        let cal = Calendar.current
+        let m = cal.component(.month, from: date)
+        let y = cal.component(.year, from: date)
+        switch m {
+        case 8...11: return "Fall \(y)"
+        case 12:     return "Winter \(y)"       // Dec belongs to the winter that just began
+        case 1, 2:   return "Winter \(y - 1)"   // Jan–Feb belong to the prior year's winter
+        case 3...5:  return "Spring \(y)"
+        default:     return "Summer \(y)"        // Jun–Jul
+        }
+    }
+
     // Scores
     var myScore: Int = 0
     var opponentScore: Int = 0
