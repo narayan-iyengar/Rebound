@@ -94,21 +94,13 @@ extension Color {
 // MARK: - Fonts (hand-chalk, with graceful system fallback)
 
 extension Font {
-    /// Caveat — the soft-chalk display face. Wordmark, headings, hints, big labels.
-    /// Caveat is a VARIABLE font whose Font.custom default is wght=400 — thin and
-    /// hard to read on device. Push the wght axis up (default ~640) for legibility.
+    /// Display face (headings, wordmark, big labels). Now Gochi Hand — its printed
+    /// letterforms are far more legible than cursive Caveat (whose 'd' read as 'a'),
+    /// so we use ONE chalk face everywhere. `weight` kept for call-site compatibility.
     static func chalkScript(_ size: CGFloat, weight: CGFloat = 640) -> Font {
-        let wghtAxis: Int = 0x77676874  // 'wght'
-        if let base = UIFont(name: ChalkFonts.scriptFamily, size: size) {
-            let desc = base.fontDescriptor.addingAttributes([
-                .init(rawValue: kCTFontVariationAttribute as String): [wghtAxis: weight]
-            ])
-            return Font(UIFont(descriptor: desc, size: size))
-        }
-        return .custom(ChalkFonts.scriptFamily, size: size)
+        .custom(ChalkFonts.handFamily, size: size)
     }
     /// Gochi Hand — printed-chalk face. Labels, pills, team names, captions.
-    /// Confirmed family name: "Gochi Hand".
     static func chalkHand(_ size: CGFloat) -> Font {
         .custom(ChalkFonts.handFamily, size: size)
     }

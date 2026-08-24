@@ -621,46 +621,40 @@ struct UltraMinimalRecordingView: View {
     private var trackingStatus: some View {
         Group {
             if hasCameraStarted {
-                HStack(spacing: 8) {
-                    // Gimbal status
-                    HStack(spacing: 3) {
-                        Image(systemName: gimbalManager.isDockKitAvailable ? "checkmark.circle.fill" : "xmark.circle")
-                            .font(.system(size: 9))
-                        Text("Gimbal")
-                            .font(.chalkHand(12))
-                    }
-                    .foregroundColor(gimbalManager.isDockKitAvailable ? Chalk.green : Chalk.coral)
+                // Minimal icon-only status (debug-glance). No model name, no text labels.
+                HStack(spacing: 11) {
+                    // Gimbal connected (green) / not (coral)
+                    Image(systemName: gimbalManager.isDockKitAvailable ? "camera.aperture" : "camera.metering.none")
+                        .font(.system(size: 13))
+                        .foregroundColor(gimbalManager.isDockKitAvailable ? Chalk.green : Chalk.coral)
 
-                    // Player detection count
+                    // Players tracked
                     HStack(spacing: 3) {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 9))
+                        Image(systemName: "figure.basketball")
+                            .font(.system(size: 13))
                         Text("\(autoZoomManager.detectedPlayerCount)")
-                            .font(.chalkHand(12))
+                            .font(.system(size: 12, weight: .bold)).monospacedDigit()
                     }
                     .foregroundColor(autoZoomManager.detectedPlayerCount > 0 ? Chalk.sky : Chalk.dust)
 
-                    // YOLO vs Vision fallback indicator
-                    Text(autoZoomManager.isUsingYOLO ? "YOLO" : "Vision")
-                        .font(.chalkHand(12))
-                        .foregroundColor(autoZoomManager.isUsingYOLO ? Chalk.green : Chalk.yellow)
-
-                    // Court auto-calibration indicator
+                    // Court calibration — icon fills in as it calibrates; % only while pending
                     HStack(spacing: 3) {
-                        Image(systemName: autoZoomManager.courtIsCalibrated ? "square.fill" : "square.dotted")
-                            .font(.system(size: 9))
-                        Text(autoZoomManager.courtIsCalibrated ? "Court ✓" : "Court \(Int(autoZoomManager.courtCalibrationProgress * 100))%")
-                            .font(.chalkHand(12))
+                        Image(systemName: autoZoomManager.courtIsCalibrated ? "square.dashed.inset.filled" : "square.dashed")
+                            .font(.system(size: 13))
+                        if !autoZoomManager.courtIsCalibrated {
+                            Text("\(Int(autoZoomManager.courtCalibrationProgress * 100))%")
+                                .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                        }
                     }
                     .foregroundColor(autoZoomManager.courtIsCalibrated ? Chalk.green : Chalk.yellow)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color(white: 0.08, opacity: 0.6))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .background(Color(white: 0.08, opacity: 0.55))
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Chalk.chalk.opacity(0.18), lineWidth: 1)  // solid over video (calmer than dashed)
+                        .stroke(Chalk.chalk.opacity(0.15), lineWidth: 1)
                 )
             }
         }
