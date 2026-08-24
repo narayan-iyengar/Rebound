@@ -348,10 +348,14 @@ struct UltraMinimalRecordingView: View {
             initializeGameState()
             updateOrientationState()
 
+            // Keep the screen awake for the whole session — recording AND stats-only.
+            // (Stats-only used to sleep mid-game because this lived inside the camera
+            // branch below; a dark screen also means you can't tap score or Clip.)
+            UIApplication.shared.isIdleTimerDisabled = true
+
             // Only setup camera if recording video
             if !appState.isStatsOnly {
                 recordingManager.reset()
-                UIApplication.shared.isIdleTimerDisabled = true // Keep screen awake during warmup/setup
                 updateOverlayState()
                 await recordingManager.requestPermissionsAndSetup()
 
@@ -367,6 +371,8 @@ struct UltraMinimalRecordingView: View {
             }
         }
         .onDisappear {
+            // Let the screen sleep normally again once we leave the game view.
+            UIApplication.shared.isIdleTimerDisabled = false
             if !appState.isStatsOnly {
                 stopRecording()
                 stopAutoZoom()
