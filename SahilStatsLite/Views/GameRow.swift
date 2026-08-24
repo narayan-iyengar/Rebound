@@ -19,37 +19,38 @@ struct GameRow: View {
 
     var body: some View {
         HStack {
-            // Result indicator
+            // Result badge — Win = sky outline, Loss = dust outline (per mock)
+            let badgeColor = game.isWin ? Chalk.sky : Chalk.dust
             Text(game.resultString)
-                .font(.headline)
-                .foregroundColor(game.isWin ? .green : game.isLoss ? .red : .secondary)
-                .frame(width: 30)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(badgeColor)
+                .frame(width: 30, height: 30)
+                .overlay(Circle().strokeBorder(badgeColor.opacity(0.6), lineWidth: 1.5))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("vs \(game.opponent)")
-                    .font(.headline)
-                    .foregroundColor(.primary)
+                    .font(.chalkHand(18))
+                    .foregroundColor(Chalk.chalk)
 
                 if !game.teamName.isEmpty {
                     Text(game.teamName)
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .fontWeight(.medium)
+                        .font(.chalkHand(13))
+                        .foregroundColor(Chalk.sky)
                 }
 
                 Text(game.date, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.chalkHand(12))
+                    .foregroundColor(Chalk.dust)
             }
 
             Spacer()
 
-            // Score and points
+            // Score and points (crisp data)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(game.scoreString)
-                    .font(.title3)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 20, weight: .semibold))
                     .monospacedDigit()
+                    .foregroundColor(Chalk.crisp)
 
                 HStack(spacing: 4) {
                     if game.youtubeStatus == .uploading {
@@ -58,25 +59,23 @@ struct GameRow: View {
                     } else if game.youtubeStatus == .uploaded {
                         Image(systemName: "checkmark.icloud.fill")
                             .font(.caption2)
-                            .foregroundColor(.green)
+                            .foregroundColor(Chalk.green)
                     } else if game.youtubeStatus == .failed {
                         Image(systemName: "exclamationmark.icloud.fill")
                             .font(.caption2)
-                            .foregroundColor(.red)
+                            .foregroundColor(Chalk.coral)
                     }
 
                     Text("\(game.playerStats.points) pts")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                        .font(.chalkHand(13))
+                        .foregroundColor(Chalk.yellow)
                 }
             }
 
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(Chalk.dust)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
+        .chalkCard()
     }
 }

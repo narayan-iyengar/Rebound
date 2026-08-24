@@ -160,14 +160,14 @@ struct AllGamesView: View {
                             VStack(spacing: 12) {
                                 Image(systemName: "basketball")
                                     .font(.largeTitle)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(Chalk.dust)
                                 Text("No games found")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
+                                    .font(.chalkScript(26))
+                                    .foregroundColor(Chalk.chalk)
                                 if !searchText.isEmpty {
                                     Text("Try a different search term")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.tertiary)
+                                        .font(.chalkHand(14))
+                                        .foregroundColor(Chalk.dust)
                                 }
                             }
                             .padding(.vertical, 40)
@@ -177,7 +177,7 @@ struct AllGamesView: View {
                     .padding(.bottom, 20)
                 }
             }
-            .background(Color(.systemGroupedBackground))
+            .chalkBoard()
             .navigationTitle("All Games")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -239,8 +239,8 @@ struct AllGamesView: View {
     private var filterSummary: some View {
         HStack {
             Text("\(filteredGames.count) games")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(.chalkHand(15))
+                .foregroundColor(Chalk.dust)
 
             Spacer()
 
@@ -249,9 +249,9 @@ struct AllGamesView: View {
                 let losses = filteredGames.filter { $0.isLoss }.count
                 HStack(spacing: 12) {
                     Label("\(wins)W", systemImage: "trophy.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(Chalk.green)
                     Label("\(losses)L", systemImage: "xmark.circle")
-                        .foregroundColor(.red)
+                        .foregroundColor(Chalk.coral)
                 }
                 .font(.caption)
             }

@@ -57,7 +57,7 @@ struct HomeView: View {
             .padding()
         }
         .scrollIndicators(.hidden)
-        .background(Color(.systemGroupedBackground))
+        .chalkBoard()
         .navigationBarHidden(true)
         .alert("Video Not Saved to Photos",
                isPresented: Binding(get: { appState.photosSaveFailureMessage != nil },
@@ -108,8 +108,8 @@ struct HomeView: View {
     private var undoToast: some View {
         HStack(spacing: 16) {
             Text("Game hidden")
-                .font(.subheadline)
-                .foregroundColor(.white)
+                .font(.chalkHand(16))
+                .foregroundColor(Chalk.chalk)
 
             Button {
                 if let id = hiddenGameID {
@@ -119,14 +119,14 @@ struct HomeView: View {
                 hiddenGameID = nil
             } label: {
                 Text("Undo")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.orange)
+                    .font(.chalkHand(16))
+                    .foregroundColor(Chalk.yellow)
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(Chalk.board2, in: Capsule())
+        .overlay(Capsule().strokeBorder(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
         .onAppear {
             // Auto-dismiss after 3 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -156,20 +156,20 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.title2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Chalk.dust)
             }
             .frame(width: 32, height: 32)
 
             Spacer()
 
-            VStack(spacing: 4) {
+            VStack(spacing: 0) {
                 Text("Rebound")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(.chalkScript(46))
+                    .foregroundColor(Chalk.chalk)
 
                 Text("Record. Track. Share.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.chalkHand(15))
+                    .foregroundColor(Chalk.dust)
             }
 
             Spacer()
@@ -181,7 +181,7 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.orange)
+                    .foregroundColor(Chalk.yellow)
             }
             .frame(width: 32, height: 32)
         }
@@ -192,33 +192,31 @@ struct HomeView: View {
 
     private var careerStatsCard: some View {
         Button(action: { showStatsSheet = true }) {
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 HStack {
                     Text("Career Stats")
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        .font(.chalkScript(28))
+                        .foregroundColor(Chalk.chalk)
 
                     Spacer()
 
                     Text("\(persistenceManager.careerGames) games")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.chalkHand(14))
+                        .foregroundColor(Chalk.dust)
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Chalk.dust)
                 }
 
                 HStack(spacing: 0) {
-                    statItem(value: String(format: "%.1f", persistenceManager.careerPPG), label: "PPG", color: .orange)
-                    statItem(value: String(format: "%.1f", persistenceManager.careerRPG), label: "RPG", color: .blue)
-                    statItem(value: String(format: "%.1f", persistenceManager.careerAPG), label: "APG", color: .green)
-                    statItem(value: persistenceManager.careerRecord, label: "W-L", color: .primary)
+                    statItem(value: String(format: "%.1f", persistenceManager.careerPPG), label: "PPG", color: Chalk.yellow)
+                    statItem(value: String(format: "%.1f", persistenceManager.careerRPG), label: "RPG", color: Chalk.sky)
+                    statItem(value: String(format: "%.1f", persistenceManager.careerAPG), label: "APG", color: Chalk.green)
+                    statItem(value: persistenceManager.careerRecord, label: "W-L", color: Chalk.chalk)
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
+            .chalkCard()
         }
         .buttonStyle(.plain)
     }
@@ -226,11 +224,12 @@ struct HomeView: View {
     private func statItem(value: String, label: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold))
+                .monospacedDigit()
                 .foregroundColor(color)
             Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.chalkHand(13))
+                .foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
     }
@@ -243,30 +242,28 @@ struct HomeView: View {
                 HStack {
                     Image(systemName: "list.bullet.clipboard")
                         .font(.title2)
-                        .foregroundColor(.orange)
+                        .foregroundColor(Chalk.yellow)
                         .frame(width: 44, height: 44)
-                        .background(Color.orange.opacity(0.15))
+                        .background(Chalk.yellow.opacity(0.15))
                         .cornerRadius(10)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("Game Log")
-                            .font(.headline)
-                            .foregroundColor(.primary)
+                            .font(.chalkScript(26))
+                            .foregroundColor(Chalk.chalk)
 
                         Text("\(persistenceManager.careerGames) games recorded")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.chalkHand(13))
+                            .foregroundColor(Chalk.dust)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Chalk.dust)
                 }
-                .padding()
-                .background(Color(.systemBackground))
-                .cornerRadius(16)
+                .chalkCard()
             }
             .buttonStyle(.plain)
 
@@ -278,15 +275,13 @@ struct HomeView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.title2)
-                        .foregroundColor(.orange)
+                        .foregroundColor(Chalk.yellow)
                     Text("Add")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .font(.chalkHand(12))
+                        .foregroundColor(Chalk.dust)
                 }
                 .frame(width: 56)
-                .padding(.vertical, 16)
-                .background(Color(.systemBackground))
-                .cornerRadius(16)
+                .chalkCard(padding: 16)
             }
             .buttonStyle(.plain)
         }
@@ -335,30 +330,28 @@ struct HomeView: View {
         VStack(spacing: 16) {
             Image(systemName: "calendar.badge.checkmark")
                 .font(.system(size: 44))
-                .foregroundColor(.green.opacity(0.6))
+                .foregroundColor(Chalk.green.opacity(0.7))
 
             Text("No games scheduled")
-                .font(.headline)
-                .foregroundColor(.primary)
+                .font(.chalkScript(28))
+                .foregroundColor(Chalk.chalk)
 
             Text("Calendar events with your team names will appear here automatically")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(.chalkHand(15))
+                .foregroundColor(Chalk.dust)
                 .multilineTextAlignment(.center)
 
             Button {
                 showSettings = true
             } label: {
                 Text("Configure Teams")
-                    .font(.subheadline)
-                    .foregroundColor(.orange)
+                    .font(.chalkHand(15))
+                    .foregroundColor(Chalk.yellow)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .padding(.horizontal)
-        .background(Color(.systemBackground))
-        .cornerRadius(20)
+        .padding(.vertical, 26)
+        .chalkCard()
     }
 
     private func upcomingGamesLink(count: Int) -> some View {
@@ -367,18 +360,16 @@ struct HomeView: View {
         } label: {
             HStack {
                 Image(systemName: "calendar")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Chalk.dust)
                 Text("\(count) more game\(count == 1 ? "" : "s") this month")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.chalkHand(15))
+                    .foregroundColor(Chalk.dust)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.5))
+                    .foregroundColor(Chalk.dust.opacity(0.6))
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
+            .chalkCard()
         }
         .buttonStyle(.plain)
     }
@@ -387,32 +378,26 @@ struct HomeView: View {
         VStack(spacing: 12) {
             Image(systemName: "calendar.badge.plus")
                 .font(.largeTitle)
-                .foregroundColor(.orange)
+                .foregroundColor(Chalk.yellow)
 
             Text("Connect Calendar")
-                .font(.headline)
+                .font(.chalkScript(28))
+                .foregroundColor(Chalk.chalk)
 
             Text("See upcoming games from your calendar")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.chalkHand(14))
+                .foregroundColor(Chalk.dust)
                 .multilineTextAlignment(.center)
 
-            Button {
+            ChalkButton(title: "Allow Access") {
                 Task {
                     await calendarManager.requestCalendarAccess()
                 }
-            } label: {
-                Text("Allow Access")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
+            .padding(.horizontal, 40)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
+        .chalkCard()
     }
 }
 

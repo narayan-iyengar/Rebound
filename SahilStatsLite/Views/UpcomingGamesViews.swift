@@ -53,12 +53,11 @@ struct NextGameHeroCard: View {
             HStack {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(isToday ? Color.green : Color.orange)
+                        .fill(isToday ? Chalk.green : Chalk.yellow)
                         .frame(width: 8, height: 8)
                     Text("NEXT GAME")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(isToday ? .green : .orange)
+                        .font(.chalkHand(14))
+                        .foregroundColor(isToday ? Chalk.green : Chalk.yellow)
                 }
 
                 Spacer()
@@ -66,8 +65,8 @@ struct NextGameHeroCard: View {
                 // Tournament day indicator
                 if todayCount > 1 && isToday {
                     Text("1 of \(todayCount) today")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.chalkHand(13))
+                        .foregroundColor(Chalk.dust)
                 }
 
                 // Hide button - subtle, one tap
@@ -76,7 +75,7 @@ struct NextGameHeroCard: View {
                 } label: {
                     Image(systemName: "eye.slash")
                         .font(.footnote)
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .foregroundColor(Chalk.dust.opacity(0.7))
                 }
             }
             .padding(.horizontal, 20)
@@ -88,35 +87,34 @@ struct NextGameHeroCard: View {
                 // Day and Date
                 VStack(spacing: 2) {
                     Text(dayLabel)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(isToday ? .green : .orange)
+                        .font(.chalkHand(16))
+                        .foregroundColor(isToday ? Chalk.green : Chalk.yellow)
 
                     if !isToday && !isTomorrow {
                         Text(dateLabel)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.chalkHand(13))
+                            .foregroundColor(Chalk.dust)
                     }
                 }
 
-                // Time - large and prominent
+                // Time - large and prominent (crisp data)
                 Text(game.timeString)
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(.system(size: 48, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundColor(Chalk.crisp)
 
                 // Opponent - the main info
                 Text(game.opponent)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .font(.chalkHand(24))
+                    .foregroundColor(Chalk.chalk)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
 
                 // Which of Sahil's teams is playing
                 if let team = game.detectedTeam {
                     Text(team)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(.chalkHand(15))
+                        .foregroundColor(Chalk.sky)
                 }
 
                 // Location
@@ -125,9 +123,9 @@ struct NextGameHeroCard: View {
                         Image(systemName: "mappin")
                             .font(.caption2)
                         Text(game.location)
-                            .font(.caption)
+                            .font(.chalkHand(13))
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Chalk.dust)
                     .lineLimit(1)
                 }
             }
@@ -135,28 +133,15 @@ struct NextGameHeroCard: View {
             .padding(.bottom, 20)
 
             // Record Game button
-            Button {
+            ChalkButton(title: "Record Game", color: Chalk.yellow) {
                 appState.pendingCalendarGame = (opponent: game.opponent, location: game.location, team: game.detectedTeam)
                 appState.isLogOnly = false
                 appState.currentScreen = .setup
-            } label: {
-                HStack {
-                    Image(systemName: "video.fill")
-                    Text("Record Game")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.orange)
-                .foregroundColor(.white)
-                .cornerRadius(12)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
-        .background(Color(.systemBackground))
-        .cornerRadius(20)
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
+        .chalkCard(padding: 0)
     }
 }
 
@@ -170,9 +155,8 @@ struct LaterTodaySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LATER TODAY")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
+                .font(.chalkHand(14))
+                .foregroundColor(Chalk.dust)
                 .padding(.leading, 4)
 
             VStack(spacing: 0) {
@@ -181,12 +165,12 @@ struct LaterTodaySection: View {
 
                     if game.id != games.last?.id {
                         Divider()
+                            .overlay(Chalk.chalk.opacity(0.15))
                             .padding(.leading, 60)
                     }
                 }
             }
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
+            .chalkCard(padding: 0)
         }
     }
 }
@@ -203,29 +187,28 @@ struct LaterTodayRow: View {
             appState.currentScreen = .setup
         } label: {
             HStack(spacing: 12) {
-                // Time
+                // Time (crisp data)
                 Text(game.timeString)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .font(.system(size: 15, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundColor(Chalk.crisp)
                     .frame(width: 50, alignment: .leading)
 
                 // Color indicator
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.orange.opacity(0.6))
+                    .fill(Chalk.yellow.opacity(0.7))
                     .frame(width: 3, height: 32)
 
                 // Opponent
                 VStack(alignment: .leading, spacing: 2) {
                     Text(game.opponent)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                        .font(.chalkHand(16))
+                        .foregroundColor(Chalk.chalk)
 
                     if !game.location.isEmpty {
                         Text(game.location)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .font(.chalkHand(12))
+                            .foregroundColor(Chalk.dust)
                             .lineLimit(1)
                     }
                 }
@@ -235,7 +218,7 @@ struct LaterTodayRow: View {
                 // Subtle action indicator
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.5))
+                    .foregroundColor(Chalk.dust.opacity(0.6))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -269,9 +252,12 @@ struct UpcomingGamesSheet: View {
                     )
                 } else {
                     ForEach(groupedGames, id: \.0) { date, games in
-                        Section(header: Text(sectionHeader(for: date))) {
+                        Section(header: Text(sectionHeader(for: date))
+                            .font(.chalkHand(14))
+                            .foregroundColor(Chalk.dust)) {
                             ForEach(games) { game in
                                 UpcomingGameListRow(game: game, appState: appState, dismiss: dismiss)
+                                    .listRowBackground(Chalk.board2)
                             }
                             .onDelete { indexSet in
                                 for index in indexSet {
@@ -282,6 +268,8 @@ struct UpcomingGamesSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .chalkBoard()
             .navigationTitle("Upcoming Games")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -329,13 +317,13 @@ struct UpcomingGameListRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(game.opponent)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        .font(.chalkHand(18))
+                        .foregroundColor(Chalk.chalk)
 
                     if !game.location.isEmpty {
                         Text(game.location)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.chalkHand(13))
+                            .foregroundColor(Chalk.dust)
                             .lineLimit(1)
                     }
                 }
@@ -343,8 +331,9 @@ struct UpcomingGameListRow: View {
                 Spacer()
 
                 Text(game.timeString)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundColor(Chalk.crisp)
             }
             .contentShape(Rectangle())
         }
