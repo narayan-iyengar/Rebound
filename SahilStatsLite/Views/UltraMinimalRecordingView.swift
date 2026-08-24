@@ -292,12 +292,12 @@ struct UltraMinimalRecordingView: View {
                 // Left half feedback (my team)
                 ZStack {
                     if myTapCount > 0 {
-                        tapFeedback(count: myTapCount, color: .orange)
-                            .transition(.scale.combined(with: .opacity))
+                        tapFeedback(count: myTapCount, color: Chalk.yellow)
+                            .transition(floatUp)
                     }
                     if showMySubtract {
-                        subtractFeedback(color: .orange)
-                            .transition(.scale.combined(with: .opacity))
+                        subtractFeedback(color: Chalk.yellow)
+                            .transition(floatUp)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -305,21 +305,21 @@ struct UltraMinimalRecordingView: View {
                 // Right half feedback (opponent)
                 ZStack {
                     if oppTapCount > 0 {
-                        tapFeedback(count: oppTapCount, color: .blue)
-                            .transition(.scale.combined(with: .opacity))
+                        tapFeedback(count: oppTapCount, color: Chalk.sky)
+                            .transition(floatUp)
                     }
                     if showOppSubtract {
-                        subtractFeedback(color: .blue)
-                            .transition(.scale.combined(with: .opacity))
+                        subtractFeedback(color: Chalk.sky)
+                            .transition(floatUp)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .allowsHitTesting(false)
-            .animation(.spring(response: 0.2), value: myTapCount)
-            .animation(.spring(response: 0.2), value: oppTapCount)
-            .animation(.spring(response: 0.2), value: showMySubtract)
-            .animation(.spring(response: 0.2), value: showOppSubtract)
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: myTapCount)
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: oppTapCount)
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showMySubtract)
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showOppSubtract)
 
             if showSahilStats {
                 sahilStatsOverlay
@@ -1094,36 +1094,36 @@ struct UltraMinimalRecordingView: View {
 
     // MARK: - Tap Feedback
 
-    private func tapFeedback(count: Int, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Text("+\(count)")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
-                .foregroundColor(color)
+    // Pops in with a gentle scale, exits by drifting UP and fading (effervescent).
+    private var floatUp: AnyTransition {
+        .asymmetric(insertion: .scale(scale: 0.7).combined(with: .opacity),
+                    removal: .offset(y: -64).combined(with: .opacity))
+    }
 
+    // Effervescent chalk tap feedback — no card; a big chalk "+N" that floats up + fades.
+    private func tapFeedback(count: Int, color: Color) -> some View {
+        VStack(spacing: 5) {
+            Text("+\(count)")
+                .font(.chalkScript(66))
+                .foregroundColor(color)
+                .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
             HStack(spacing: 6) {
                 ForEach(1...3, id: \.self) { i in
                     Circle()
-                        .fill(i <= count ? color : Color.gray.opacity(0.3))
-                        .frame(width: 10, height: 10)
+                        .fill(i <= count ? color : color.opacity(0.25))
+                        .frame(width: 7, height: 7)
                 }
             }
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 24)
-        .background(.regularMaterial)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.15), radius: 10)
+        .offset(y: -46)  // lift above the tally box, nearer the score
     }
 
     private func subtractFeedback(color: Color) -> some View {
-        Text("-1")
-            .font(.system(size: 44, weight: .bold, design: .rounded))
-            .foregroundColor(color.opacity(0.8))
-            .padding(.vertical, 16)
-            .padding(.horizontal, 28)
-            .background(.regularMaterial)
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(0.15), radius: 10)
+        Text("−1")
+            .font(.chalkScript(66))
+            .foregroundColor(Chalk.coral)
+            .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
+            .offset(y: -46)
     }
 
     // MARK: - Tap Handling
