@@ -292,12 +292,13 @@ struct UltraMinimalRecordingView: View {
                 // Left half feedback (my team)
                 ZStack {
                     if myTapCount > 0 {
-                        tapFeedback(count: myTapCount, color: Chalk.yellow)
-                            .transition(floatUp)
+                        FloatingScore(text: "+\(myTapCount)", color: Chalk.yellow, dots: myTapCount)
+                            .id(myTapCount)
+                            .transition(.opacity)
                     }
                     if showMySubtract {
-                        subtractFeedback(color: Chalk.yellow)
-                            .transition(floatUp)
+                        FloatingScore(text: "−1", color: Chalk.coral, dots: 0)
+                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -305,21 +306,18 @@ struct UltraMinimalRecordingView: View {
                 // Right half feedback (opponent)
                 ZStack {
                     if oppTapCount > 0 {
-                        tapFeedback(count: oppTapCount, color: Chalk.sky)
-                            .transition(floatUp)
+                        FloatingScore(text: "+\(oppTapCount)", color: Chalk.sky, dots: oppTapCount)
+                            .id(oppTapCount)
+                            .transition(.opacity)
                     }
                     if showOppSubtract {
-                        subtractFeedback(color: Chalk.sky)
-                            .transition(floatUp)
+                        FloatingScore(text: "−1", color: Chalk.coral, dots: 0)
+                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .allowsHitTesting(false)
-            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: myTapCount)
-            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: oppTapCount)
-            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showMySubtract)
-            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showOppSubtract)
 
             if showSahilStats {
                 sahilStatsOverlay
@@ -1094,37 +1092,6 @@ struct UltraMinimalRecordingView: View {
 
     // MARK: - Tap Feedback
 
-    // Pops in with a gentle scale, exits by drifting UP and fading (effervescent).
-    private var floatUp: AnyTransition {
-        .asymmetric(insertion: .scale(scale: 0.7).combined(with: .opacity),
-                    removal: .offset(y: -64).combined(with: .opacity))
-    }
-
-    // Effervescent chalk tap feedback — no card; a big chalk "+N" that floats up + fades.
-    private func tapFeedback(count: Int, color: Color) -> some View {
-        VStack(spacing: 5) {
-            Text("+\(count)")
-                .font(.chalkScript(66))
-                .foregroundColor(color)
-                .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
-            HStack(spacing: 6) {
-                ForEach(1...3, id: \.self) { i in
-                    Circle()
-                        .fill(i <= count ? color : color.opacity(0.25))
-                        .frame(width: 7, height: 7)
-                }
-            }
-        }
-        .offset(y: -46)  // lift above the tally box, nearer the score
-    }
-
-    private func subtractFeedback(color: Color) -> some View {
-        Text("−1")
-            .font(.chalkScript(66))
-            .foregroundColor(Chalk.coral)
-            .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
-            .offset(y: -46)
-    }
 
     // MARK: - Tap Handling
 
@@ -1869,6 +1836,38 @@ struct UltraMinimalRecordingView: View {
         }
     }
 
+}
+
+// Effervescent score feedback: a big chalk "+N" (or "−1") that rises up and fades on
+// its own (self-animating), so it never sits static over the name/score.
+private struct FloatingScore: View {
+    let text: String
+    let color: Color
+    let dots: Int   // multi-tap indicator (0 = subtract, no dots)
+    @State private var animate = false
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(text)
+                .font(.chalkScript(74))
+                .foregroundColor(color)
+                .shadow(color: .black.opacity(0.5), radius: 7, y: 1)
+            if dots > 0 {
+                HStack(spacing: 6) {
+                    ForEach(1...3, id: \.self) { i in
+                        Circle()
+                            .fill(i <= dots ? color : color.opacity(0.22))
+                            .frame(width: 7, height: 7)
+                    }
+                }
+            }
+        }
+        .offset(y: animate ? -128 : 24)   // rise from near the score up into empty space
+        .scaleEffect(animate ? 1.15 : 0.8)
+        .opacity(animate ? 0 : 1)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.85)) { animate = true }
+        }
+    }
 }
 
 #Preview("Portrait") {
