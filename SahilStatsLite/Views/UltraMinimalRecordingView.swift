@@ -660,7 +660,7 @@ struct UltraMinimalRecordingView: View {
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Chalk.chalk.opacity(0.25), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                        .stroke(Chalk.chalk.opacity(0.18), lineWidth: 1)  // solid over video (calmer than dashed)
                 )
             }
         }
@@ -762,7 +762,7 @@ struct UltraMinimalRecordingView: View {
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Chalk.chalk.opacity(0.4), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    .stroke(Chalk.chalk.opacity(0.22), lineWidth: 1)  // solid over video (calmer than dashed)
             )
 
             // Expanded controls — spring down, inline, auto-collapse
@@ -953,7 +953,7 @@ struct UltraMinimalRecordingView: View {
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Chalk.chalk.opacity(0.45), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                .stroke(Chalk.chalk.opacity(0.25), lineWidth: 1)  // solid over video (calmer than dashed)
         )
     }
 
