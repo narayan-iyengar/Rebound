@@ -36,8 +36,8 @@ class OverlayRenderer: @unchecked Sendable {
     nonisolated(unsafe) var state = OverlayState()
 
     // Team colors (constant after init, safe to read from any thread)
-    let homeColor: UIColor = UIColor(red: 1.0, green: 0.5, blue: 0.0, alpha: 1.0)  // Orange
-    let awayColor: UIColor = UIColor(red: 0.2, green: 0.5, blue: 0.9, alpha: 1.0)  // Blue
+    let homeColor: UIColor = UIColor(red: 0.945, green: 0.824, blue: 0.443, alpha: 1.0)  // chalk yellow
+    let awayColor: UIColor = UIColor(red: 0.663, green: 0.792, blue: 0.820, alpha: 1.0)  // chalk sky
 
     // MARK: - Rendering
 
@@ -121,7 +121,7 @@ class OverlayRenderer: @unchecked Sendable {
 
         let homeNameRect = CGRect(x: bugX + colorBarWidth + 10 * scale, y: homeRowY, width: teamWidth, height: rowHeight)
         drawText(String(s.homeTeam.prefix(4)).uppercased(), in: homeNameRect, context: context,
-                 fontSize: 16 * scale, color: .white, bold: true, alignment: .left)
+                 fontSize: 17 * scale, color: UIColor(red: 0.949, green: 0.937, blue: 0.894, alpha: 1), bold: true, alignment: .left, chalk: true)
 
         let homeScoreRect = CGRect(x: bugX + colorBarWidth + teamWidth + 4 * scale, y: homeRowY, width: scoreWidth, height: rowHeight)
         drawText("\(s.homeScore)", in: homeScoreRect, context: context,
@@ -135,7 +135,7 @@ class OverlayRenderer: @unchecked Sendable {
         // Period (top right section)
         let periodRect = CGRect(x: dividerX + 6 * scale, y: homeRowY, width: timeWidth - 12 * scale, height: rowHeight)
         drawText(s.period, in: periodRect, context: context,
-                 fontSize: 12 * scale, color: UIColor(white: 0.7, alpha: 1.0), bold: true, alignment: .center)
+                 fontSize: 13 * scale, color: UIColor(white: 0.85, alpha: 1.0), bold: true, alignment: .center, chalk: true)
 
         // === AWAY TEAM ROW (BOTTOM) ===
         let awayRowY = bugY + rowHeight
@@ -145,21 +145,21 @@ class OverlayRenderer: @unchecked Sendable {
 
         let awayNameRect = CGRect(x: bugX + colorBarWidth + 10 * scale, y: awayRowY, width: teamWidth, height: rowHeight)
         drawText(String(s.awayTeam.prefix(4)).uppercased(), in: awayNameRect, context: context,
-                 fontSize: 16 * scale, color: .white, bold: true, alignment: .left)
+                 fontSize: 17 * scale, color: UIColor(red: 0.949, green: 0.937, blue: 0.894, alpha: 1), bold: true, alignment: .left, chalk: true)
 
         let awayScoreRect = CGRect(x: bugX + colorBarWidth + teamWidth + 4 * scale, y: awayRowY, width: scoreWidth, height: rowHeight)
         drawText("\(s.awayScore)", in: awayScoreRect, context: context,
                  fontSize: 28 * scale, color: .white, bold: true, alignment: .right)
 
         // Clock (bottom right section)
-        let clockColor = s.isClockRunning ? UIColor.white : UIColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1.0)
+        let clockColor = s.isClockRunning ? UIColor.white : UIColor(red: 0.945, green: 0.824, blue: 0.443, alpha: 1.0)  // chalk yellow when paused
         let clockRect = CGRect(x: dividerX + 6 * scale, y: awayRowY, width: timeWidth - 12 * scale, height: rowHeight)
         drawText(s.clockTime, in: clockRect, context: context,
                  fontSize: 20 * scale, color: clockColor, bold: true, alignment: .center, monospaced: true)
 
-        // === SUBTLE BORDER ===
-        context.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.1))
-        context.setLineWidth(1 * scale)
+        // === CHALK FRAME (subtle, solid — calmer than dashed over video) ===
+        context.setStrokeColor(CGColor(red: 0.949, green: 0.937, blue: 0.894, alpha: 0.4))
+        context.setLineWidth(1.5 * scale)
         context.addPath(bgPath)
         context.strokePath()
 
@@ -215,10 +215,15 @@ class OverlayRenderer: @unchecked Sendable {
     /// Draw text with alignment options
     private nonisolated func drawText(_ text: String, in rect: CGRect, context: CGContext,
                                        fontSize: CGFloat, color: UIColor, bold: Bool,
-                                       alignment: NSTextAlignment, monospaced: Bool = false) {
+                                       alignment: NSTextAlignment, monospaced: Bool = false,
+                                       chalk: Bool = false) {
 
         let font: UIFont
-        if monospaced {
+        if chalk {
+            // Hand-chalk face (registered app-wide) for team names/labels — personality.
+            // Numbers/clock never pass chalk:true, so data stays crisp + legible.
+            font = UIFont(name: "Gochi Hand", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .bold)
+        } else if monospaced {
             font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: bold ? .bold : .medium)
         } else if bold {
             font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
