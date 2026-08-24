@@ -1,0 +1,11 @@
+Rebound bundles two hand-chalk typefaces, both licensed under the SIL Open
+Font License 1.1 (OFL). The OFL permits bundling and redistribution in an
+application at no cost. Full license text: https://openfontlicense.org
+
+• Caveat  — Copyright (c) The Caveat Project Authors
+  https://github.com/google/fonts/tree/main/ofl/caveat
+  (Caveat-VariableFont_wght.ttf)
+
+• Gochi Hand — Copyright (c) The Gochi Hand Project Authors
+  https://github.com/google/fonts/tree/main/ofl/gochihand
+  (GochiHand-Regular.ttf)

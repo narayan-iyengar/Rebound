@@ -18,6 +18,45 @@
 //
 
 import SwiftUI
+import CoreText
+import UIKit
+
+// MARK: - Font registration (runtime, robust to Info.plist path quirks)
+
+/// Registers the bundled hand-chalk TTFs at process scope so Font.custom resolves.
+/// Confirmed family names (via the TTF `name` tables):
+///   • Caveat-VariableFont_wght.ttf → family "Caveat"     (PostScript "Caveat-Regular")
+///   • GochiHand-Regular.ttf        → family "Gochi Hand" (PostScript "GochiHand-Regular")
+/// Caveat is a variable font; its default instance is weight 400 (Regular).
+enum ChalkFonts {
+    /// Font family names ChalkTheme's Font.chalkScript/.chalkHand resolve against.
+    static let scriptFamily = "Caveat"
+    static let handFamily   = "Gochi Hand"
+
+    private static var didRegister = false
+
+    static func register() {
+        guard !didRegister else { return }
+        didRegister = true
+
+        for name in ["Caveat-VariableFont_wght", "GochiHand-Regular"] {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "ttf") else {
+                debugPrint("🖍️ [ChalkFonts] MISSING font resource: \(name).ttf")
+                continue
+            }
+            var error: Unmanaged<CFError>?
+            if !CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
+                // Already-registered (e.g. via UIAppFonts) is expected and harmless.
+                debugPrint("🖍️ [ChalkFonts] register note for \(name): \(error?.takeUnretainedValue().localizedDescription ?? "unknown")")
+            }
+        }
+
+        // Confirm what actually resolved.
+        let caveatOK = UIFont(name: scriptFamily, size: 20) != nil
+        let gochiOK  = UIFont(name: handFamily,   size: 20) != nil
+        debugPrint("🖍️ [ChalkFonts] Caveat resolved: \(caveatOK) | Gochi Hand resolved: \(gochiOK)")
+    }
+}
 
 // MARK: - Palette (colored chalk on a green board)
 
@@ -56,12 +95,14 @@ extension Color {
 
 extension Font {
     /// Caveat — the soft-chalk display face. Wordmark, headings, hints, big labels.
+    /// Confirmed family name: "Caveat" (variable font, default weight 400).
     static func chalkScript(_ size: CGFloat) -> Font {
-        .custom("Caveat", size: size)
+        .custom(ChalkFonts.scriptFamily, size: size)
     }
     /// Gochi Hand — printed-chalk face. Labels, pills, team names, captions.
+    /// Confirmed family name: "Gochi Hand".
     static func chalkHand(_ size: CGFloat) -> Font {
-        .custom("Gochi Hand", size: size)
+        .custom(ChalkFonts.handFamily, size: size)
     }
 }
 

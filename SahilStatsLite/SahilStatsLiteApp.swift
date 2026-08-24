@@ -15,6 +15,7 @@ import SwiftUI
 import FirebaseCore
 import GoogleSignIn
 import Combine
+import CoreText
 
 @main
 struct SahilStatsLiteApp: App {
@@ -23,6 +24,11 @@ struct SahilStatsLiteApp: App {
     init() {
         // Build stamp — compare with Watch console output to confirm both are in sync.
         debugPrint("📱 [iOS] Build: \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "?") | \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") ?? "?")")
+
+        // Register the bundled hand-chalk fonts (Caveat + Gochi Hand) at runtime.
+        // Belt-and-suspenders alongside Info.plist's UIAppFonts, so ChalkTheme's
+        // Font.chalkScript/.chalkHand always resolve regardless of plist path quirks.
+        ChalkFonts.register()
     }
 
     var body: some Scene {

@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Rebound</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -13,22 +15,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleDisplayName</key>
-	<string>Rebound</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Record basketball games with score overlay</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Record game audio</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save game recordings to Photos</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Save game recordings to Photos</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Find upcoming games from your calendar</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Connect to gimbal for auto-tracking</string>
-	<key>UIFileSharingEnabled</key>
-	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -51,5 +37,24 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Connect to gimbal for auto-tracking</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Find upcoming games from your calendar</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Record basketball games with score overlay</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record game audio</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save game recordings to Photos</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Save game recordings to Photos</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>GochiHand-Regular.ttf</string>
+		<string>Caveat-VariableFont_wght.ttf</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 </dict>
 </plist>
