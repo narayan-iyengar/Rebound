@@ -89,6 +89,9 @@ struct UltraMinimalRecordingView: View {
     @State private var isPulsing: Bool = false
     @State private var showLinkCopied: Bool = false
     @State private var currentZoom: CGFloat = 1.0
+    // Debug-only tracking overlay (gimbal/detection/court %). Off by default — normal
+    // games stay clean; toggle in Settings.
+    @AppStorage("showTrackingOverlay") private var showTrackingOverlay = false
 
     // Computed
     private var halfLength: Int {
@@ -618,7 +621,7 @@ struct UltraMinimalRecordingView: View {
 
     private var trackingStatus: some View {
         Group {
-            if hasCameraStarted {
+            if hasCameraStarted && showTrackingOverlay {
                 // Minimal icon-only status (debug-glance). No model name, no text labels.
                 HStack(spacing: 11) {
                     // Gimbal connected (green) / not (coral)

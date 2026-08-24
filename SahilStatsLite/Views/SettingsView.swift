@@ -132,6 +132,52 @@ struct SettingsView: View {
                         }
                         .tint(Chalk.green)
                         .listRowBackground(Chalk.board2)
+
+                        // Clip forward length — how long Clip keeps rolling AFTER you tap
+                        // (on top of the 30s it already banked). Varies by league, so adjustable.
+                        HStack {
+                            HStack(spacing: 12) {
+                                Image(systemName: "scissors")
+                                    .font(.title2).foregroundColor(Chalk.coral).frame(width: 32)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Clip forward length")
+                                        .font(.system(size: 15)).foregroundColor(Chalk.chalk)
+                                    Text("Seconds a Clip keeps recording after you tap (plus the 30s before)")
+                                        .font(.system(size: 12)).foregroundColor(Chalk.dust)
+                                }
+                            }
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 20 },
+                                set: { UserDefaults.standard.set($0, forKey: "clipForwardLength") }
+                            )) {
+                                Text("15s").tag(15)
+                                Text("20s").tag(20)
+                                Text("30s").tag(30)
+                            }
+                            .pickerStyle(.menu).labelsHidden().tint(Chalk.yellow)
+                        }
+                        .listRowBackground(Chalk.board2)
+
+                        // Debug: show the tracking overlay (gimbal / detection / court %).
+                        // Off by default so normal games stay clean.
+                        Toggle(isOn: Binding(
+                            get: { UserDefaults.standard.bool(forKey: "showTrackingOverlay") },
+                            set: { UserDefaults.standard.set($0, forKey: "showTrackingOverlay") }
+                        )) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "ladybug")
+                                    .font(.title2).foregroundColor(Chalk.dust).frame(width: 32)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Show tracking overlay")
+                                        .font(.system(size: 15)).foregroundColor(Chalk.chalk)
+                                    Text("Debug: gimbal, player detection, and court-calibration readouts")
+                                        .font(.system(size: 12)).foregroundColor(Chalk.dust)
+                                }
+                            }
+                        }
+                        .tint(Chalk.green)
+                        .listRowBackground(Chalk.board2)
                     } header: {
                         sectionHeader("Recording")
                     } footer: {
