@@ -56,25 +56,49 @@ struct GameDetailSheet: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
+            VStack(spacing: 0) {
+                // Chalk header replaces the system nav bar.
+                HStack {
+                    Text("Game Details")
+                        .font(.chalkScript(28))
+                        .foregroundColor(Chalk.chalk)
+
+                    Spacer()
+
+                    Button("Edit") {
+                        showEditSheet = true
+                    }
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(Chalk.yellow)
+
+                    Button { dismiss() } label: {
+                        Text("Done")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Chalk.chalk)
+                    }
+                    .padding(.leading, 8)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
+                ScrollView {
+                    VStack(spacing: 20) {
                     // Result Header
                     VStack(spacing: 8) {
                         Text(game.isWin ? "Victory" : (game.isLoss ? "Defeat" : "Tie"))
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(game.isWin ? .green : (game.isLoss ? .red : .orange))
+                            .font(.chalkScript(30))
+                            .foregroundColor(game.isWin ? Chalk.green : (game.isLoss ? Chalk.coral : Chalk.yellow))
 
-                        Text(game.scoreString)
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                        ScoreText(value: game.scoreString, size: 48)
 
                         Text("vs \(game.opponent)")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Chalk.dust)
 
                         Text(game.date.formatted(date: .long, time: .omitted))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 12))
+                            .foregroundColor(Chalk.dust)
                     }
                     .padding()
 
@@ -83,11 +107,11 @@ struct GameDetailSheet: View {
                         if game.youtubeStatus == .uploaded {
                             VStack(spacing: 12) {
                                 Label("Uploaded to YouTube", systemImage: "checkmark.circle.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.green)
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundColor(Chalk.green)
                                     .padding()
                                     .frame(maxWidth: .infinity)
-                                    .background(Color.green.opacity(0.1))
+                                    .background(Chalk.green.opacity(0.12))
                                     .cornerRadius(12)
 
                                 if let videoID = game.youtubeVideoId {
@@ -100,9 +124,8 @@ struct GameDetailSheet: View {
                                             Image(systemName: "play.rectangle.fill")
                                             Text("Watch on YouTube")
                                         }
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.red)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(Chalk.coral)
                                         .padding(.vertical, 8)
                                     }
                                 }
@@ -114,11 +137,13 @@ struct GameDetailSheet: View {
                                 // exposes the Upload button on the next render.
                                 if isImportingVideo {
                                     ProgressView("Importing replacement…")
+                                        .tint(Chalk.chalk)
+                                        .foregroundColor(Chalk.dust)
                                 } else {
                                     PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
                                         Label("Re-upload with a different video", systemImage: "arrow.triangle.2.circlepath")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Chalk.sky)
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 8)
                                     }
@@ -136,7 +161,8 @@ struct GameDetailSheet: View {
                                         deleteLocalFile(url: url)
                                     } label: {
                                         Label("Delete local file (\(size))", systemImage: "trash")
-                                            .font(.caption)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Chalk.coral)
                                     }
                                     .padding(.top, 4)
                                 }
@@ -144,38 +170,29 @@ struct GameDetailSheet: View {
                         } else if youtubeService.isUploading && youtubeService.currentUploadingGameID == game.id {
                             VStack(spacing: 8) {
                                 ProgressView(value: youtubeService.uploadProgress)
-                                    .tint(.blue)
+                                    .tint(Chalk.sky)
                                 HStack {
                                     Text("Uploading to YouTube...")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Chalk.dust)
                                     Spacer()
                                     Button("Cancel") {
                                         youtubeService.cancelUpload()
                                     }
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.red)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(Chalk.coral)
                                 }
                             }
                             .padding()
-                            .background(Color(.systemBackground))
+                            .background(Chalk.board2)
                             .cornerRadius(12)
+                            .overlay(RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
                         } else {
                             if let url = resolveVideoURL(for: game) {
-                                Button {
+                                ChalkButton(title: game.youtubeStatus == .failed ? "Retry Upload" : "Upload to YouTube",
+                                            icon: "square.and.arrow.up", color: Chalk.yellow) {
                                     startUpload(url: url)
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "square.and.arrow.up")
-                                        Text(game.youtubeStatus == .failed ? "Retry Upload" : "Upload to YouTube")
-                                    }
-                                    .fontWeight(.semibold)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(12)
                                 }
 
                                 // Recovery path: swap in a different video file (e.g. when
@@ -184,11 +201,13 @@ struct GameDetailSheet: View {
                                 // game's videoURL, then the Upload button above retries.
                                 if isImportingVideo {
                                     ProgressView("Importing replacement…")
+                                        .tint(Chalk.chalk)
+                                        .foregroundColor(Chalk.dust)
                                 } else {
                                     PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
                                         Label("Use a different video from Photos", systemImage: "arrow.triangle.2.circlepath")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Chalk.sky)
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 8)
                                     }
@@ -199,26 +218,28 @@ struct GameDetailSheet: View {
 
                                 if let error = youtubeService.lastError {
                                     Text(error)
-                                        .font(.caption)
-                                        .foregroundColor(.red)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Chalk.coral)
                                 }
                             } else {
                                 // Video missing - offer picker
                                 VStack(spacing: 12) {
                                     Text("Video file not found")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Chalk.dust)
 
                                     if isImportingVideo {
                                         ProgressView("Importing...")
+                                            .tint(Chalk.chalk)
+                                            .foregroundColor(Chalk.dust)
                                     } else {
                                         PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
                                             Label("Select Video from Photos", systemImage: "photo.on.rectangle")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
+                                                .font(.system(size: 15, weight: .medium))
+                                                .foregroundColor(Chalk.chalk)
                                                 .frame(maxWidth: .infinity)
                                                 .padding()
-                                                .background(Color(.systemGray5))
+                                                .background(Chalk.board.opacity(0.6))
                                                 .cornerRadius(12)
                                         }
                                         .onChange(of: selectedVideoItem) { _, newItem in
@@ -237,14 +258,15 @@ struct GameDetailSheet: View {
                     // Player Stats
                     VStack(spacing: 16) {
                         Text("Player Stats")
-                            .font(.headline)
+                            .font(.chalkScript(22))
+                            .foregroundColor(Chalk.chalk)
 
                         HStack(spacing: 0) {
-                            statBox(value: "\(game.playerStats.points)", label: "PTS", color: .orange)
-                            statBox(value: "\(game.playerStats.rebounds)", label: "REB", color: .blue)
-                            statBox(value: "\(game.playerStats.assists)", label: "AST", color: .green)
-                            statBox(value: "\(game.playerStats.steals)", label: "STL", color: .teal)
-                            statBox(value: "\(game.playerStats.blocks)", label: "BLK", color: .purple)
+                            statBox(value: "\(game.playerStats.points)", label: "PTS", color: Chalk.yellow)
+                            statBox(value: "\(game.playerStats.rebounds)", label: "REB", color: Chalk.sky)
+                            statBox(value: "\(game.playerStats.assists)", label: "AST", color: Chalk.green)
+                            statBox(value: "\(game.playerStats.steals)", label: "STL", color: Chalk.chalkDim)
+                            statBox(value: "\(game.playerStats.blocks)", label: "BLK", color: Chalk.coral)
                         }
 
                         // Shooting
@@ -255,24 +277,16 @@ struct GameDetailSheet: View {
                         }
                     }
                     .padding()
-                    .background(Color(.systemBackground))
-                    .cornerRadius(16)
-                }
-                .padding()
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Game Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        Button("Edit") {
-                            showEditSheet = true
-                        }
-                        Button("Done") { dismiss() }
+                    .frame(maxWidth: .infinity)
+                    .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
                     }
+                    .padding()
                 }
             }
+            .chalkBoard()
+            .navigationBarHidden(true)
             .sheet(isPresented: $showEditSheet) {
                 // Pass binding that saves via persistence manager
                 if let index = persistenceManager.savedGames.firstIndex(where: { $0.id == gameId }) {
@@ -395,12 +409,12 @@ struct GameDetailSheet: View {
     private func statBox(value: String, label: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.system(size: 22, weight: .bold))
+                .monospacedDigit()
                 .foregroundColor(color)
             Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12))
+                .foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
     }
@@ -408,11 +422,12 @@ struct GameDetailSheet: View {
     private func shootingStat(label: String, made: Int, attempted: Int) -> some View {
         VStack(spacing: 4) {
             Text("\(made)/\(attempted)")
-                .font(.headline)
+                .font(.system(size: 17, weight: .semibold))
                 .monospacedDigit()
+                .foregroundColor(Chalk.crisp)
             Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12))
+                .foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
     }

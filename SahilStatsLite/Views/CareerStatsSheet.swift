@@ -49,14 +49,15 @@ struct CareerStatsSheet: View {
         case shooting = "Shooting"
         case winRate = "Wins"
 
+        // Chalk accent colors so the chart reads as the same board.
         var color: Color {
             switch self {
-            case .points: return .orange
-            case .rebounds: return .blue
-            case .assists: return .purple
-            case .defense: return .green
-            case .shooting: return .cyan
-            case .winRate: return .mint
+            case .points: return Chalk.yellow
+            case .rebounds: return Chalk.sky
+            case .assists: return Chalk.green
+            case .defense: return Chalk.chalkDim
+            case .shooting: return Chalk.sky
+            case .winRate: return Chalk.green
             }
         }
 
@@ -213,182 +214,207 @@ struct CareerStatsSheet: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    recentFormCard
+            VStack(spacing: 0) {
+                // Chalk header replaces the system nav bar.
+                HStack {
+                    Text("Career Stats")
+                        .font(.chalkScript(30))
+                        .foregroundColor(Chalk.chalk)
 
-                    careerAveragesCard
+                    Spacer()
 
-                    if !currentTrendData.isEmpty {
-                        trendCard
+                    Button { dismiss() } label: {
+                        Text("Done")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Chalk.chalk)
                     }
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
 
-                    shootingStatsCard
+                ScrollView {
+                    VStack(spacing: 20) {
+                        recentFormCard
+
+                        careerAveragesCard
+
+                        if !currentTrendData.isEmpty {
+                            trendCard
+                        }
+
+                        shootingStatsCard
+                    }
+                    .padding()
                 }
-                .padding()
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Career Stats")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .chalkBoard()
+            .navigationBarHidden(true)
         }
+    }
+
+    // MARK: - Card chrome
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
     }
 
     // MARK: - Trend Card
 
     private var trendCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Progress")
-                    .font(.headline)
-                Spacer()
-            }
-
-            // Time period picker - pill style
-            HStack(spacing: 0) {
-                ForEach(TimePeriod.allCases, id: \.self) { period in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedTimePeriod = period
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: period.icon)
-                                .font(.caption2)
-                            Text(period.rawValue)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(selectedTimePeriod == period ? .white : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            selectedTimePeriod == period
-                                ? selectedTrendStat.color
-                                : Color.clear
-                        )
-                        .cornerRadius(12)
-                    }
-                    .buttonStyle(.plain)
+        card {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Progress")
+                        .font(.chalkScript(22))
+                        .foregroundColor(Chalk.chalk)
+                    Spacer()
                 }
-            }
-            .padding(4)
-            .background(Color(.systemGray5))
-            .cornerRadius(16)
 
-            // Stat picker
-            HStack {
-                Text("Stat:")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                Menu {
-                    ForEach(TrendStat.allCases, id: \.self) { stat in
+                // Time period picker - pill style
+                HStack(spacing: 0) {
+                    ForEach(TimePeriod.allCases, id: \.self) { period in
                         Button {
-                            selectedTrendStat = stat
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedTimePeriod = period
+                            }
                         } label: {
-                            HStack {
-                                Text(stat.rawValue)
-                                if stat == selectedTrendStat {
-                                    Image(systemName: "checkmark")
+                            HStack(spacing: 4) {
+                                Image(systemName: period.icon)
+                                    .font(.caption2)
+                                Text(period.rawValue)
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundColor(selectedTimePeriod == period ? Chalk.board : Chalk.dust)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                selectedTimePeriod == period
+                                    ? selectedTrendStat.color
+                                    : Color.clear
+                            )
+                            .cornerRadius(12)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(4)
+                .background(Chalk.board.opacity(0.6))
+                .cornerRadius(16)
+
+                // Stat picker
+                HStack {
+                    Text("Stat:")
+                        .font(.system(size: 15))
+                        .foregroundColor(Chalk.dust)
+
+                    Menu {
+                        ForEach(TrendStat.allCases, id: \.self) { stat in
+                            Button {
+                                selectedTrendStat = stat
+                            } label: {
+                                HStack {
+                                    Text(stat.rawValue)
+                                    if stat == selectedTrendStat {
+                                        Image(systemName: "checkmark")
+                                    }
                                 }
                             }
                         }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(selectedTrendStat.rawValue)
-                            .fontWeight(.medium)
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                    }
-                    .foregroundColor(selectedTrendStat.color)
-                }
-
-                Spacer()
-            }
-
-            // Current value label
-            if let latest = currentTrendData.last {
-                HStack {
-                    Spacer()
-                    let formattedValue = selectedTrendStat.isPercentage
-                        ? String(format: "%.0f%%", latest.value)
-                        : String(format: "%.1f", latest.value)
-                    Text("\(latest.label): \(formattedValue) \(selectedTrendStat.isPercentage ? "" : selectedTrendStat.label)")
-                        .font(.caption)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(selectedTrendStat.rawValue)
+                                .font(.system(size: 15, weight: .medium))
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                        }
                         .foregroundColor(selectedTrendStat.color)
+                    }
+
+                    Spacer()
                 }
-            }
 
-            // Scrollable chart
-            ScrollView(.horizontal, showsIndicators: false) {
-             Chart {
-                ForEach(currentTrendData, id: \.label) { dataPoint in
-                    LineMark(
-                        x: .value("Period", dataPoint.label),
-                        y: .value(selectedTrendStat.label, dataPoint.value)
-                    )
-                    .foregroundStyle(selectedTrendStat.color.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 3))
-
-                    PointMark(
-                        x: .value("Period", dataPoint.label),
-                        y: .value(selectedTrendStat.label, dataPoint.value)
-                    )
-                    .foregroundStyle(selectedTrendStat.color)
-                    .symbolSize(60)
-
-                    AreaMark(
-                        x: .value("Period", dataPoint.label),
-                        y: .value(selectedTrendStat.label, dataPoint.value)
-                    )
-                    .foregroundStyle(selectedTrendStat.color.opacity(0.1).gradient)
+                // Current value label
+                if let latest = currentTrendData.last {
+                    HStack {
+                        Spacer()
+                        let formattedValue = selectedTrendStat.isPercentage
+                            ? String(format: "%.0f%%", latest.value)
+                            : String(format: "%.1f", latest.value)
+                        Text("\(latest.label): \(formattedValue) \(selectedTrendStat.isPercentage ? "" : selectedTrendStat.label)")
+                            .font(.system(size: 12))
+                            .monospacedDigit()
+                            .foregroundColor(selectedTrendStat.color)
+                    }
                 }
-            }
-            .frame(width: max(UIScreen.main.bounds.width - 64,
-                              CGFloat(currentTrendData.count) * 44),
-                   height: 160)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(.secondary.opacity(0.3))
-                    AxisValueLabel {
-                        if let v = value.as(Double.self) {
-                            Text(selectedTrendStat.isPercentage
-                                 ? String(format: "%.0f%%", v)
-                                 : String(format: "%.0f", v))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+
+                // Scrollable chart
+                ScrollView(.horizontal, showsIndicators: false) {
+                 Chart {
+                    ForEach(currentTrendData, id: \.label) { dataPoint in
+                        LineMark(
+                            x: .value("Period", dataPoint.label),
+                            y: .value(selectedTrendStat.label, dataPoint.value)
+                        )
+                        .foregroundStyle(selectedTrendStat.color.gradient)
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 3))
+
+                        PointMark(
+                            x: .value("Period", dataPoint.label),
+                            y: .value(selectedTrendStat.label, dataPoint.value)
+                        )
+                        .foregroundStyle(selectedTrendStat.color)
+                        .symbolSize(60)
+
+                        AreaMark(
+                            x: .value("Period", dataPoint.label),
+                            y: .value(selectedTrendStat.label, dataPoint.value)
+                        )
+                        .foregroundStyle(selectedTrendStat.color.opacity(0.1).gradient)
+                    }
+                }
+                .frame(width: max(UIScreen.main.bounds.width - 64,
+                                  CGFloat(currentTrendData.count) * 44),
+                       height: 160)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(Chalk.dust.opacity(0.3))
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text(selectedTrendStat.isPercentage
+                                     ? String(format: "%.0f%%", v)
+                                     : String(format: "%.0f", v))
+                                    .font(.caption2)
+                                    .foregroundColor(Chalk.dust)
+                            }
                         }
                     }
                 }
-            }
-            .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: min(currentTrendData.count, 6))) { value in
-                    AxisValueLabel {
-                        if let s = value.as(String.self) {
-                            Text(s)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .fixedSize()
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: min(currentTrendData.count, 6))) { value in
+                        AxisValueLabel {
+                            if let s = value.as(String.self) {
+                                Text(s)
+                                    .font(.caption2)
+                                    .foregroundColor(Chalk.dust)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
                         }
                     }
                 }
+                .animation(.easeInOut(duration: 0.3), value: selectedTrendStat)
+                .animation(.easeInOut(duration: 0.3), value: selectedTimePeriod)
+                } // end ScrollView
             }
-            .animation(.easeInOut(duration: 0.3), value: selectedTrendStat)
-            .animation(.easeInOut(duration: 0.3), value: selectedTimePeriod)
-            } // end ScrollView
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
     }
 
     // MARK: - Recent Form Card
@@ -411,84 +437,91 @@ struct CareerStatsSheet: View {
     @ViewBuilder
     private var recentFormCard: some View {
         if let d = recentFormData {
-            VStack(spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: d.diff >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                        .foregroundColor(d.diff >= 0 ? .green : .red)
-                    Text("Last \(d.count) games:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Text(String(format: "%.1f PPG", d.ppg))
-                        .font(.subheadline.bold())
-                    Text(String(format: "%+.1f vs season", d.diff))
-                        .font(.caption)
-                        .foregroundColor(d.diff >= 0 ? .green : .red)
-                    Spacer()
-                }
-                if d.bestPts > 0 {
+            card {
+                VStack(spacing: 10) {
                     HStack(spacing: 6) {
-                        Image(systemName: "star.fill").foregroundColor(.orange)
-                        Text("Best:").font(.caption).foregroundColor(.secondary)
-                        Text("\(d.bestPts) pts vs \(d.bestOpponent)").font(.caption.bold())
+                        Image(systemName: d.diff >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                            .foregroundColor(d.diff >= 0 ? Chalk.green : Chalk.coral)
+                        Text("Last \(d.count) games:")
+                            .font(.system(size: 15))
+                            .foregroundColor(Chalk.dust)
+                        Text(String(format: "%.1f PPG", d.ppg))
+                            .font(.system(size: 15, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundColor(Chalk.chalk)
+                        Text(String(format: "%+.1f vs season", d.diff))
+                            .font(.system(size: 12))
+                            .monospacedDigit()
+                            .foregroundColor(d.diff >= 0 ? Chalk.green : Chalk.coral)
                         Spacer()
-                        Text(d.bestDate).font(.caption2).foregroundColor(.secondary)
+                    }
+                    if d.bestPts > 0 {
+                        HStack(spacing: 6) {
+                            Image(systemName: "star.fill").foregroundColor(Chalk.yellow)
+                            Text("Best:").font(.system(size: 12)).foregroundColor(Chalk.dust)
+                            Text("\(d.bestPts) pts vs \(d.bestOpponent)")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(Chalk.chalk)
+                            Spacer()
+                            Text(d.bestDate).font(.caption2).foregroundColor(Chalk.dust)
+                        }
                     }
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
         }
     }
 
     // MARK: - Career Averages Card
 
     private var careerAveragesCard: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Career Averages")
-                    .font(.headline)
-                Spacer()
-                Text("\(persistenceManager.careerGames) games")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+        card {
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Career Averages")
+                        .font(.chalkScript(22))
+                        .foregroundColor(Chalk.chalk)
+                    Spacer()
+                    Text("\(persistenceManager.careerGames) games")
+                        .font(.system(size: 12))
+                        .foregroundColor(Chalk.dust)
+                }
 
-            HStack(spacing: 0) {
-                careerStat(value: String(format: "%.1f", persistenceManager.careerPPG), label: "PPG", color: .orange)
-                careerStat(value: String(format: "%.1f", persistenceManager.careerRPG), label: "RPG", color: .blue)
-                careerStat(value: String(format: "%.1f", persistenceManager.careerAPG), label: "APG", color: .green)
-                careerStat(value: String(format: "%.1f", persistenceManager.careerSPG), label: "SPG", color: .teal)
-                careerStat(value: String(format: "%.1f", persistenceManager.careerBPG), label: "BPG", color: .purple)
-            }
+                HStack(spacing: 0) {
+                    careerStat(value: String(format: "%.1f", persistenceManager.careerPPG), label: "PPG", color: Chalk.yellow)
+                    careerStat(value: String(format: "%.1f", persistenceManager.careerRPG), label: "RPG", color: Chalk.sky)
+                    careerStat(value: String(format: "%.1f", persistenceManager.careerAPG), label: "APG", color: Chalk.green)
+                    careerStat(value: String(format: "%.1f", persistenceManager.careerSPG), label: "SPG", color: Chalk.chalkDim)
+                    careerStat(value: String(format: "%.1f", persistenceManager.careerBPG), label: "BPG", color: Chalk.coral)
+                }
 
-            // Record
-            HStack(spacing: 20) {
-                Label(persistenceManager.careerRecord, systemImage: "trophy.fill")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                // Record
+                HStack(spacing: 20) {
+                    Label(persistenceManager.careerRecord, systemImage: "trophy.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundColor(Chalk.chalk)
 
-                if persistenceManager.careerGames > 0 {
-                    let winPct = Double(persistenceManager.careerWins) / Double(persistenceManager.careerGames) * 100
-                    Text(String(format: "%.0f%% Win Rate", winPct))
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    if persistenceManager.careerGames > 0 {
+                        let winPct = Double(persistenceManager.careerWins) / Double(persistenceManager.careerGames) * 100
+                        Text(String(format: "%.0f%% Win Rate", winPct))
+                            .font(.system(size: 15))
+                            .monospacedDigit()
+                            .foregroundColor(Chalk.dust)
+                    }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
     }
 
     private func careerStat(value: String, label: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold))
+                .monospacedDigit()
                 .foregroundColor(color)
             Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12))
+                .foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
     }
@@ -496,47 +529,47 @@ struct CareerStatsSheet: View {
     // MARK: - Shooting Stats Card
 
     private var shootingStatsCard: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Shooting")
-                    .font(.headline)
-                Spacer()
-            }
+        card {
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Shooting")
+                        .font(.chalkScript(22))
+                        .foregroundColor(Chalk.chalk)
+                    Spacer()
+                }
 
-            HStack(spacing: 20) {
-                shootingCircle(
-                    label: "FG",
-                    made: persistenceManager.careerFGMade,
-                    attempted: persistenceManager.careerFGAttempted,
-                    pct: persistenceManager.careerFGPercentage,
-                    color: .blue
-                )
-                shootingCircle(
-                    label: "3PT",
-                    made: persistenceManager.career3PMade,
-                    attempted: persistenceManager.career3PAttempted,
-                    pct: persistenceManager.career3PPercentage,
-                    color: .purple
-                )
-                shootingCircle(
-                    label: "FT",
-                    made: persistenceManager.careerFTMade,
-                    attempted: persistenceManager.careerFTAttempted,
-                    pct: persistenceManager.careerFTPercentage,
-                    color: .cyan
-                )
+                HStack(spacing: 20) {
+                    shootingCircle(
+                        label: "FG",
+                        made: persistenceManager.careerFGMade,
+                        attempted: persistenceManager.careerFGAttempted,
+                        pct: persistenceManager.careerFGPercentage,
+                        color: Chalk.sky
+                    )
+                    shootingCircle(
+                        label: "3PT",
+                        made: persistenceManager.career3PMade,
+                        attempted: persistenceManager.career3PAttempted,
+                        pct: persistenceManager.career3PPercentage,
+                        color: Chalk.green
+                    )
+                    shootingCircle(
+                        label: "FT",
+                        made: persistenceManager.careerFTMade,
+                        attempted: persistenceManager.careerFTAttempted,
+                        pct: persistenceManager.careerFTPercentage,
+                        color: Chalk.yellow
+                    )
+                }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
     }
 
     private func shootingCircle(label: String, made: Int, attempted: Int, pct: Double, color: Color) -> some View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 6)
+                    .stroke(Chalk.chalk.opacity(0.15), lineWidth: 6)
                     .frame(width: 70, height: 70)
 
                 Circle()
@@ -547,17 +580,18 @@ struct CareerStatsSheet: View {
 
                 Text(String(format: "%.0f%%", pct))
                     .font(.system(size: 14, weight: .bold))
+                    .monospacedDigit()
                     .foregroundColor(color)
             }
 
             Text(label)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Chalk.chalk)
 
             Text("\(made)/\(attempted)")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
     }

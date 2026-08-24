@@ -16,100 +16,91 @@ struct AuthView: View {
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var persistenceManager = GamePersistenceManager.shared
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
-                Spacer()
-
-                // App icon and title
-                VStack(spacing: 16) {
-                    Image(systemName: "basketball.fill")
-                        .font(.system(size: 80))
-                        .foregroundStyle(.orange)
-
-                    Text("SahilStats")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-
-                    Text("Sign in to sync your games across devices")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-
-                Spacer()
-
-                // Sign-in options
-                VStack(spacing: 16) {
-                    if authService.isSignedIn {
-                        // Already signed in
-                        signedInView
-                    } else {
-                        // Sign in with Google
-                        Button {
-                            Task {
-                                await authService.signInWithGoogle()
-                            }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "g.circle.fill")
-                                    .font(.title2)
-                                Text("Sign in with Google")
-                                    .fontWeight(.medium)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(colorScheme == .dark ? Color.white : Color.black)
-                            .foregroundColor(colorScheme == .dark ? .black : .white)
-                            .cornerRadius(10)
-                        }
-                        .padding(.horizontal, 32)
-                        .disabled(authService.isLoading)
-
-                        // Continue without signing in
-                        Button {
-                            dismiss()
-                        } label: {
-                            Text("Continue without signing in")
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 8)
+            VStack(spacing: 0) {
+                // Chalk header replaces the system nav bar.
+                HStack {
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Text("Done")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Chalk.chalk)
                     }
                 }
+                .padding(.horizontal)
+                .padding(.top, 8)
 
-                // Error display
-                if let error = authService.error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal)
-                }
+                VStack(spacing: 32) {
+                    Spacer()
 
-                // Loading indicator
-                if authService.isLoading {
-                    ProgressView()
-                        .padding()
-                }
+                    // Wordmark and tagline
+                    VStack(spacing: 16) {
+                        ReboundWordmark(size: 52)
 
-                Spacer()
-
-                // Privacy note
-                Text("Your data is stored securely in Firebase")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom)
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
+                        Text("Sign in to sync your games across devices")
+                            .font(.system(size: 15))
+                            .foregroundColor(Chalk.dust)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
+
+                    Spacer()
+
+                    // Sign-in options
+                    VStack(spacing: 16) {
+                        if authService.isSignedIn {
+                            // Already signed in
+                            signedInView
+                        } else {
+                            // Sign in with Google
+                            ChalkButton(title: "Sign in with Google", icon: "g.circle.fill", color: Chalk.yellow) {
+                                Task {
+                                    await authService.signInWithGoogle()
+                                }
+                            }
+                            .padding(.horizontal, 32)
+                            .disabled(authService.isLoading)
+
+                            // Continue without signing in
+                            Button {
+                                dismiss()
+                            } label: {
+                                Text("Continue without signing in")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(Chalk.dust)
+                            }
+                            .padding(.top, 8)
+                        }
+                    }
+
+                    // Error display
+                    if let error = authService.error {
+                        Text(error)
+                            .font(.system(size: 12))
+                            .foregroundColor(Chalk.coral)
+                            .padding(.horizontal)
+                    }
+
+                    // Loading indicator
+                    if authService.isLoading {
+                        ProgressView()
+                            .tint(Chalk.chalk)
+                            .padding()
+                    }
+
+                    Spacer()
+
+                    // Privacy note
+                    Text("Your data is stored securely in Firebase")
+                        .font(.caption2)
+                        .foregroundColor(Chalk.dust.opacity(0.7))
+                        .padding(.bottom)
                 }
             }
+            .chalkBoard()
+            .navigationBarHidden(true)
         }
     }
 
@@ -121,16 +112,16 @@ struct AuthView: View {
             VStack(spacing: 8) {
                 Image(systemName: "person.circle.fill")
                     .font(.system(size: 60))
-                    .foregroundStyle(.green)
+                    .foregroundColor(Chalk.green)
 
                 Text("Signed In")
-                    .font(.headline)
-                    .foregroundStyle(.green)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Chalk.green)
 
                 if let email = authService.userEmail {
                     Text(email)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 15))
+                        .foregroundColor(Chalk.dust)
                 }
             }
 
@@ -139,49 +130,44 @@ struct AuthView: View {
                 if persistenceManager.isSyncing {
                     ProgressView()
                         .scaleEffect(0.8)
+                        .tint(Chalk.chalk)
                     Text("Syncing...")
                 } else if let lastSync = persistenceManager.lastSyncTime {
                     Image(systemName: "checkmark.icloud.fill")
-                        .foregroundStyle(.green)
+                        .foregroundColor(Chalk.green)
                     Text("Last synced: \(lastSync.formatted(date: .omitted, time: .shortened))")
                 } else {
                     Image(systemName: "icloud.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundColor(Chalk.sky)
                     Text("Connected to cloud")
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.system(size: 12))
+            .foregroundColor(Chalk.dust)
 
             // Sync error
             if let syncError = persistenceManager.syncError {
                 Text(syncError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(.system(size: 12))
+                    .foregroundColor(Chalk.coral)
             }
 
             // Actions
             VStack(spacing: 12) {
                 // Force sync button
-                Button {
+                ChalkButton(title: "Sync Now", icon: "arrow.triangle.2.circlepath",
+                            color: Chalk.chalk, filled: false) {
                     Task {
                         await persistenceManager.forceSyncFromFirebase()
                     }
-                } label: {
-                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
                 .disabled(persistenceManager.isSyncing)
 
                 // Sign out button
-                Button(role: .destructive) {
+                ChalkButton(title: "Sign Out", icon: "rectangle.portrait.and.arrow.right",
+                            color: Chalk.coral, filled: false) {
                     authService.signOut()
-                } label: {
-                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
             }
             .padding(.horizontal, 32)
             .padding(.top, 16)

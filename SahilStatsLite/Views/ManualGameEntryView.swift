@@ -68,7 +68,7 @@ struct ManualGameEntryView: View {
             // Save Button
             saveButton
         }
-        .background(Color(.systemGroupedBackground))
+        .chalkBoard()
     }
 
     // MARK: - Header
@@ -81,13 +81,14 @@ struct ManualGameEntryView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.title2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Chalk.dust)
             }
 
             Spacer()
 
             Text("Log Game")
-                .font(.headline)
+                .font(.chalkScript(28))
+                .foregroundColor(Chalk.chalk)
 
             Spacer()
 
@@ -97,7 +98,6 @@ struct ManualGameEntryView: View {
                 .foregroundColor(.clear)
         }
         .padding()
-        .background(Color(.systemBackground))
     }
 
     // MARK: - Score Section
@@ -105,43 +105,45 @@ struct ManualGameEntryView: View {
     private var scoreSection: some View {
         VStack(spacing: 16) {
             Text("Final Score")
-                .font(.headline)
-                .foregroundColor(.secondary)
+                .font(.chalkScript(22))
+                .foregroundColor(Chalk.chalk)
 
             HStack(spacing: 20) {
                 // My Team
                 VStack(spacing: 8) {
                     Text(teamName)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Chalk.sky)
                         .lineLimit(1)
 
-                    scoreInput(value: $myScore)
+                    scoreInput(value: $myScore, accent: Chalk.sky)
                 }
                 .frame(maxWidth: .infinity)
 
                 Text("vs")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(Chalk.dust)
 
                 // Opponent
                 VStack(spacing: 8) {
                     Text(opponent)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Chalk.coral)
                         .lineLimit(1)
 
-                    scoreInput(value: $opponentScore)
+                    scoreInput(value: $opponentScore, accent: Chalk.coral)
                 }
                 .frame(maxWidth: .infinity)
             }
         }
         .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
+        .frame(maxWidth: .infinity)
+        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16)
+            .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
     }
 
-    private func scoreInput(value: Binding<Int>) -> some View {
+    private func scoreInput(value: Binding<Int>, accent: Color) -> some View {
         HStack(spacing: 12) {
             Button {
                 if value.wrappedValue > 0 {
@@ -150,11 +152,10 @@ struct ManualGameEntryView: View {
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Chalk.dust)
             }
 
-            Text("\(value.wrappedValue)")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+            ScoreText(value: "\(value.wrappedValue)", size: 36)
                 .frame(minWidth: 60)
 
             Button {
@@ -162,7 +163,7 @@ struct ManualGameEntryView: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.orange)
+                    .foregroundColor(accent)
             }
         }
     }
@@ -173,36 +174,39 @@ struct ManualGameEntryView: View {
         VStack(spacing: 16) {
             HStack {
                 Text("Player Stats")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
+                    .font(.chalkScript(22))
+                    .foregroundColor(Chalk.chalk)
 
                 Spacer()
 
                 Text("\(sahilPoints) pts")
-                    .font(.headline)
-                    .foregroundColor(.orange)
+                    .font(.system(size: 17, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundColor(Chalk.yellow)
             }
 
             // Shooting stats
             HStack(spacing: 12) {
-                shootingTile("2PT", made: $fg2Made, att: $fg2Att, color: .blue)
-                shootingTile("3PT", made: $fg3Made, att: $fg3Att, color: .purple)
-                shootingTile("FT", made: $ftMade, att: $ftAtt, color: .cyan)
+                shootingTile("2PT", made: $fg2Made, att: $fg2Att, color: Chalk.sky)
+                shootingTile("3PT", made: $fg3Made, att: $fg3Att, color: Chalk.green)
+                shootingTile("FT", made: $ftMade, att: $ftAtt, color: Chalk.yellow)
             }
 
             // Other stats
             HStack(spacing: 8) {
-                statTile("AST", $assists, .green)
-                statTile("REB", $rebounds, .orange)
-                statTile("STL", $steals, .teal)
-                statTile("BLK", $blocks, .indigo)
-                statTile("TO", $turnovers, .red)
-                statTile("PF", $fouls, .gray)
+                statTile("AST", $assists, Chalk.green)
+                statTile("REB", $rebounds, Chalk.sky)
+                statTile("STL", $steals, Chalk.chalkDim)
+                statTile("BLK", $blocks, Chalk.coral)
+                statTile("TO", $turnovers, Chalk.coral)
+                statTile("PF", $fouls, Chalk.dust)
             }
         }
         .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
+        .frame(maxWidth: .infinity)
+        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16)
+            .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
     }
 
     // MARK: - Reusable Tiles (same pattern as UltraMinimalRecordingView)
@@ -214,8 +218,9 @@ struct ManualGameEntryView: View {
                 .foregroundColor(color)
 
             Text("\(made.wrappedValue)/\(att.wrappedValue)")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
+                .font(.system(size: 20, weight: .bold))
+                .monospacedDigit()
+                .foregroundColor(Chalk.crisp)
 
             HStack(spacing: 6) {
                 // Make button
@@ -225,9 +230,9 @@ struct ManualGameEntryView: View {
                 } label: {
                     Image(systemName: "checkmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(Chalk.board)
                         .frame(width: 32, height: 26)
-                        .background(Color.green)
+                        .background(Chalk.green)
                         .cornerRadius(6)
                 }
 
@@ -237,16 +242,16 @@ struct ManualGameEntryView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(Chalk.board)
                         .frame(width: 32, height: 26)
-                        .background(Color.red.opacity(0.85))
+                        .background(Chalk.coral)
                         .cornerRadius(6)
                 }
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(Color.gray.opacity(0.08))
+        .background(Chalk.board.opacity(0.5))
         .cornerRadius(10)
     }
 
@@ -257,14 +262,15 @@ struct ManualGameEntryView: View {
             VStack(spacing: 2) {
                 Text("\(value.wrappedValue)")
                     .font(.system(size: 20, weight: .bold))
+                    .monospacedDigit()
                     .foregroundColor(color)
                 Text(label)
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Chalk.dust)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(Color.gray.opacity(0.06))
+            .background(Chalk.board.opacity(0.5))
             .cornerRadius(8)
         }
         .buttonStyle(.plain)
@@ -273,22 +279,10 @@ struct ManualGameEntryView: View {
     // MARK: - Save Button
 
     private var saveButton: some View {
-        Button {
+        ChalkButton(title: "Save Game", icon: "checkmark.circle.fill", color: Chalk.yellow) {
             saveGame()
-        } label: {
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                Text("Save Game")
-            }
-            .font(.headline)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Color.orange)
-            .cornerRadius(16)
         }
         .padding()
-        .background(Color(.systemBackground))
     }
 
     // MARK: - Actions
