@@ -862,56 +862,92 @@ struct UltraMinimalRecordingView: View {
     // zones (which are padded away from the bottom), so tapping a tally never scores.
     private var fullScreenStatsLayout: some View {
         ZStack {
-            // Big scores — non-interactive so taps pass through to the scoring halves.
+            // Two columns: team name + big score (display, taps pass through to scoring)
+            // + a framed tally box (interactive — consumes taps so it never scores).
             HStack(spacing: 0) {
                 statColumn(name: appState.currentGame?.teamName ?? "HOME",
-                           score: myScore, accent: Chalk.yellow)
+                           score: myScore, accent: Chalk.yellow,
+                           fouls: $homeFouls, timeouts: $homeTimeouts)
                 Rectangle().fill(Chalk.chalk.opacity(0.15))
                     .frame(width: 1.5)
-                    .padding(.vertical, 70)
+                    .padding(.vertical, 80)
+                    .allowsHitTesting(false)
                 statColumn(name: appState.currentGame?.opponent ?? "AWAY",
-                           score: opponentScore, accent: Chalk.sky)
+                           score: opponentScore, accent: Chalk.sky,
+                           fouls: $awayFouls, timeouts: $awayTimeouts)
             }
-            .padding(.top, 58)
-            .padding(.bottom, 96)
-            .allowsHitTesting(false)
+            .padding(.top, 50)
+            .padding(.bottom, 54)
 
-            // Bottom band: fouls/timeout tallies (home left, away right) + clock/period
-            // (center). Interactive tallies, but below the scoring zones → no interference.
+            // Clock + period, bottom center (display only).
             VStack {
                 Spacer()
-                HStack(alignment: .center, spacing: 8) {
-                    teamFT(fouls: $homeFouls, timeouts: $homeTimeouts, accent: Chalk.yellow)
-                    Spacer(minLength: 8)
-                    VStack(spacing: 2) {
-                        Text(period)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(Chalk.chalkDim)
-                        Text(clockTime)
-                            .font(.system(size: 19, weight: .bold)).monospacedDigit()
-                            .foregroundColor(isClockRunning ? Chalk.crisp : Chalk.yellow)
-                    }
-                    Spacer(minLength: 8)
-                    teamFT(fouls: $awayFouls, timeouts: $awayTimeouts, accent: Chalk.sky)
+                HStack(spacing: 8) {
+                    Text(period)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Chalk.chalkDim)
+                    Text("·").foregroundColor(Chalk.dust)
+                    Text(clockTime)
+                        .font(.system(size: 18, weight: .bold)).monospacedDigit()
+                        .foregroundColor(isClockRunning ? Chalk.crisp : Chalk.yellow)
                 }
-                .padding(.horizontal, 22)
                 .padding(.bottom, 14)
             }
+            .allowsHitTesting(false)
         }
     }
 
-    private func statColumn(name: String, score: Int, accent: Color) -> some View {
-        VStack(spacing: 6) {
+    private func statColumn(name: String, score: Int, accent: Color,
+                            fouls: Binding<Int>, timeouts: Binding<Int>) -> some View {
+        VStack(spacing: 8) {
             Text(name.prefix(8).uppercased())
                 .font(.chalkHand(30))
                 .foregroundColor(accent)
                 .lineLimit(1).minimumScaleFactor(0.7)
+                .allowsHitTesting(false)
             Text("\(score)")
-                .font(.system(size: 90, weight: .heavy)).monospacedDigit()
+                .font(.system(size: 82, weight: .heavy)).monospacedDigit()
                 .foregroundColor(Chalk.crisp)
                 .minimumScaleFactor(0.5)
+                .allowsHitTesting(false)
+            tallyBox(fouls: fouls, timeouts: timeouts, accent: accent)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // Framed fouls|timeouts box (like the mock). Interactive: tap a tally to +1,
+    // long-press to −1. Consumes its own taps so it never triggers a score.
+    private func tallyBox(fouls: Binding<Int>, timeouts: Binding<Int>, accent: Color) -> some View {
+        HStack(spacing: 0) {
+            ftItemBig(label: "FOULS", count: fouls, color: Chalk.coral)
+            Rectangle().fill(Chalk.chalk.opacity(0.2)).frame(width: 1, height: 34)
+            ftItemBig(label: "T.O.", count: timeouts, color: accent)
+        }
+        .background(Color(white: 0.08, opacity: 0.72), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.2), lineWidth: 1))
+    }
+
+    private func ftItemBig(label: String, count: Binding<Int>, color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(Chalk.dust)
+            TallyMarks(count: count.wrappedValue, color: color, barHeight: 22)
+                .frame(minWidth: 44, minHeight: 24, alignment: .center)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            count.wrappedValue += 1
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        .onLongPressGesture {
+            if count.wrappedValue > 0 {
+                count.wrappedValue -= 1
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            }
+        }
     }
 
     // Fouls + timeouts tally strip (sits above the corner scoreboard; also reused in the
@@ -937,13 +973,15 @@ struct UltraMinimalRecordingView: View {
     }
 
     private func ftItem(label: String, count: Binding<Int>, color: Color) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Text(label)
-                .font(.system(size: 8, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .foregroundColor(Chalk.dust)
-            TallyMarks(count: count.wrappedValue, color: color, barHeight: 13)
-                .frame(minWidth: 22, minHeight: 15, alignment: .leading)
+            TallyMarks(count: count.wrappedValue, color: color, barHeight: 19)
+                .frame(minWidth: 34, minHeight: 22, alignment: .leading)
         }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .onTapGesture {
             count.wrappedValue += 1
