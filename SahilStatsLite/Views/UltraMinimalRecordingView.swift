@@ -570,29 +570,29 @@ struct UltraMinimalRecordingView: View {
         Group {
             if appState.isStatsOnly {
                 // Stats-only mode indicator
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Circle()
-                        .fill(isClockRunning ? Color.green : Color.orange)
+                        .fill(isClockRunning ? Chalk.green : Chalk.yellow)
                         .frame(width: 8, height: 8)
                     Text("LIVE")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(isClockRunning ? .green : .orange)
+                        .font(.chalkHand(13))
+                        .foregroundColor(isClockRunning ? Chalk.green : Chalk.yellow)
                     // Simple YT LIVE indicator — no tap needed, phone is on gimbal
                     if streamingService.health.isActive {
-                        HStack(spacing: 2) {
+                        HStack(spacing: 3) {
                             Image(systemName: "dot.radiowaves.left.and.right")
                                 .font(.system(size: 8))
-                                .foregroundColor(.red)
+                                .foregroundColor(Chalk.coral)
                             Text("YT")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.red)
+                                .font(.chalkHand(11))
+                                .foregroundColor(Chalk.coral)
                         }
                     }
                 }
             } else if isClockRunning {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Color.red)
+                        .fill(Chalk.coral)
                         .frame(width: 12, height: 12)
                         .scaleEffect(isPulsing ? 1.3 : 1.0)
                         .animation(
@@ -604,14 +604,14 @@ struct UltraMinimalRecordingView: View {
                     // Stream health — always visible so you know what's happening
                     if recordingManager.isStreamingActive {
                         Text(streamingService.health.label)
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(streamingService.health.isActive ? .red : .orange)
+                            .font(.chalkHand(12))
+                            .foregroundColor(streamingService.health.isActive ? Chalk.coral : Chalk.yellow)
                     }
                 }
             } else {
                 Image(systemName: "pause.fill")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.orange)
+                    .foregroundColor(Chalk.yellow)
             }
         }
     }
@@ -627,37 +627,41 @@ struct UltraMinimalRecordingView: View {
                         Image(systemName: gimbalManager.isDockKitAvailable ? "checkmark.circle.fill" : "xmark.circle")
                             .font(.system(size: 9))
                         Text("Gimbal")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.chalkHand(12))
                     }
-                    .foregroundColor(gimbalManager.isDockKitAvailable ? .green : .red)
+                    .foregroundColor(gimbalManager.isDockKitAvailable ? Chalk.green : Chalk.coral)
 
                     // Player detection count
                     HStack(spacing: 3) {
                         Image(systemName: "person.fill")
                             .font(.system(size: 9))
                         Text("\(autoZoomManager.detectedPlayerCount)")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.chalkHand(12))
                     }
-                    .foregroundColor(autoZoomManager.detectedPlayerCount > 0 ? .cyan : .gray)
+                    .foregroundColor(autoZoomManager.detectedPlayerCount > 0 ? Chalk.sky : Chalk.dust)
 
                     // YOLO vs Vision fallback indicator
                     Text(autoZoomManager.isUsingYOLO ? "YOLO" : "Vision")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(autoZoomManager.isUsingYOLO ? .green : .orange)
+                        .font(.chalkHand(12))
+                        .foregroundColor(autoZoomManager.isUsingYOLO ? Chalk.green : Chalk.yellow)
 
                     // Court auto-calibration indicator
                     HStack(spacing: 3) {
                         Image(systemName: autoZoomManager.courtIsCalibrated ? "square.fill" : "square.dotted")
                             .font(.system(size: 9))
                         Text(autoZoomManager.courtIsCalibrated ? "Court ✓" : "Court \(Int(autoZoomManager.courtCalibrationProgress * 100))%")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.chalkHand(12))
                     }
-                    .foregroundColor(autoZoomManager.courtIsCalibrated ? .green : .yellow)
+                    .foregroundColor(autoZoomManager.courtIsCalibrated ? Chalk.green : Chalk.yellow)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.black.opacity(0.6))
-                .cornerRadius(8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color(white: 0.08, opacity: 0.6))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Chalk.chalk.opacity(0.25), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                )
             }
         }
     }
@@ -722,10 +726,10 @@ struct UltraMinimalRecordingView: View {
                     HStack(spacing: 8) {
                         Image(systemName: isClockRunning ? "pause.fill" : "play.fill")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(isClockRunning ? .orange : .green)
+                            .foregroundColor(isClockRunning ? Chalk.coral : Chalk.green)
                         Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Start")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
+                            .font(.chalkHand(18))
+                            .foregroundColor(Chalk.yellow)
                     }
                     .padding(.leading, 14)
                     .padding(.trailing, 12)
@@ -735,7 +739,7 @@ struct UltraMinimalRecordingView: View {
                 .buttonStyle(.plain)
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.15))
+                    .fill(Chalk.chalk.opacity(0.15))
                     .frame(width: 1, height: 26)
 
                 // Secondary: deliberate edge target to reveal the rest
@@ -748,7 +752,7 @@ struct UltraMinimalRecordingView: View {
                 } label: {
                     Image(systemName: controlsExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(Chalk.chalkDim)
                         .frame(width: 40, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -758,14 +762,14 @@ struct UltraMinimalRecordingView: View {
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(Chalk.chalk.opacity(0.4), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
             )
 
             // Expanded controls — spring down, inline, auto-collapse
             if controlsExpanded {
                 HStack(spacing: 6) {
                     // Period advance
-                    controlButton(icon: "forward.fill", label: nextPeriodLabel, color: .blue) {
+                    controlButton(icon: "forward.fill", label: nextPeriodLabel, color: Chalk.sky) {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         advancePeriod()
                         scheduleAutoCollapse()
@@ -775,7 +779,7 @@ struct UltraMinimalRecordingView: View {
                     controlButton(
                         icon: remainingSeconds > 0 ? "clock.arrow.circlepath" : "plus.circle.fill",
                         label: remainingSeconds > 0 ? "+1:00" : "Add OT",
-                        color: .purple
+                        color: Chalk.yellow
                     ) {
                         if remainingSeconds > 0 {
                             remainingSeconds += 60
@@ -798,7 +802,7 @@ struct UltraMinimalRecordingView: View {
                     })
 
                     // End game — never one-tap; requires expand + confirmation
-                    controlButton(icon: "stop.fill", label: "End", color: .red) {
+                    controlButton(icon: "stop.fill", label: "End", color: Chalk.coral) {
                         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
                         cancelAutoCollapse()
                         if hasGameStarted || appState.isStatsOnly {
@@ -837,7 +841,7 @@ struct UltraMinimalRecordingView: View {
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .semibold))
                 Text(label)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.chalkHand(12))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -862,12 +866,12 @@ struct UltraMinimalRecordingView: View {
             // HOME ROW
             HStack(spacing: 0) {
                 Rectangle()
-                    .fill(Color.orange)
+                    .fill(Chalk.yellow)
                     .frame(width: 6)
 
                 Text((appState.currentGame?.teamName ?? "HOME").prefix(4).uppercased())
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.chalkHand(17))
+                    .foregroundColor(Chalk.chalk)
                     .frame(width: 54, alignment: .leading)
                     .padding(.leading, 8)
 
@@ -882,8 +886,8 @@ struct UltraMinimalRecordingView: View {
                     .padding(.horizontal, 8)
 
                 Text(period)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.chalkHand(13))
+                    .foregroundColor(Chalk.chalkDim)
                     .frame(width: 64, alignment: .center)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -899,12 +903,12 @@ struct UltraMinimalRecordingView: View {
             // AWAY ROW
             HStack(spacing: 0) {
                 Rectangle()
-                    .fill(Color.blue)
+                    .fill(Chalk.sky)
                     .frame(width: 6)
 
                 Text((appState.currentGame?.opponent ?? "AWAY").prefix(4).uppercased())
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.chalkHand(17))
+                    .foregroundColor(Chalk.chalk)
                     .frame(width: 54, alignment: .leading)
                     .padding(.leading, 8)
 
@@ -949,7 +953,7 @@ struct UltraMinimalRecordingView: View {
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Chalk.chalk.opacity(0.45), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
         )
     }
 
