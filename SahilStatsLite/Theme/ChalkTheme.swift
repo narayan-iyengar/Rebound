@@ -238,41 +238,25 @@ struct ChalkButton: View {
 struct BasketballGlyph: View {
     var size: CGFloat = 22
     var color: Color = Chalk.coral
-    private var lw: CGFloat { max(1.4, size * 0.085) }
     var body: some View {
-        ZStack {
-            Circle().stroke(color, lineWidth: lw)
-            // seams, clipped inside the ball
-            ZStack {
-                Path { p in
-                    p.move(to: CGPoint(x: size / 2, y: 0)); p.addLine(to: CGPoint(x: size / 2, y: size))
-                    p.move(to: CGPoint(x: 0, y: size / 2)); p.addLine(to: CGPoint(x: size, y: size / 2))
-                }.stroke(color, lineWidth: lw * 0.85)
-                Path { p in
-                    p.addArc(center: CGPoint(x: -size * 0.18, y: size / 2), radius: size * 0.66,
-                             startAngle: .degrees(-48), endAngle: .degrees(48), clockwise: false)
-                }.stroke(color, lineWidth: lw * 0.85)
-                Path { p in
-                    p.addArc(center: CGPoint(x: size * 1.18, y: size / 2), radius: size * 0.66,
-                             startAngle: .degrees(132), endAngle: .degrees(228), clockwise: false)
-                }.stroke(color, lineWidth: lw * 0.85)
-            }
-            .clipShape(Circle().inset(by: lw / 2))
-        }
-        .frame(width: size, height: size)
+        // The SF Symbol reads unmistakably as a basketball at any size.
+        Image(systemName: "basketball.fill")
+            .font(.system(size: size))
+            .foregroundColor(color)
     }
 }
 
 struct ReboundWordmark: View {
-    var size: CGFloat = 46
+    var size: CGFloat = 44
     var color: Color = Chalk.chalk
     var body: some View {
-        HStack(spacing: size * 0.02) {
-            Text("Re").font(.chalkScript(size)).foregroundColor(color)
-            BasketballGlyph(size: size * 0.5)
-                .padding(.horizontal, size * 0.03)
-                .offset(y: size * 0.06)
-            Text("bound").font(.chalkScript(size)).foregroundColor(color)
+        // Gochi Hand (printed) instead of cursive Caveat — the cursive "d" read as
+        // "a" ("bouna"); printed letterforms are unambiguous for the wordmark.
+        HStack(spacing: size * 0.04) {
+            Text("Re").font(.chalkHand(size)).foregroundColor(color)
+            BasketballGlyph(size: size * 0.62)
+                .padding(.horizontal, size * 0.02)
+            Text("bound").font(.chalkHand(size)).foregroundColor(color)
         }
         .fixedSize()
     }

@@ -41,13 +41,14 @@ struct GameSetupView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.title2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Chalk.dust)
                 }
 
                 Spacer()
 
                 Text(appState.isLogOnly ? "Log Game" : "New Game")
-                    .font(.headline)
+                    .font(.chalkScript(30))
+                    .foregroundColor(Chalk.chalk)
 
                 Spacer()
 
@@ -59,103 +60,107 @@ struct GameSetupView: View {
             .padding()
 
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 22) {
                     // Opponent
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Opponent")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                        fieldLabel("opponent")
 
-                        TextField("Team name", text: $opponent)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.title3)
+                        TextField("", text: $opponent, prompt: chalkPrompt("Team name"))
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Chalk.crisp)
+                            .tint(Chalk.yellow)
+                            .padding(12)
+                            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
                             .focused($isOpponentFocused)
                     }
 
                     // Your Team
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Your Team")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                        fieldLabel("your team")
 
                         if teams.count > 1 {
-                            Picker("Team", selection: $selectedTeam) {
-                                ForEach(Array(teams.enumerated()), id: \.offset) { _, team in
-                                    Text(team).tag(team)
-                                }
-                            }
-                            .pickerStyle(.segmented)
+                            ChalkSegmentedPicker(
+                                options: teams.map { (label: $0, value: $0) },
+                                selection: $selectedTeam,
+                                useChalkFont: true
+                            )
                         } else {
                             // Single team - just show it
                             Text(selectedTeam.isEmpty ? "No team configured" : selectedTeam)
-                                .font(.title3)
+                                .font(.chalkHand(18))
+                                .foregroundColor(Chalk.chalk)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
+                                .padding(12)
+                                .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
                         }
                     }
 
                     // Location (optional)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Location (optional)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                        fieldLabel("location (optional)")
 
-                        TextField("Gym or venue", text: $location)
-                            .textFieldStyle(.roundedBorder)
+                        TextField("", text: $location, prompt: chalkPrompt("Gym or venue"))
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundColor(Chalk.crisp)
+                            .tint(Chalk.yellow)
+                            .padding(12)
+                            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
                     }
 
                     // Half Length (AAU games use halves)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Half Length")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                        fieldLabel("half length")
 
-                        Picker("Half Length", selection: $halfLength) {
-                            Text("18 min").tag(18)
-                            Text("20 min").tag(20)
-                        }
-                        .pickerStyle(.segmented)
+                        ChalkSegmentedPicker(
+                            options: [(label: "18 min", value: 18), (label: "20 min", value: 20)],
+                            selection: $halfLength,
+                            useChalkFont: false
+                        )
                     }
 
                     // Record Video Toggle (only show when not in log-only mode)
                     if !appState.isLogOnly {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Record Video")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                Text("record video")
+                                    .font(.chalkHand(17))
+                                    .foregroundColor(Chalk.chalk)
                                 Text(recordVideo ? "Game will be recorded" : "Stats only, no video")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Chalk.dust)
                             }
 
                             Spacer()
 
                             Toggle("", isOn: $recordVideo)
-                                .tint(.orange)
+                                .labelsHidden()
+                                .tint(Chalk.green)
                         }
-                        .padding()
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
+                        .chalkCard()
                     }
 
                     // Stream Live — only shown when recording video and stream key is set
                     if recordVideo && !appState.isLogOnly && !StreamingService.shared.savedStreamKey.isEmpty {
-                        VStack(spacing: 0) {
+                        VStack(spacing: 12) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Stream Live")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                                    Text("stream live")
+                                        .font(.chalkHand(17))
+                                        .foregroundColor(Chalk.chalk)
                                     Text(streamLive ? "YouTube • parents can watch" : "Record only, no stream")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Chalk.dust)
                                 }
                                 Spacer()
                                 Toggle("", isOn: $streamLive)
-                                    .tint(.red)
+                                    .labelsHidden()
+                                    .tint(Chalk.green)
                                     .onChange(of: streamLive) { _, on in
                                         if on {
                                             if YouTubeService.shared.isAuthorized {
@@ -170,39 +175,37 @@ struct GameSetupView: View {
                                         }
                                     }
                             }
-                            .padding()
 
                             // Share button — prominent, appears once broadcast URL is ready
                             if streamLive {
-                                Divider().padding(.horizontal)
+                                Divider().overlay(Chalk.chalk.opacity(0.2))
                                 if isCreatingBroadcast {
                                     HStack(spacing: 8) {
-                                        ProgressView().scaleEffect(0.8)
+                                        ProgressView().scaleEffect(0.8).tint(Chalk.chalk)
                                         Text("Getting your link…")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
+                                            .font(.chalkHand(15))
+                                            .foregroundColor(Chalk.dust)
                                     }
-                                    .padding()
                                 } else if let err = broadcastError {
                                     HStack(spacing: 6) {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .foregroundColor(.orange)
+                                            .foregroundColor(Chalk.coral)
                                         Text(err)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                            .font(.chalkHand(14))
+                                            .foregroundColor(Chalk.dust)
                                     }
-                                    .padding()
                                 } else if !broadcastURL.isEmpty {
                                     VStack(spacing: 8) {
                                         // Link preview
                                         Text(broadcastURL)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Chalk.dust)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
-                                            .padding(.horizontal)
                                         // Share button
-                                        Button {
+                                        ChalkButton(title: "Share Link (copied ✓)",
+                                                    icon: "square.and.arrow.up",
+                                                    color: Chalk.coral) {
                                             let av = UIActivityViewController(
                                                 activityItems: [URL(string: broadcastURL) ?? broadcastURL],
                                                 applicationActivities: nil)
@@ -210,23 +213,12 @@ struct GameSetupView: View {
                                                let root = scene.windows.first?.rootViewController {
                                                 root.present(av, animated: true)
                                             }
-                                        } label: {
-                                            Label("Share Link (copied ✓)", systemImage: "square.and.arrow.up")
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundColor(.white)
-                                                .frame(maxWidth: .infinity)
-                                                .padding(.vertical, 12)
-                                                .background(Color.red)
-                                                .cornerRadius(10)
                                         }
-                                        .padding(.horizontal)
-                                        .padding(.bottom, 8)
                                     }
                                 }
                             }
                         }
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
+                        .chalkCard()
                     }
 
                     // Gimbal Status (only show if recording video)
@@ -240,25 +232,19 @@ struct GameSetupView: View {
             }
 
             // Start Button
-            Button {
+            ChalkButton(
+                title: appState.isLogOnly ? "Enter Stats" : (recordVideo ? "Start Recording" : "Start Live Stats"),
+                icon: appState.isLogOnly ? "pencil.line" : (recordVideo ? "video.fill" : "sportscourt.fill"),
+                color: opponent.isEmpty ? Chalk.dust : Chalk.yellow
+            ) {
                 startGame()
-            } label: {
-                HStack {
-                    Image(systemName: appState.isLogOnly ? "pencil.line" : (recordVideo ? "video.fill" : "sportscourt.fill"))
-                    Text(appState.isLogOnly ? "Enter Stats" : (recordVideo ? "Start Recording" : "Start Live Stats"))
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(opponent.isEmpty ? Color.gray : Color.orange)
-                .cornerRadius(16)
             }
             .disabled(opponent.isEmpty)
+            .opacity(opponent.isEmpty ? 0.6 : 1)
             .padding(.horizontal)
             .padding(.bottom)
         }
-        .background(Color(.systemGroupedBackground))
+        .chalkBoard()
         .onAppear {
             // Load teams from UserDefaults
             loadTeams()
@@ -309,23 +295,35 @@ struct GameSetupView: View {
     private var gimbalStatusCard: some View {
         HStack {
             Image(systemName: gimbalManager.isDockKitAvailable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .foregroundColor(gimbalManager.isDockKitAvailable ? .green : .orange)
+                .foregroundColor(gimbalManager.isDockKitAvailable ? Chalk.green : Chalk.coral)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(gimbalManager.isDockKitAvailable ? "Gimbal Connected" : "No Gimbal Detected")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                Text(gimbalManager.isDockKitAvailable ? "gimbal connected" : "no gimbal detected")
+                    .font(.chalkHand(16))
+                    .foregroundColor(Chalk.chalk)
 
                 Text(gimbalManager.isDockKitAvailable ? "Auto-tracking ready" : "Recording will work, but no auto-tracking")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12))
+                    .foregroundColor(Chalk.dust)
             }
 
             Spacer()
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
+        .chalkCard()
+    }
+
+    // MARK: - Chalk helpers (presentation only)
+
+    /// Lowercase hand-chalk field label, per the coach's-board language.
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.chalkHand(16))
+            .foregroundColor(Chalk.dust)
+    }
+
+    /// Dimmed placeholder that reads on the dark board.
+    private func chalkPrompt(_ text: String) -> Text {
+        Text(text).foregroundColor(Chalk.dust)
     }
 
     // MARK: - Actions
@@ -401,6 +399,50 @@ struct GameSetupView: View {
             StreamingService.shared.streamingEnabled = streamLive && recordVideo
             appState.currentScreen = .recording
         }
+    }
+}
+
+// MARK: - Chalk segmented picker (presentation-only chip row)
+//
+// Drives the same binding a SwiftUI segmented Picker would; only the look changes.
+// Selected chip = Chalk.yellow fill with board-dark text; unselected = chalkDim on
+// dark. Team names use the hand-chalk face; the half-length value stays crisp system
+// font (a data value the user reads), per the chalk/crisp split.
+
+private struct ChalkSegmentedPicker<T: Hashable>: View {
+    let options: [(label: String, value: T)]
+    @Binding var selection: T
+    var useChalkFont: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Key on offset so duplicate labels/values can't collide as SwiftUI ids.
+            ForEach(Array(options.enumerated()), id: \.offset) { _, opt in
+                let isSelected = opt.value == selection
+                Button {
+                    selection = opt.value
+                } label: {
+                    Text(opt.label)
+                        .font(font(selected: isSelected))
+                        .foregroundColor(isSelected ? Chalk.board : Chalk.chalkDim)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(isSelected ? Chalk.yellow : Chalk.board2,
+                                    in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(isSelected ? Color.clear : Chalk.chalk.opacity(0.2),
+                                          lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+    }
+
+    private func font(selected: Bool) -> Font {
+        useChalkFont
+            ? .chalkHand(16)
+            : .system(size: 15, weight: selected ? .bold : .semibold)
     }
 }
 
