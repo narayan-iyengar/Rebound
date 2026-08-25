@@ -292,13 +292,15 @@ struct UltraMinimalRecordingView: View {
                                 scoreboardDisplay
                             }
                             .padding(.trailing, 8)
-                            // While a clip is capturing, the corner board "ducks" — a quick
-                            // shrink + coral glow toward its corner, echoing the stats-only
-                            // flip, so you feel this moment being grabbed.
+                            // While a clip is capturing, the corner board "ducks" — a small
+                            // shrink toward its corner (recording mode; stats-only shrinks the
+                            // big board instead) plus a coral glow shown in BOTH modes, so the
+                            // "we're clipping" signal is consistent. Same spring as the shrink.
                             .scaleEffect(isClipCapturing ? 0.86 : 1, anchor: .bottomTrailing)
-                            .shadow(color: isClipCapturing ? Chalk.coral.opacity(0.65) : .clear,
-                                    radius: isClipCapturing ? 14 : 0)
-                            .animation(.spring(response: 0.42, dampingFraction: 0.7), value: isClipCapturing)
+                            .shadow(color: isCapturingClip ? Chalk.coral.opacity(0.6) : .clear,
+                                    radius: isCapturingClip ? 14 : 0)
+                            .animation(Self.clipCaptureSpring, value: isClipCapturing)
+                            .animation(Self.clipCaptureSpring, value: isCapturingClip)
                         }
                         .padding(.bottom, 16)
                     }
@@ -429,7 +431,7 @@ struct UltraMinimalRecordingView: View {
             }
         }
         .animation(.spring(response: 0.3), value: showSahilStats)
-        .animation(.spring(response: 0.5, dampingFraction: 0.78), value: isStatsOnlyClipping)
+        .animation(Self.clipCaptureSpring, value: isStatsOnlyClipping)
     }
 
     // MARK: - Initialize Game State
@@ -612,24 +614,23 @@ struct UltraMinimalRecordingView: View {
         hasGameStarted && !appState.isStatsOnly
     }
 
-    /// Stats-only, actively capturing a clip → reveal the camera and shrink the board
-    /// to the corner (the same layout recording mode uses). Matches the Clip mock.
-    private var isStatsOnlyClipping: Bool {
-        guard appState.isStatsOnly else { return false }
+    /// One shared spring for every clip-capture board motion, so the shrink/duck and
+    /// the grow-back use the exact same timing in both modes (in == out).
+    static let clipCaptureSpring: Animation = .spring(response: 0.5, dampingFraction: 0.78)
+
+    /// A clip is actively capturing (either mode). Base for the two derived flags.
+    private var isCapturingClip: Bool {
         switch recordingManager.clipState {
         case .clipping, .saving: return true
         default: return false
         }
     }
 
-    /// Recording mode, actively capturing a clip → the corner board ducks (shrink + glow).
-    private var isClipCapturing: Bool {
-        guard !appState.isStatsOnly else { return false }
-        switch recordingManager.clipState {
-        case .clipping, .saving: return true
-        default: return false
-        }
-    }
+    /// Stats-only, capturing → reveal the camera and shrink the big board into the corner.
+    private var isStatsOnlyClipping: Bool { appState.isStatsOnly && isCapturingClip }
+
+    /// Recording mode, capturing → the (already-corner) board ducks (small shrink).
+    private var isClipCapturing: Bool { !appState.isStatsOnly && isCapturingClip }
 
     private var recIndicator: some View {
         Group {
