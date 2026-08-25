@@ -42,9 +42,18 @@ struct HomeView: View {
             boardPage(StoreView()).tag(3)
             boardPage(SettingsView(embedded: true)).tag(4)
         }
-        .tabViewStyle(.page(indexDisplayMode: .always))
-        .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+        .tabViewStyle(.page(indexDisplayMode: .never))
         .background(Chalk.board.ignoresSafeArea())
+        .overlay(alignment: .leading) {
+            if page > 0 {
+                pageArrow(Self.pageIcon(page - 1)) { withAnimation(.easeInOut(duration: 0.28)) { page -= 1 } }
+            }
+        }
+        .overlay(alignment: .trailing) {
+            if page < 4 {
+                pageArrow(Self.pageIcon(page + 1)) { withAnimation(.easeInOut(duration: 0.28)) { page += 1 } }
+            }
+        }
         .navigationBarHidden(true)
         .alert("Video Not Saved to Photos",
                isPresented: Binding(get: { appState.photosSaveFailureMessage != nil },
@@ -99,6 +108,32 @@ struct HomeView: View {
             Chalk.board.ignoresSafeArea()
             content
         }
+    }
+
+    /// The SF Symbol representing each page — shown on the edge affordance so you
+    /// can see what you're swiping toward (instead of anonymous dots/chevrons).
+    static func pageIcon(_ index: Int) -> String {
+        switch index {
+        case 0: return "basketball.fill"      // Game Setup / home
+        case 1: return "chart.bar.fill"       // Career Stats
+        case 2: return "list.bullet.clipboard" // Game Log
+        case 3: return "film.stack"           // Store
+        default: return "gearshape.fill"      // Settings
+        }
+    }
+
+    /// Subtle edge affordance to page left/right (replaces the home-screen dots).
+    private func pageArrow(_ system: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(Chalk.chalk.opacity(0.9))
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(Chalk.board2.opacity(0.75)))
+                .overlay(Circle().stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
     }
 
     /// Page 0 — the "home": wordmark, upcoming games, and the start-a-game actions.

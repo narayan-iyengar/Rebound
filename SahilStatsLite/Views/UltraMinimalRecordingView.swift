@@ -1571,8 +1571,18 @@ struct UltraMinimalRecordingView: View {
         isFinishingRecording = true
         timer?.cancel()
 
+        let wasStatsOnly = appState.isStatsOnly
+
         // Notify Watch to reset
         watchService.sendEndGame()
+
+        // Discard means discard: never save, and remove any record that may already
+        // exist (e.g. a live game pushed to Firebase at start) so it never shows in
+        // the Game Log. deleteGame no-ops safely if the game was never persisted, and
+        // also cleans up any local video file.
+        if let game = appState.currentGame {
+            persistenceManager.deleteGame(game)
+        }
 
         // Delete stream recording from YouTube so nothing stays on the channel
         if let broadcastId = appState.currentGame?.broadcastVideoId {
@@ -1581,7 +1591,7 @@ struct UltraMinimalRecordingView: View {
             }
         }
 
-        if !appState.isStatsOnly {
+        if !wasStatsOnly {
             gimbalManager.stopTracking()
             stopAutoZoom()
 
@@ -1595,15 +1605,7 @@ struct UltraMinimalRecordingView: View {
                 }
             }
         } else {
-            // Stats-only: always save even on "discard" — no data loss
-            syncPlayerStats()
-            appState.currentGame?.myScore = myScore
-            appState.currentGame?.opponentScore = opponentScore
-            appState.currentGame?.playerStats = playerStats
-            appState.currentGame?.completedAt = Date()
-            if let game = appState.currentGame {
-                persistenceManager.saveGame(game)
-            }
+            recordingManager.stopClipBuffering()
             isFinishingRecording = false
             appState.isStatsOnly = false
             appState.goHome()
@@ -1628,6 +1630,7 @@ struct UltraMinimalRecordingView: View {
 
         if appState.isStatsOnly {
             // Stats-only mode: just save the game, no video to process
+            recordingManager.stopClipBuffering()
             if let game = appState.currentGame {
                 persistenceManager.saveGame(game)
             }
