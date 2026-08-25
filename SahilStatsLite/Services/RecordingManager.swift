@@ -144,6 +144,10 @@ class RecordingManager: NSObject, ObservableObject {
     /// (The capture session must already be set up via requestPermissionsAndSetup.)
     @MainActor
     func startClipBuffering() {
+        // Orient the capture connection like recording mode does — otherwise clips from
+        // stats-only / practice encode at the sensor's default rotation and come out
+        // inverted (recording-mode clips are fine because startRecording() does this).
+        configureVideoRotationForRecording()
         clipBuffer.arm()
     }
 

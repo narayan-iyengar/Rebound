@@ -37,6 +37,30 @@ struct Highlight: Codable, Identifiable, Sendable {
     var scoreLine: String { "\(homeTeam) \(homeScore) – \(awayScore) \(awayTeam)" }
 }
 
+// Tolerant decoding so adding a field never wipes previously-saved clips. Swift's
+// synthesized Codable throws keyNotFound for a missing NON-optional key (it ignores
+// the property's default) — which would fail the whole array decode and empty the
+// Store. Fields added after v1 (gameId, isPractice) are decoded with decodeIfPresent.
+extension Highlight {
+    private enum CodingKeys: String, CodingKey {
+        case id, fileName, createdAt, gameId, homeTeam, awayTeam, homeScore, awayScore, period, clockTime, isPractice
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        fileName = try c.decode(String.self, forKey: .fileName)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        gameId = try c.decodeIfPresent(String.self, forKey: .gameId)
+        homeTeam = try c.decode(String.self, forKey: .homeTeam)
+        awayTeam = try c.decode(String.self, forKey: .awayTeam)
+        homeScore = try c.decode(Int.self, forKey: .homeScore)
+        awayScore = try c.decode(Int.self, forKey: .awayScore)
+        period = try c.decode(String.self, forKey: .period)
+        clockTime = try c.decode(String.self, forKey: .clockTime)
+        isPractice = try c.decodeIfPresent(Bool.self, forKey: .isPractice) ?? false
+    }
+}
+
 /// One game session's worth of clips, for the Store's grouped layout.
 struct HighlightGroup: Identifiable, Sendable {
     let id: String            // gameId, or the clip's own id when a game was never stamped
@@ -77,15 +101,38 @@ final class HighlightStore: ObservableObject {
 
     private let key = "savedHighlights"
 
+    private static var highlightsDir: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Highlights", isDirectory: true)
+    }
+
     private init() { load() }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([Highlight].self, from: data) else { return }
-        // Newest first; drop entries whose files are gone.
-        highlights = decoded
-            .filter { FileManager.default.fileExists(atPath: $0.url.path) }
-            .sorted { $0.createdAt > $1.createdAt }
+        var loaded: [Highlight] = []
+        if let data = UserDefaults.standard.data(forKey: key),
+           let decoded = try? JSONDecoder().decode([Highlight].self, from: data) {
+            loaded = decoded.filter { FileManager.default.fileExists(atPath: $0.url.path) }
+        }
+
+        // Recover orphans: clip files on disk with no metadata (e.g. lost to the old
+        // Codable-wipe bug). Re-adopt them so no highlight silently disappears.
+        let known = Set(loaded.map { $0.fileName })
+        let fm = FileManager.default
+        if let files = try? fm.contentsOfDirectory(at: Self.highlightsDir,
+                                                   includingPropertiesForKeys: [.creationDateKey]) {
+            for file in files where file.pathExtension.lowercased() == "mov" && !known.contains(file.lastPathComponent) {
+                let created = (try? file.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date()
+                loaded.append(Highlight(
+                    id: UUID(), fileName: file.lastPathComponent, createdAt: created,
+                    gameId: nil, homeTeam: "Clip", awayTeam: "",
+                    homeScore: 0, awayScore: 0, period: "", clockTime: "", isPractice: false
+                ))
+            }
+        }
+
+        highlights = loaded.sorted { $0.createdAt > $1.createdAt }
+        persist()  // fold any recovered orphans back into the metadata store
     }
 
     private func persist() {
