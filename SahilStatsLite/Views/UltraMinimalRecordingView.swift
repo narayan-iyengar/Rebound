@@ -92,9 +92,6 @@ struct UltraMinimalRecordingView: View {
     // Debug-only tracking overlay (gimbal/detection/court %). Off by default — normal
     // games stay clean; toggle in Settings.
     @AppStorage("showTrackingOverlay") private var showTrackingOverlay = false
-    @State private var clipPulse = false  // brief visual bump on Clip tap (haptic is muted while recording)
-    @State private var clipRecPulse = false  // steady pulse on the dot while a clip is exporting
-    @State private var clipUnavailableFlash = false  // brief "start game to clip" hint on a tap before arming
 
     // Computed
     private var halfLength: Int {
@@ -184,7 +181,7 @@ struct UltraMinimalRecordingView: View {
             // Top bar: Clip (left) · [clock chip is a separate centered overlay] · Sahil-stats (right)
             VStack {
                 HStack {
-                    clipButton
+                    ClipButton(idleHint: appState.isStatsOnly ? "Camera warming up…" : "Start game to clip")
                         .padding(.leading, 16)
 
                     // Streaming indicator (only while live to YouTube)
@@ -613,94 +610,6 @@ struct UltraMinimalRecordingView: View {
         switch recordingManager.clipState {
         case .clipping, .saving: return true
         default: return false
-        }
-    }
-
-    // Clip — the retroactive highlight. Prominent, top-left, same spot in both modes.
-    // The single button reflects the whole flow: tap to save [buffered ~30s + forward
-    // window]; while clipping it shows the countdown and taps again to stop early.
-    // A visual bump confirms the tap even when iOS mutes haptics during recording.
-    // Clip can only fire once the ring is armed (recording started). We surface that
-    // as a dimmed, "Clip · start game" pill so a tap-that-does-nothing never happens silently.
-    private var clipReady: Bool { recordingManager.clipState != .idle }
-
-    private var clipButton: some View {
-        Button {
-            switch recordingManager.clipState {
-            case .clipping:
-                recordingManager.stopClip()
-            case .saving, .saved:
-                break  // in-flight; ignore taps
-            case .idle:
-                // Not armed yet — tell the user why instead of doing nothing.
-                UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                withAnimation(.easeOut(duration: 0.12)) { clipUnavailableFlash = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                    withAnimation(.easeIn(duration: 0.25)) { clipUnavailableFlash = false }
-                }
-            case .buffering:
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                withAnimation(.easeOut(duration: 0.10)) { clipPulse = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    withAnimation(.easeIn(duration: 0.18)) { clipPulse = false }
-                }
-                recordingManager.triggerClip()
-            }
-        } label: {
-            clipButtonLabel
-                .foregroundColor(Chalk.board)
-                .padding(.horizontal, 15)
-                .padding(.vertical, 7)
-                .background(clipButtonBackground, in: Capsule())
-                .shadow(color: Chalk.coral.opacity(clipPulse ? 0.8 : 0.4), radius: clipPulse ? 12 : 6, y: 2)
-                .scaleEffect(clipPulse ? 1.12 : 1)
-                .opacity(clipReady ? 1 : 0.45)
-        }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: recordingManager.clipState)
-    }
-
-    @ViewBuilder
-    private var clipButtonLabel: some View {
-        switch recordingManager.clipState {
-        case .clipping(let remaining):
-            HStack(spacing: 6) {
-                Circle().fill(Chalk.board).frame(width: 8, height: 8)
-                    .opacity(clipRecPulse ? 0.35 : 1)
-                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: clipRecPulse)
-                Text("Clipping \(remaining)s")
-                    .font(.system(size: 14, weight: .bold)).monospacedDigit()
-            }
-            .onAppear { clipRecPulse = true }
-            .onDisappear { clipRecPulse = false }
-        case .saving:
-            HStack(spacing: 6) {
-                ProgressView().scaleEffect(0.7).tint(Chalk.board)
-                Text("Saving…").font(.system(size: 14, weight: .bold))
-            }
-        case .saved:
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
-                Text("Saved").font(.system(size: 14, weight: .bold))
-            }
-        case .idle:
-            HStack(spacing: 6) {
-                Circle().fill(Chalk.board).frame(width: 8, height: 8)
-                Text(clipUnavailableFlash ? (appState.isStatsOnly ? "Camera warming up…" : "Start game to clip") : "Clip")
-                    .font(.system(size: 14, weight: .bold))
-            }
-        case .buffering:
-            HStack(spacing: 6) {
-                Circle().fill(Chalk.board).frame(width: 8, height: 8)
-                Text("Clip").font(.system(size: 14, weight: .bold))
-            }
-        }
-    }
-
-    private var clipButtonBackground: Color {
-        switch recordingManager.clipState {
-        case .saved: return Chalk.green
-        default: return Chalk.coral
         }
     }
 
