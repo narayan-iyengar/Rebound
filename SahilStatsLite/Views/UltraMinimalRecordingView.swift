@@ -272,7 +272,9 @@ struct UltraMinimalRecordingView: View {
             if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
                 if appState.isStatsOnly && !isStatsOnlyClipping {
                     fullScreenStatsLayout
-                        .transition(.opacity)
+                        // Shrink toward the bottom-right corner as the clip starts, so the
+                        // big stats board visibly collapses into the small recording-view board.
+                        .transition(.scale(scale: 0.32, anchor: .bottomTrailing).combined(with: .opacity))
                 } else {
                     VStack {
                         Spacer()
@@ -290,6 +292,13 @@ struct UltraMinimalRecordingView: View {
                                 scoreboardDisplay
                             }
                             .padding(.trailing, 8)
+                            // While a clip is capturing, the corner board "ducks" — a quick
+                            // shrink + coral glow toward its corner, echoing the stats-only
+                            // flip, so you feel this moment being grabbed.
+                            .scaleEffect(isClipCapturing ? 0.86 : 1, anchor: .bottomTrailing)
+                            .shadow(color: isClipCapturing ? Chalk.coral.opacity(0.65) : .clear,
+                                    radius: isClipCapturing ? 14 : 0)
+                            .animation(.spring(response: 0.42, dampingFraction: 0.7), value: isClipCapturing)
                         }
                         .padding(.bottom, 16)
                     }
@@ -420,7 +429,7 @@ struct UltraMinimalRecordingView: View {
             }
         }
         .animation(.spring(response: 0.3), value: showSahilStats)
-        .animation(.easeInOut(duration: 0.45), value: isStatsOnlyClipping)
+        .animation(.spring(response: 0.5, dampingFraction: 0.78), value: isStatsOnlyClipping)
     }
 
     // MARK: - Initialize Game State
@@ -607,6 +616,15 @@ struct UltraMinimalRecordingView: View {
     /// to the corner (the same layout recording mode uses). Matches the Clip mock.
     private var isStatsOnlyClipping: Bool {
         guard appState.isStatsOnly else { return false }
+        switch recordingManager.clipState {
+        case .clipping, .saving: return true
+        default: return false
+        }
+    }
+
+    /// Recording mode, actively capturing a clip → the corner board ducks (shrink + glow).
+    private var isClipCapturing: Bool {
+        guard !appState.isStatsOnly else { return false }
         switch recordingManager.clipState {
         case .clipping, .saving: return true
         default: return false
