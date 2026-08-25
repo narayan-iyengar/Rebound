@@ -392,11 +392,12 @@ struct ReboundWordmark: View {
     var body: some View {
         // Gochi Hand (printed) instead of cursive Caveat — the cursive "d" read as
         // "a" ("bouna"); printed letterforms are unambiguous for the wordmark.
+        // The ball IS the "o" of Reb-O-und — so it reads "Rebound", not "Reobound".
         HStack(spacing: size * 0.04) {
-            Text("Re").font(.chalkHand(size)).foregroundColor(color)
+            Text("Reb").font(.chalkHand(size)).foregroundColor(color)
             BasketballGlyph(size: size * 0.62)
-                .padding(.horizontal, size * 0.02)
-            Text("bound").font(.chalkHand(size)).foregroundColor(color)
+                .padding(.horizontal, size * 0.01)
+            Text("und").font(.chalkHand(size)).foregroundColor(color)
         }
         .fixedSize()
     }

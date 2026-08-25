@@ -41,7 +41,7 @@ struct HomeView: View {
             boardPage(CareerStatsSheet(embedded: true)).tag(1)
             boardPage(AllGamesView(embedded: true)).tag(2)
             boardPage(StoreView()).tag(3)
-            boardPage(SettingsView(embedded: true)).tag(4)
+            boardPage(SettingsView(embedded: true).chalkBoard()).tag(4)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .background(Chalk.board.ignoresSafeArea())
@@ -99,11 +99,14 @@ struct HomeView: View {
     // MARK: - Paging helpers
 
     /// Every page sits on the green board so all five read as one surface.
+    /// Cheap solid ground behind every page. The play-diagram backdrop comes from each
+    /// page's own .chalkBoard() (exactly once per page) so we never stack two Canvases.
     @ViewBuilder
     private func boardPage<V: View>(_ content: V) -> some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .chalkBoard()
+        ZStack {
+            Chalk.board.ignoresSafeArea()
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     /// The SF Symbol representing each page — shown on the edge affordance so you
@@ -213,6 +216,7 @@ struct HomeView: View {
             .padding()
         }
         .scrollIndicators(.hidden)
+        .chalkBoard()
     }
 
     private var startButtons: some View {
@@ -281,40 +285,14 @@ struct HomeView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        HStack {
-            // Settings gear
-            Button {
-                showSettings = true
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.title2)
-                    .foregroundColor(Chalk.dust)
-            }
-            .frame(width: 32, height: 32)
+        VStack(spacing: 0) {
+            ReboundWordmark(size: 44)
 
-            Spacer()
-
-            VStack(spacing: 0) {
-                ReboundWordmark(size: 44)
-
-                Text("Record. Track. Share.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(Chalk.dust)
-            }
-
-            Spacer()
-
-            // New Game button
-            Button {
-                appState.isLogOnly = false
-                appState.currentScreen = .setup
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(Chalk.yellow)
-            }
-            .frame(width: 32, height: 32)
+            Text("Record. Track. Share.")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Chalk.dust)
         }
+        .frame(maxWidth: .infinity)
         .padding(.top, 20)
     }
 
