@@ -92,6 +92,7 @@ struct UltraMinimalRecordingView: View {
     // Debug-only tracking overlay (gimbal/detection/court %). Off by default — normal
     // games stay clean; toggle in Settings.
     @AppStorage("showTrackingOverlay") private var showTrackingOverlay = false
+    @State private var clipPulse = false  // brief visual bump on Clip tap (haptic is muted while recording)
 
     // Computed
     private var halfLength: Int {
@@ -579,10 +580,15 @@ struct UltraMinimalRecordingView: View {
 
     // Clip — the retroactive highlight. Prominent, top-left, same spot in both modes.
     // NOTE: action is a placeholder until #3 wires the rolling AVAssetWriter buffer.
+    // A visual bump confirms the tap even when iOS mutes haptics during recording.
     private var clipButton: some View {
         Button {
             // TODO(#3): start the retroactive-buffer Clip.
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            withAnimation(.easeOut(duration: 0.10)) { clipPulse = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.easeIn(duration: 0.18)) { clipPulse = false }
+            }
         } label: {
             HStack(spacing: 6) {
                 Circle().fill(Chalk.board).frame(width: 8, height: 8)
@@ -592,7 +598,8 @@ struct UltraMinimalRecordingView: View {
             .padding(.horizontal, 15)
             .padding(.vertical, 7)
             .background(Chalk.coral, in: Capsule())
-            .shadow(color: Chalk.coral.opacity(0.4), radius: 6, y: 2)
+            .shadow(color: Chalk.coral.opacity(clipPulse ? 0.8 : 0.4), radius: clipPulse ? 12 : 6, y: 2)
+            .scaleEffect(clipPulse ? 1.12 : 1)
         }
         .buttonStyle(.plain)
     }
