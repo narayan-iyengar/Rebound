@@ -90,6 +90,10 @@ class RecordingManager: NSObject, ObservableObject {
     let clipBuffer = ClipBuffer()
     @MainActor @Published var clipState: ClipState = .idle
 
+    /// The current game's id, stamped onto saved clips so the Store can group clips
+    /// from one session together — even if the game itself is never saved.
+    nonisolated(unsafe) var currentClipGameId: String?
+
     // MARK: - Completion Handler
 
     private var recordingFinishedContinuation: CheckedContinuation<URL?, Never>?
@@ -144,9 +148,10 @@ class RecordingManager: NSObject, ObservableObject {
     /// Called (off-main) when a clip file is finalized: save to Photos + record it.
     nonisolated private func handleClipSaved(_ url: URL) {
         let s = overlayRenderer.state
+        let gameId = currentClipGameId
         Task { @MainActor in
             HighlightStore.shared.add(
-                fileURL: url,
+                fileURL: url, gameId: gameId,
                 homeTeam: s.homeTeam, awayTeam: s.awayTeam,
                 homeScore: s.homeScore, awayScore: s.awayScore,
                 period: s.period, clockTime: s.clockTime

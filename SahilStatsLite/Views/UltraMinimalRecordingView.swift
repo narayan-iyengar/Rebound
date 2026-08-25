@@ -431,6 +431,8 @@ struct UltraMinimalRecordingView: View {
     private func initializeGameState() {
         remainingSeconds = halfLength * 60
         remainingTenths = 0
+        // Stamp the current game id so saved clips group together in the Store.
+        recordingManager.currentClipGameId = appState.currentGame?.id
         setupWatchCallbacks()
         sendGameStateToWatch()
     }

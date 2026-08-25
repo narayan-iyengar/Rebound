@@ -25,6 +25,9 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showUpcomingGames = false
 
+    // Home-screen-style paging: Game Setup · Career Stats · Game Log · Store · Settings
+    @State private var page = 0
+
     // Undo toast state
     @State private var hiddenGameID: String? = nil
     @State private var showUndoToast = false
@@ -32,32 +35,16 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                headerSection
-
-                // Upcoming Games (smart filtered from calendar)
-                if calendarManager.hasCalendarAccess {
-                    upcomingGamesSection
-                } else {
-                    calendarAccessCard
-                }
-
-                // Career Stats Card (if we have games)
-                if persistenceManager.careerGames > 0 {
-                    careerStatsCard
-                }
-
-                // Game Log Card
-                gameLogCard
-
-                Spacer(minLength: 40)
-            }
-            .padding()
+        TabView(selection: $page) {
+            boardPage(setupPage).tag(0)
+            boardPage(CareerStatsSheet(embedded: true)).tag(1)
+            boardPage(AllGamesView(embedded: true)).tag(2)
+            boardPage(StoreView()).tag(3)
+            boardPage(SettingsView(embedded: true)).tag(4)
         }
-        .scrollIndicators(.hidden)
-        .chalkBoard()
+        .tabViewStyle(.page(indexDisplayMode: .always))
+        .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+        .background(Chalk.board.ignoresSafeArea())
         .navigationBarHidden(true)
         .alert("Video Not Saved to Photos",
                isPresented: Binding(get: { appState.photosSaveFailureMessage != nil },
@@ -101,6 +88,58 @@ struct HomeView: View {
             // a minute of its scheduled end.
             calendarManager.loadUpcomingGames()
         }
+    }
+
+    // MARK: - Paging helpers
+
+    /// Every page sits on the green board so all five read as one surface.
+    @ViewBuilder
+    private func boardPage<V: View>(_ content: V) -> some View {
+        ZStack {
+            Chalk.board.ignoresSafeArea()
+            content
+        }
+    }
+
+    /// Page 0 — the "home": wordmark, upcoming games, and the start-a-game actions.
+    private var setupPage: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                headerSection
+
+                if calendarManager.hasCalendarAccess {
+                    upcomingGamesSection
+                } else {
+                    calendarAccessCard
+                }
+
+                startButtons
+
+                Spacer(minLength: 60)
+            }
+            .padding()
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var startButtons: some View {
+        VStack(spacing: 12) {
+            ChalkButton(title: "New Game", icon: "video.fill") {
+                appState.isLogOnly = false
+                appState.currentScreen = .setup
+            }
+
+            Button {
+                appState.isLogOnly = true
+                appState.currentScreen = .setup
+            } label: {
+                Text("Add a past game manually")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Chalk.dust)
+            }
+            .padding(.top, 2)
+        }
+        .padding(.top, 4)
     }
 
     // MARK: - Undo Toast

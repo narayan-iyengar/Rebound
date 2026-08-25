@@ -19,8 +19,9 @@ struct Highlight: Codable, Identifiable, Sendable {
     let id: UUID
     let fileName: String          // relative to Documents/Highlights
     let createdAt: Date
-    let homeTeam: String
-    let awayTeam: String
+    var gameId: String?           // grouping key: clips from one game session cluster together
+    let homeTeam: String          // Sahil's team
+    let awayTeam: String          // opponent
     let homeScore: Int
     let awayScore: Int
     let period: String
@@ -35,11 +36,38 @@ struct Highlight: Codable, Identifiable, Sendable {
     var scoreLine: String { "\(homeTeam) \(homeScore) – \(awayScore) \(awayTeam)" }
 }
 
+/// One game session's worth of clips, for the Store's grouped layout.
+struct HighlightGroup: Identifiable, Sendable {
+    let id: String            // gameId, or the clip's own id when a game was never stamped
+    let homeTeam: String      // Sahil's team
+    let awayTeam: String      // opponent
+    let date: Date            // earliest clip in the session
+    let clips: [Highlight]    // newest first
+
+    var matchup: String { "\(homeTeam) vs \(awayTeam)" }
+}
+
 @MainActor
 final class HighlightStore: ObservableObject {
     static let shared = HighlightStore()
 
     @Published private(set) var highlights: [Highlight] = []
+
+    /// Clips grouped by game session (newest session first), for the Store.
+    var grouped: [HighlightGroup] {
+        let byGame = Dictionary(grouping: highlights) { $0.gameId ?? $0.id.uuidString }
+        return byGame.map { key, clips in
+            let sorted = clips.sorted { $0.createdAt > $1.createdAt }
+            let anchor = sorted[0]
+            return HighlightGroup(
+                id: key,
+                homeTeam: anchor.homeTeam, awayTeam: anchor.awayTeam,
+                date: clips.map(\.createdAt).min() ?? anchor.createdAt,
+                clips: sorted
+            )
+        }
+        .sorted { $0.date > $1.date }
+    }
 
     private let key = "savedHighlights"
 
@@ -61,10 +89,10 @@ final class HighlightStore: ObservableObject {
     }
 
     /// Thread-safe entry point — hops to main to mutate published state.
-    nonisolated func add(fileURL: URL, homeTeam: String, awayTeam: String,
+    nonisolated func add(fileURL: URL, gameId: String?, homeTeam: String, awayTeam: String,
                          homeScore: Int, awayScore: Int, period: String, clockTime: String) {
         let h = Highlight(id: UUID(), fileName: fileURL.lastPathComponent, createdAt: Date(),
-                          homeTeam: homeTeam, awayTeam: awayTeam,
+                          gameId: gameId, homeTeam: homeTeam, awayTeam: awayTeam,
                           homeScore: homeScore, awayScore: awayScore,
                           period: period, clockTime: clockTime)
         Task { @MainActor in

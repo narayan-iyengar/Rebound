@@ -30,8 +30,16 @@ struct SettingsView: View {
     @State private var showAddTeam: Bool = false
     @State private var showStreamKey: Bool = false
 
+    /// When shown as a page in the home pager (not a sheet): no nav wrapper, no Done.
+    var embedded: Bool = false
+
+    @ViewBuilder
+    private func navWrap<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        if embedded { content() } else { NavigationView { content() } }
+    }
+
     var body: some View {
-        NavigationView {
+        navWrap {
             VStack(spacing: 0) {
                 // Chalk header replaces the system nav bar so the whole screen reads
                 // as the green board (no white title / blue Done island).
@@ -42,10 +50,12 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Button { dismiss() } label: {
-                        Text("Done")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(Chalk.chalk)
+                    if !embedded {
+                        Button { dismiss() } label: {
+                            Text("Done")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(Chalk.chalk)
+                        }
                     }
                 }
                 .padding(.horizontal)
