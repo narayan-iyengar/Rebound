@@ -101,10 +101,9 @@ struct HomeView: View {
     /// Every page sits on the green board so all five read as one surface.
     @ViewBuilder
     private func boardPage<V: View>(_ content: V) -> some View {
-        ZStack {
-            Chalk.board.ignoresSafeArea()
-            content
-        }
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .chalkBoard()
     }
 
     /// The SF Symbol representing each page — shown on the edge affordance so you

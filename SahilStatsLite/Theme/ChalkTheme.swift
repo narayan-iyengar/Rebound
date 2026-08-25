@@ -122,12 +122,99 @@ extension Font {
 
 // MARK: - Board background
 
+/// Faint hand-drawn X's-and-O's play diagram — the chalkboard watermark behind
+/// every board screen. Drawn in code (Canvas) so it's crisp at any size and needs
+/// no bundled asset. Non-interactive and very low opacity so it never competes.
+struct ChalkPlayBackdrop: View {
+    var opacity: Double = 0.05
+
+    var body: some View {
+        Canvas { ctx, size in
+            let shade = GraphicsContext.Shading.color(Chalk.chalk.opacity(opacity))
+            let lw = max(1.6, size.width * 0.0045)
+            let solid = StrokeStyle(lineWidth: lw, lineCap: .round, lineJoin: .round)
+            let dashed = StrokeStyle(lineWidth: lw, lineCap: .round,
+                                     dash: [size.width * 0.02, size.width * 0.016])
+
+            let w = size.width, h = size.height
+            let left = w * 0.09, right = w * 0.91
+            let top = h * 0.30, bottom = h * 0.90
+            let midX = (left + right) / 2
+            let hoopY = bottom - h * 0.045
+
+            func stroke(_ p: Path, _ style: StrokeStyle = solid) { ctx.stroke(p, with: shade, style: style) }
+
+            // Court boundary
+            stroke(Path(roundedRect: CGRect(x: left, y: top, width: right - left, height: bottom - top),
+                        cornerRadius: w * 0.03))
+
+            // Backboard + rim
+            var bb = Path()
+            bb.move(to: CGPoint(x: midX - w * 0.06, y: bottom - h * 0.03))
+            bb.addLine(to: CGPoint(x: midX + w * 0.06, y: bottom - h * 0.03))
+            stroke(bb)
+            stroke(Path(ellipseIn: CGRect(x: midX - w * 0.018, y: hoopY - w * 0.018,
+                                          width: w * 0.036, height: w * 0.036)))
+
+            // Key + free-throw circle
+            let keyW = w * 0.20, keyTop = bottom - h * 0.34
+            stroke(Path(CGRect(x: midX - keyW / 2, y: keyTop, width: keyW, height: bottom - keyTop)))
+            let ftR = w * 0.10
+            stroke(Path(ellipseIn: CGRect(x: midX - ftR, y: keyTop - ftR, width: ftR * 2, height: ftR * 2)))
+
+            // Three-point arc
+            var tp = Path()
+            tp.addArc(center: CGPoint(x: midX, y: hoopY), radius: (right - left) * 0.42,
+                      startAngle: .degrees(197), endAngle: .degrees(343), clockwise: false)
+            stroke(tp)
+
+            // Players + motion — a simple set play
+            func drawO(_ p: CGPoint) {
+                let r = w * 0.022
+                stroke(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)))
+            }
+            func drawX(_ p: CGPoint) {
+                let r = w * 0.019
+                var pa = Path()
+                pa.move(to: CGPoint(x: p.x - r, y: p.y - r)); pa.addLine(to: CGPoint(x: p.x + r, y: p.y + r))
+                pa.move(to: CGPoint(x: p.x - r, y: p.y + r)); pa.addLine(to: CGPoint(x: p.x + r, y: p.y - r))
+                stroke(pa)
+            }
+            func arrow(_ a: CGPoint, _ b: CGPoint) {
+                var pa = Path(); pa.move(to: a); pa.addLine(to: b)
+                stroke(pa, dashed)
+                let ang = atan2(b.y - a.y, b.x - a.x), hl = w * 0.026
+                var head = Path()
+                head.move(to: b)
+                head.addLine(to: CGPoint(x: b.x - hl * cos(ang - .pi / 7), y: b.y - hl * sin(ang - .pi / 7)))
+                head.move(to: b)
+                head.addLine(to: CGPoint(x: b.x - hl * cos(ang + .pi / 7), y: b.y - hl * sin(ang + .pi / 7)))
+                stroke(head)
+            }
+
+            let o1 = CGPoint(x: midX, y: bottom - h * 0.16)          // ball handler
+            let o2 = CGPoint(x: left + w * 0.11, y: bottom - h * 0.09) // left wing
+            let o3 = CGPoint(x: right - w * 0.11, y: bottom - h * 0.09) // right wing
+            drawO(o1); drawO(o2); drawO(o3)
+            drawX(CGPoint(x: midX + w * 0.05, y: bottom - h * 0.23))
+            drawX(CGPoint(x: left + w * 0.14, y: bottom - h * 0.16))
+            arrow(o2, CGPoint(x: midX - w * 0.05, y: hoopY + h * 0.015))  // baseline cut
+            arrow(o1, o3)                                                 // swing pass
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct ChalkBoard: ViewModifier {
     func body(content: Content) -> some View {
         content.background(
-            LinearGradient(colors: [Chalk.board, Chalk.board2],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            ZStack {
+                LinearGradient(colors: [Chalk.board, Chalk.board2],
+                               startPoint: .top, endPoint: .bottom)
+                ChalkPlayBackdrop()
+            }
+            .ignoresSafeArea()
         )
     }
 }
