@@ -93,6 +93,7 @@ struct UltraMinimalRecordingView: View {
     // games stay clean; toggle in Settings.
     @AppStorage("showTrackingOverlay") private var showTrackingOverlay = false
     @State private var clipPulse = false  // brief visual bump on Clip tap (haptic is muted while recording)
+    @State private var clipRecPulse = false  // steady pulse on the dot while a clip is exporting
 
     // Computed
     private var halfLength: Int {
@@ -579,29 +580,73 @@ struct UltraMinimalRecordingView: View {
     }
 
     // Clip — the retroactive highlight. Prominent, top-left, same spot in both modes.
-    // NOTE: action is a placeholder until #3 wires the rolling AVAssetWriter buffer.
+    // The single button reflects the whole flow: tap to save [buffered ~30s + forward
+    // window]; while clipping it shows the countdown and taps again to stop early.
     // A visual bump confirms the tap even when iOS mutes haptics during recording.
     private var clipButton: some View {
         Button {
-            // TODO(#3): start the retroactive-buffer Clip.
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            withAnimation(.easeOut(duration: 0.10)) { clipPulse = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.easeIn(duration: 0.18)) { clipPulse = false }
+            switch recordingManager.clipState {
+            case .clipping:
+                recordingManager.stopClip()
+            case .saving, .saved:
+                break  // in-flight; ignore taps
+            default:
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.easeOut(duration: 0.10)) { clipPulse = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    withAnimation(.easeIn(duration: 0.18)) { clipPulse = false }
+                }
+                recordingManager.triggerClip()
             }
         } label: {
+            clipButtonLabel
+                .foregroundColor(Chalk.board)
+                .padding(.horizontal, 15)
+                .padding(.vertical, 7)
+                .background(clipButtonBackground, in: Capsule())
+                .shadow(color: Chalk.coral.opacity(clipPulse ? 0.8 : 0.4), radius: clipPulse ? 12 : 6, y: 2)
+                .scaleEffect(clipPulse ? 1.12 : 1)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: recordingManager.clipState)
+    }
+
+    @ViewBuilder
+    private var clipButtonLabel: some View {
+        switch recordingManager.clipState {
+        case .clipping(let remaining):
+            HStack(spacing: 6) {
+                Circle().fill(Chalk.board).frame(width: 8, height: 8)
+                    .opacity(clipRecPulse ? 0.35 : 1)
+                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: clipRecPulse)
+                Text("Clipping \(remaining)s")
+                    .font(.system(size: 14, weight: .bold)).monospacedDigit()
+            }
+            .onAppear { clipRecPulse = true }
+            .onDisappear { clipRecPulse = false }
+        case .saving:
+            HStack(spacing: 6) {
+                ProgressView().scaleEffect(0.7).tint(Chalk.board)
+                Text("Saving…").font(.system(size: 14, weight: .bold))
+            }
+        case .saved:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
+                Text("Saved").font(.system(size: 14, weight: .bold))
+            }
+        default:
             HStack(spacing: 6) {
                 Circle().fill(Chalk.board).frame(width: 8, height: 8)
                 Text("Clip").font(.system(size: 14, weight: .bold))
             }
-            .foregroundColor(Chalk.board)
-            .padding(.horizontal, 15)
-            .padding(.vertical, 7)
-            .background(Chalk.coral, in: Capsule())
-            .shadow(color: Chalk.coral.opacity(clipPulse ? 0.8 : 0.4), radius: clipPulse ? 12 : 6, y: 2)
-            .scaleEffect(clipPulse ? 1.12 : 1)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var clipButtonBackground: Color {
+        switch recordingManager.clipState {
+        case .saved: return Chalk.green
+        default: return Chalk.coral
+        }
     }
 
     private var recIndicator: some View {

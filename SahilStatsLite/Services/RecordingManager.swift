@@ -85,6 +85,11 @@ class RecordingManager: NSObject, ObservableObject {
 
     let overlayRenderer = OverlayRenderer()
 
+    // MARK: - Clip (retroactive highlight) buffer
+
+    let clipBuffer = ClipBuffer()
+    @MainActor @Published var clipState: ClipState = .idle
+
     // MARK: - Completion Handler
 
     private var recordingFinishedContinuation: CheckedContinuation<URL?, Never>?
@@ -94,6 +99,55 @@ class RecordingManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
+
+        // Surface clip state to the UI, and handle a finished clip (Photos + store).
+        clipBuffer.onStateChange = { [weak self] st in
+            Task { @MainActor in self?.clipState = st }
+        }
+        clipBuffer.onClipSaved = { [weak self] url in
+            self?.handleClipSaved(url)
+        }
+    }
+
+    // MARK: - Clip control
+
+    /// Save a retroactive highlight: buffered ~30s + forward window from Settings.
+    @MainActor
+    func triggerClip() {
+        guard clipBuffer.isArmed else {
+            debugPrint("🎬 triggerClip ignored — clip buffer not armed")
+            return
+        }
+        let forward = UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 20
+        clipBuffer.startClip(forwardSeconds: Double(forward))
+    }
+
+    /// Cut the forward window short and save now.
+    @MainActor
+    func stopClip() {
+        clipBuffer.stopClip()
+    }
+
+    /// Called (off-main) when a clip file is finalized: save to Photos + record it.
+    nonisolated private func handleClipSaved(_ url: URL) {
+        let s = overlayRenderer.state
+        Task { @MainActor in
+            HighlightStore.shared.add(
+                fileURL: url,
+                homeTeam: s.homeTeam, awayTeam: s.awayTeam,
+                homeScore: s.homeScore, awayScore: s.awayScore,
+                period: s.period, clockTime: s.clockTime
+            )
+        }
+
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else { return }
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+            } completionHandler: { success, error in
+                if let error = error { debugPrint("❌ Clip → Photos failed: \(error)") }
+            }
+        }
     }
 
     /// Reset the recording manager state for a new game
@@ -112,6 +166,7 @@ class RecordingManager: NSObject, ObservableObject {
         isWriterConfigured = false
         recordingStartTime = nil
         pendingOutputURL = nil
+        clipBuffer.disarm()
 
         // Ensure screen auto-lock is re-enabled
         UIApplication.shared.isIdleTimerDisabled = false
@@ -410,6 +465,9 @@ class RecordingManager: NSObject, ObservableObject {
         recordingStartTime = nil
         frameCount = 0
 
+        // Arm the retroactive-clip ring buffer for the whole live recording.
+        clipBuffer.arm()
+
         // CRITICAL: Keep screen on during recording to prevent interruption
         UIApplication.shared.isIdleTimerDisabled = true
         debugPrint("📹 Screen auto-lock DISABLED for recording")
@@ -496,6 +554,7 @@ class RecordingManager: NSObject, ObservableObject {
         isRecording = false
         recordingTimer?.invalidate()
         recordingTimer = nil
+        clipBuffer.disarm()
 
         // Re-enable screen auto-lock
         UIApplication.shared.isIdleTimerDisabled = false
@@ -516,6 +575,7 @@ class RecordingManager: NSObject, ObservableObject {
             isRecording = false
             recordingTimer?.invalidate()
             recordingTimer = nil
+            clipBuffer.disarm()
             UIApplication.shared.isIdleTimerDisabled = false
             return nil
         }
@@ -523,6 +583,7 @@ class RecordingManager: NSObject, ObservableObject {
         isRecording = false
         recordingTimer?.invalidate()
         recordingTimer = nil
+        clipBuffer.disarm()
 
         // Re-enable screen auto-lock
         UIApplication.shared.isIdleTimerDisabled = false
@@ -814,6 +875,10 @@ extension RecordingManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
         // Apply overlay to the frame — scoreboard burned in once here
         _ = overlayRenderer.render(onto: pixelBuffer)
 
+        // Fork composited frame to the retroactive clip ring (downscales + copies
+        // synchronously, so the capture buffer is never held past return).
+        clipBuffer.feedVideo(pixelBuffer, timestamp: timestamp)
+
         // Fork composited frame to live stream if active (same frame, no extra render)
         if isStreamingActive {
             StreamingService.shared.appendVideoBuffer(pixelBuffer, timestamp: timestamp)
@@ -841,6 +906,9 @@ extension RecordingManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
     }
 
     nonisolated private func processAudioFrame(_ sampleBuffer: CMSampleBuffer) {
+        // Fork audio to the retroactive clip ring.
+        clipBuffer.feedAudio(sampleBuffer)
+
         // Fork audio to live stream
         if isStreamingActive {
             StreamingService.shared.appendAudioBuffer(sampleBuffer)
