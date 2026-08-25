@@ -134,6 +134,20 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
         clipQueue.async { self.encodeLocked(boxed.value, pts: timestamp) }
     }
 
+    /// Feed a RAW (un-composited) video frame and burn the scoreboard in ourselves.
+    /// Used in stats-only mode, where there is no file AVAssetWriter to composite the
+    /// overlay — so the clip still gets the (historical) score burned in. Downscales
+    /// synchronously; overlay render + encode happen on clipQueue.
+    func feedVideoCompositing(_ pixelBuffer: CVPixelBuffer, timestamp: CMTime, overlay: OverlayRenderer) {
+        guard armed else { return }
+        guard let scaled = downscale(pixelBuffer) else { return }
+        let boxed = Unchecked(value: scaled)
+        clipQueue.async {
+            _ = overlay.render(onto: boxed.value)
+            self.encodeLocked(boxed.value, pts: timestamp)
+        }
+    }
+
     /// Feed a raw audio sample buffer (from AVCaptureAudioDataOutput).
     func feedAudio(_ sampleBuffer: CMSampleBuffer) {
         guard armed else { return }

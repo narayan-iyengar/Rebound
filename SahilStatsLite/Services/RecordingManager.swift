@@ -128,6 +128,19 @@ class RecordingManager: NSObject, ObservableObject {
         clipBuffer.stopClip()
     }
 
+    /// Stats-only mode: arm the clip ring without recording the whole game to a file.
+    /// (The capture session must already be set up via requestPermissionsAndSetup.)
+    @MainActor
+    func startClipBuffering() {
+        clipBuffer.arm()
+    }
+
+    /// Stop stats-only clip buffering (leaving the view).
+    @MainActor
+    func stopClipBuffering() {
+        clipBuffer.disarm()
+    }
+
     /// Called (off-main) when a clip file is finalized: save to Photos + record it.
     nonisolated private func handleClipSaved(_ url: URL) {
         let s = overlayRenderer.state
@@ -765,6 +778,19 @@ extension RecordingManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                     // Fallback to full res if downscale fails
                     callback(pixelBuffer)
                 }
+            }
+        }
+
+        // Stats-only clip buffering: no file writer is running, but the clip ring is
+        // armed — feed it directly (compositing the scoreboard ourselves) so a Clip
+        // can be saved even when the full game isn't being recorded to a file.
+        if clipBuffer.isArmed && pendingOutputURL == nil && assetWriter == nil {
+            if output === videoDataOutput, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                clipBuffer.feedVideoCompositing(pb,
+                    timestamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
+                    overlay: overlayRenderer)
+            } else if output === audioDataOutput {
+                clipBuffer.feedAudio(sampleBuffer)
             }
         }
 

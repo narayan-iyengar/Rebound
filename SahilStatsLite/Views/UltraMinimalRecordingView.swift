@@ -273,8 +273,9 @@ struct UltraMinimalRecordingView: View {
             // Scoreboard: full-screen big layout in stats-only mode (no video); the small
             // corner board when recording. Both keep the fouls/timeout tally.
             if !isPortrait || recordingManager.isSimulator || appState.isStatsOnly {
-                if appState.isStatsOnly {
+                if appState.isStatsOnly && !isStatsOnlyClipping {
                     fullScreenStatsLayout
+                        .transition(.opacity)
                 } else {
                     VStack {
                         Spacer()
@@ -390,6 +391,15 @@ struct UltraMinimalRecordingView: View {
                     gimbalManager.startTracking()
                     startAutoZoom()
                 }
+            } else {
+                // Stats-only: bring up the camera HIDDEN, purely to buffer Clips. No
+                // file recording — the green board stays until a Clip reveals the camera.
+                recordingManager.reset()
+                updateOverlayState()
+                await recordingManager.requestPermissionsAndSetup()
+                if recordingManager.isSessionReady && !recordingManager.isSimulator {
+                    recordingManager.startClipBuffering()
+                }
             }
         }
         .onDisappear {
@@ -398,6 +408,9 @@ struct UltraMinimalRecordingView: View {
             if !appState.isStatsOnly {
                 stopRecording()
                 stopAutoZoom()
+                recordingManager.stopSession()
+            } else {
+                recordingManager.stopClipBuffering()
                 recordingManager.stopSession()
             }
         }
@@ -410,6 +423,7 @@ struct UltraMinimalRecordingView: View {
             }
         }
         .animation(.spring(response: 0.3), value: showSahilStats)
+        .animation(.easeInOut(duration: 0.45), value: isStatsOnlyClipping)
     }
 
     // MARK: - Initialize Game State
@@ -533,10 +547,20 @@ struct UltraMinimalRecordingView: View {
     @ViewBuilder
     private var cameraPreview: some View {
         if appState.isStatsOnly {
-            // Stats-only mode - no camera: green chalk board is the ground; the
-            // full-screen scoreboard (fullScreenStatsLayout) fills it.
-            LinearGradient(colors: [Chalk.board, Chalk.board2], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            // Stats-only mode: green chalk board is the ground and the full-screen
+            // scoreboard fills it — UNTIL a Clip is taken, when the (already-buffering)
+            // camera is revealed behind the shrunk corner board.
+            ZStack {
+                LinearGradient(colors: [Chalk.board, Chalk.board2], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+                if isStatsOnlyClipping, recordingManager.isSessionReady,
+                   let session = recordingManager.captureSession {
+                    CameraPreviewView(session: session)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.45), value: isStatsOnlyClipping)
         } else if recordingManager.isSimulator {
             LinearGradient(
                 colors: [Color(white: 0.92), Color(white: 0.85)],
@@ -578,6 +602,16 @@ struct UltraMinimalRecordingView: View {
     // Recording video is active (drives the clock-chip coral glow, replacing a REC pill).
     private var isRecordingLive: Bool {
         hasGameStarted && !appState.isStatsOnly
+    }
+
+    /// Stats-only, actively capturing a clip → reveal the camera and shrink the board
+    /// to the corner (the same layout recording mode uses). Matches the Clip mock.
+    private var isStatsOnlyClipping: Bool {
+        guard appState.isStatsOnly else { return false }
+        switch recordingManager.clipState {
+        case .clipping, .saving: return true
+        default: return false
+        }
     }
 
     // Clip — the retroactive highlight. Prominent, top-left, same spot in both modes.
@@ -650,7 +684,7 @@ struct UltraMinimalRecordingView: View {
         case .idle:
             HStack(spacing: 6) {
                 Circle().fill(Chalk.board).frame(width: 8, height: 8)
-                Text(clipUnavailableFlash ? (appState.isStatsOnly ? "Recording only" : "Start game to clip") : "Clip")
+                Text(clipUnavailableFlash ? (appState.isStatsOnly ? "Camera warming up…" : "Start game to clip") : "Clip")
                     .font(.system(size: 14, weight: .bold))
             }
         case .buffering:
