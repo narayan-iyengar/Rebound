@@ -14,6 +14,7 @@
 
 import Foundation
 import Combine
+import Photos
 
 struct Highlight: Codable, Identifiable, Sendable {
     let id: UUID
@@ -27,6 +28,7 @@ struct Highlight: Codable, Identifiable, Sendable {
     let period: String
     let clockTime: String
     var isPractice: Bool = false
+    var photoAssetId: String? = nil   // PHAsset localIdentifier, so delete can also clear Photos
 
     var url: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -43,7 +45,7 @@ struct Highlight: Codable, Identifiable, Sendable {
 // Store. Fields added after v1 (gameId, isPractice) are decoded with decodeIfPresent.
 extension Highlight {
     private enum CodingKeys: String, CodingKey {
-        case id, fileName, createdAt, gameId, homeTeam, awayTeam, homeScore, awayScore, period, clockTime, isPractice
+        case id, fileName, createdAt, gameId, homeTeam, awayTeam, homeScore, awayScore, period, clockTime, isPractice, photoAssetId
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -58,6 +60,7 @@ extension Highlight {
         period = try c.decode(String.self, forKey: .period)
         clockTime = try c.decode(String.self, forKey: .clockTime)
         isPractice = try c.decodeIfPresent(Bool.self, forKey: .isPractice) ?? false
+        photoAssetId = try c.decodeIfPresent(String.self, forKey: .photoAssetId)
     }
 }
 
@@ -141,11 +144,14 @@ final class HighlightStore: ObservableObject {
         }
     }
 
-    /// Thread-safe entry point — hops to main to mutate published state.
-    nonisolated func add(fileURL: URL, gameId: String?, homeTeam: String, awayTeam: String,
+    /// Thread-safe entry point — hops to main to mutate published state. Returns the
+    /// id it will use so the caller can attach a Photos asset id once that save finishes.
+    @discardableResult
+    nonisolated func add(id: UUID = UUID(), fileURL: URL, gameId: String?,
+                         homeTeam: String, awayTeam: String,
                          homeScore: Int, awayScore: Int, period: String, clockTime: String,
-                         isPractice: Bool = false) {
-        let h = Highlight(id: UUID(), fileName: fileURL.lastPathComponent, createdAt: Date(),
+                         isPractice: Bool = false) -> UUID {
+        let h = Highlight(id: id, fileName: fileURL.lastPathComponent, createdAt: Date(),
                           gameId: gameId, homeTeam: homeTeam, awayTeam: awayTeam,
                           homeScore: homeScore, awayScore: awayScore,
                           period: period, clockTime: clockTime, isPractice: isPractice)
@@ -153,11 +159,49 @@ final class HighlightStore: ObservableObject {
             self.highlights.insert(h, at: 0)
             self.persist()
         }
+        return id
     }
 
-    func delete(_ highlight: Highlight) {
-        try? FileManager.default.removeItem(at: highlight.url)
-        highlights.removeAll { $0.id == highlight.id }
+    /// Record the Photos localIdentifier for a clip so a later delete can also clear Photos.
+    nonisolated func setPhotoAsset(id: UUID, assetId: String) {
+        Task { @MainActor in
+            guard let idx = self.highlights.firstIndex(where: { $0.id == id }) else { return }
+            self.highlights[idx].photoAssetId = assetId
+            self.persist()
+        }
+    }
+
+    /// All clips for a game session (newest first) — used by the Game Log detail.
+    func clips(forGameId gameId: String?) -> [Highlight] {
+        guard let gameId else { return [] }
+        return highlights.filter { $0.gameId == gameId }.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func delete(_ highlight: Highlight, fromPhotos: Bool = false) {
+        deleteMany([highlight.id], fromPhotos: fromPhotos)
+    }
+
+    /// Delete a set of clips: remove local files + metadata, and (optionally) the
+    /// tracked Photos copies. Clips saved before asset-id tracking simply skip Photos.
+    func deleteMany(_ ids: Set<UUID>, fromPhotos: Bool) {
+        let targets = highlights.filter { ids.contains($0.id) }
+        guard !targets.isEmpty else { return }
+
+        for h in targets { try? FileManager.default.removeItem(at: h.url) }
+
+        if fromPhotos {
+            let assetIds = targets.compactMap { $0.photoAssetId }
+            if !assetIds.isEmpty {
+                let assets = PHAsset.fetchAssets(withLocalIdentifiers: assetIds, options: nil)
+                if assets.count > 0 {
+                    PHPhotoLibrary.shared().performChanges {
+                        PHAssetChangeRequest.deleteAssets(assets)
+                    } completionHandler: { _, _ in }
+                }
+            }
+        }
+
+        highlights.removeAll { ids.contains($0.id) }
         persist()
     }
 }

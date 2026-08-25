@@ -162,17 +162,19 @@ class RecordingManager: NSObject, ObservableObject {
         let s = overlayRenderer.state
         let gameId = currentClipGameId
         let practice = isPracticeSession
+        let clipId = UUID()  // shared id so we can attach the Photos asset id below
+
         Task { @MainActor in
             if practice {
                 HighlightStore.shared.add(
-                    fileURL: url, gameId: gameId,
+                    id: clipId, fileURL: url, gameId: gameId,
                     homeTeam: "Practice", awayTeam: "",
                     homeScore: 0, awayScore: 0,
                     period: "", clockTime: "", isPractice: true
                 )
             } else {
                 HighlightStore.shared.add(
-                    fileURL: url, gameId: gameId,
+                    id: clipId, fileURL: url, gameId: gameId,
                     homeTeam: s.homeTeam, awayTeam: s.awayTeam,
                     homeScore: s.homeScore, awayScore: s.awayScore,
                     period: s.period, clockTime: s.clockTime
@@ -182,10 +184,15 @@ class RecordingManager: NSObject, ObservableObject {
 
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else { return }
+            var placeholderId: String?
             PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                let req = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                placeholderId = req?.placeholderForCreatedAsset?.localIdentifier
             } completionHandler: { success, error in
                 if let error = error { debugPrint("❌ Clip → Photos failed: \(error)") }
+                if success, let assetId = placeholderId {
+                    HighlightStore.shared.setPhotoAsset(id: clipId, assetId: assetId)
+                }
             }
         }
     }

@@ -3,9 +3,10 @@
 //  SahilStatsLite
 //
 //  PURPOSE: The "Store" — saved Clips (highlights), grouped by game session
-//           (Sahil's team vs opponent · date/time). Tap to play, long-press to
-//           share or delete. No win/loss — clips are self-describing from the
-//           metadata captured at clip time, independent of any saved Game.
+//           (Sahil's team vs opponent · date/time). Tap to play. Long-press to
+//           enter multi-select, then tap clips (or a game header to grab the whole
+//           game) and delete in bulk — from the app and optionally Photos. No
+//           win/loss — clips are self-describing from clip-time metadata.
 //  KEY TYPES: StoreView, ClipCard, ClipThumbnail, ClipPlayerSheet
 //  DEPENDS ON: HighlightStore, AVKit
 //
@@ -19,7 +20,11 @@ import AVFoundation
 struct StoreView: View {
     @ObservedObject private var store = HighlightStore.shared
     @State private var playing: Highlight?
-    @State private var pendingDelete: Highlight?
+
+    // Multi-select
+    @State private var selecting = false
+    @State private var selected = Set<UUID>()
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         ScrollView {
@@ -40,35 +45,52 @@ struct StoreView: View {
         }
         .scrollIndicators(.hidden)
         .chalkBoard()
+        .safeAreaInset(edge: .bottom) {
+            if selecting { selectionBar }
+        }
         .fullScreenCover(item: $playing) { clip in
             ClipPlayerSheet(clip: clip)
         }
-        .confirmationDialog("Delete this clip?", isPresented: Binding(
-            get: { pendingDelete != nil },
-            set: { if !$0 { pendingDelete = nil } }
-        ), titleVisibility: .visible) {
-            Button("Delete clip", role: .destructive) {
-                if let clip = pendingDelete { store.delete(clip) }
-                pendingDelete = nil
+        .confirmationDialog("Delete \(selected.count) clip\(selected.count == 1 ? "" : "s")?",
+                            isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete from app + Photos", role: .destructive) {
+                store.deleteMany(selected, fromPhotos: true)
+                exitSelection()
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
+            Button("Delete from app only", role: .destructive) {
+                store.deleteMany(selected, fromPhotos: false)
+                exitSelection()
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes it from the app. The copy in Photos stays.")
+            Text("Deleting from Photos will ask for permission. Clips saved before this update can only be removed from the app.")
         }
     }
 
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Store")
-                .font(.chalkScript(40))
-                .foregroundColor(Chalk.chalk)
-            Text(store.highlights.isEmpty
-                 ? "Your saved clips live here"
-                 : "\(store.highlights.count) clip\(store.highlights.count == 1 ? "" : "s") · \(store.grouped.count) game\(store.grouped.count == 1 ? "" : "s")")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(Chalk.dust)
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Store")
+                    .font(.chalkScript(40))
+                    .foregroundColor(Chalk.chalk)
+                Text(store.highlights.isEmpty
+                     ? "Your saved clips live here"
+                     : "\(store.highlights.count) clip\(store.highlights.count == 1 ? "" : "s") · \(store.grouped.count) game\(store.grouped.count == 1 ? "" : "s")")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Chalk.dust)
+            }
+            Spacer()
+            if !store.highlights.isEmpty {
+                Button(selecting ? "Cancel" : "Select") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if selecting { exitSelection() } else { selecting = true }
+                    }
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(Chalk.yellow)
+            }
         }
         .padding(.top, 8)
     }
@@ -83,7 +105,7 @@ struct StoreView: View {
             Text("No clips yet")
                 .font(.chalkScript(28))
                 .foregroundColor(Chalk.chalk)
-            Text("Tap Clip during a game to save the last ~30s as a highlight. Saved clips appear here, grouped by game.")
+            Text("Tap Clip during a game or practice to save the last ~30s as a highlight. Saved clips appear here, grouped by game.")
                 .font(.system(size: 15))
                 .foregroundColor(Chalk.dust)
                 .multilineTextAlignment(.center)
@@ -98,30 +120,109 @@ struct StoreView: View {
 
     private func gameSection(_ group: HighlightGroup) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(group.matchup)
-                    .font(.chalkScript(26))
-                    .foregroundColor(Chalk.chalk)
-                    .lineLimit(1)
-                Spacer()
-                Text(Self.sessionDate(group.date))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Chalk.dust)
+            Button {
+                if selecting { toggleGroup(group) }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if selecting {
+                        Image(systemName: groupAllSelected(group) ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(groupAllSelected(group) ? Chalk.yellow : Chalk.dust)
+                    }
+                    Text(group.matchup)
+                        .font(.chalkScript(26))
+                        .foregroundColor(Chalk.chalk)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(Self.sessionDate(group.date))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Chalk.dust)
+                }
             }
+            .buttonStyle(.plain)
+            .disabled(!selecting)
 
             ForEach(group.clips) { clip in
-                ClipCard(clip: clip)
-                    .onTapGesture { playing = clip }
-                    .contextMenu {
-                        ShareLink(item: clip.url) {
-                            Label("Share", systemImage: "square.and.arrow.up")
+                ClipCard(clip: clip, selecting: selecting, isSelected: selected.contains(clip.id))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if selecting { toggle(clip) } else { playing = clip }
+                    }
+                    .onLongPressGesture {
+                        if !selecting {
+                            withAnimation(.easeInOut(duration: 0.2)) { selecting = true }
+                            selected = [clip.id]
                         }
-                        Button(role: .destructive) { pendingDelete = clip } label: {
-                            Label("Delete", systemImage: "trash")
+                    }
+                    .contextMenu {
+                        if !selecting {
+                            ShareLink(item: clip.url) { Label("Share", systemImage: "square.and.arrow.up") }
+                            Button { selecting = true; selected = [clip.id] } label: {
+                                Label("Select", systemImage: "checkmark.circle")
+                            }
+                            Button(role: .destructive) {
+                                selected = [clip.id]; showDeleteConfirm = true
+                            } label: { Label("Delete", systemImage: "trash") }
                         }
                     }
             }
         }
+    }
+
+    // MARK: - Selection bar
+
+    private var selectionBar: some View {
+        HStack(spacing: 16) {
+            Button(selected.count == store.highlights.count ? "Deselect All" : "Select All") {
+                if selected.count == store.highlights.count { selected.removeAll() }
+                else { selected = Set(store.highlights.map(\.id)) }
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(Chalk.chalk)
+
+            Spacer()
+
+            Text("\(selected.count) selected")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Chalk.dust)
+
+            Spacer()
+
+            Button {
+                showDeleteConfirm = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(selected.isEmpty ? Chalk.dust : Chalk.board)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(selected.isEmpty ? Color.clear : Chalk.coral, in: Capsule())
+            }
+            .disabled(selected.isEmpty)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(Chalk.board2.opacity(0.98), in: Capsule())
+        .overlay(Capsule().stroke(Chalk.chalk.opacity(0.14), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+
+    // MARK: - Selection helpers
+
+    private func toggle(_ clip: Highlight) {
+        if selected.contains(clip.id) { selected.remove(clip.id) } else { selected.insert(clip.id) }
+    }
+    private func groupAllSelected(_ g: HighlightGroup) -> Bool {
+        !g.clips.isEmpty && g.clips.allSatisfy { selected.contains($0.id) }
+    }
+    private func toggleGroup(_ g: HighlightGroup) {
+        if groupAllSelected(g) { g.clips.forEach { selected.remove($0.id) } }
+        else { g.clips.forEach { selected.insert($0.id) } }
+    }
+    private func exitSelection() {
+        selecting = false
+        selected.removeAll()
     }
 
     static func sessionDate(_ date: Date) -> String {
@@ -136,16 +237,25 @@ struct StoreView: View {
 
 private struct ClipCard: View {
     let clip: Highlight
+    var selecting: Bool = false
+    var isSelected: Bool = false
 
     var body: some View {
         HStack(spacing: 14) {
+            if selecting {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundColor(isSelected ? Chalk.yellow : Chalk.dust)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
             ClipThumbnail(url: clip.url)
                 .frame(width: 108, height: 61)
                 .clipShape(RoundedRectangle(cornerRadius: 9))
                 .overlay(
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(.white.opacity(selecting ? 0.4 : 0.9))
                         .shadow(radius: 3)
                 )
                 .overlay(RoundedRectangle(cornerRadius: 9).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
@@ -176,14 +286,18 @@ private struct ClipCard: View {
                 }
             }
             Spacer()
-            Image(systemName: "ellipsis")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Chalk.dust)
-                .rotationEffect(.degrees(90))
+            if !selecting {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Chalk.dust)
+                    .rotationEffect(.degrees(90))
+            }
         }
         .padding(10)
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.10), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12)
+            .stroke(isSelected ? Chalk.yellow.opacity(0.8) : Chalk.chalk.opacity(0.10),
+                    lineWidth: isSelected ? 2 : 1))
     }
 }
 
