@@ -94,6 +94,7 @@ struct UltraMinimalRecordingView: View {
     @AppStorage("showTrackingOverlay") private var showTrackingOverlay = false
     @State private var clipPulse = false  // brief visual bump on Clip tap (haptic is muted while recording)
     @State private var clipRecPulse = false  // steady pulse on the dot while a clip is exporting
+    @State private var clipUnavailableFlash = false  // brief "start game to clip" hint on a tap before arming
 
     // Computed
     private var halfLength: Int {
@@ -583,6 +584,10 @@ struct UltraMinimalRecordingView: View {
     // The single button reflects the whole flow: tap to save [buffered ~30s + forward
     // window]; while clipping it shows the countdown and taps again to stop early.
     // A visual bump confirms the tap even when iOS mutes haptics during recording.
+    // Clip can only fire once the ring is armed (recording started). We surface that
+    // as a dimmed, "Clip · start game" pill so a tap-that-does-nothing never happens silently.
+    private var clipReady: Bool { recordingManager.clipState != .idle }
+
     private var clipButton: some View {
         Button {
             switch recordingManager.clipState {
@@ -590,7 +595,14 @@ struct UltraMinimalRecordingView: View {
                 recordingManager.stopClip()
             case .saving, .saved:
                 break  // in-flight; ignore taps
-            default:
+            case .idle:
+                // Not armed yet — tell the user why instead of doing nothing.
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                withAnimation(.easeOut(duration: 0.12)) { clipUnavailableFlash = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    withAnimation(.easeIn(duration: 0.25)) { clipUnavailableFlash = false }
+                }
+            case .buffering:
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 withAnimation(.easeOut(duration: 0.10)) { clipPulse = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
@@ -606,6 +618,7 @@ struct UltraMinimalRecordingView: View {
                 .background(clipButtonBackground, in: Capsule())
                 .shadow(color: Chalk.coral.opacity(clipPulse ? 0.8 : 0.4), radius: clipPulse ? 12 : 6, y: 2)
                 .scaleEffect(clipPulse ? 1.12 : 1)
+                .opacity(clipReady ? 1 : 0.45)
         }
         .buttonStyle(.plain)
         .animation(.easeInOut(duration: 0.2), value: recordingManager.clipState)
@@ -634,7 +647,13 @@ struct UltraMinimalRecordingView: View {
                 Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
                 Text("Saved").font(.system(size: 14, weight: .bold))
             }
-        default:
+        case .idle:
+            HStack(spacing: 6) {
+                Circle().fill(Chalk.board).frame(width: 8, height: 8)
+                Text(clipUnavailableFlash ? (appState.isStatsOnly ? "Recording only" : "Start game to clip") : "Clip")
+                    .font(.system(size: 14, weight: .bold))
+            }
+        case .buffering:
             HStack(spacing: 6) {
                 Circle().fill(Chalk.board).frame(width: 8, height: 8)
                 Text("Clip").font(.system(size: 14, weight: .bold))

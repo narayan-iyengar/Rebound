@@ -216,7 +216,7 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
         }
         guard let session = session else { return }
 
-        VTCompressionSessionEncodeFrame(
+        let status = VTCompressionSessionEncodeFrame(
             session,
             imageBuffer: pixelBuffer,
             presentationTimeStamp: pts,
@@ -224,9 +224,15 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
             frameProperties: nil,
             infoFlagsOut: nil
         ) { [weak self] status, _, sampleBuffer in
-            guard let self = self, status == noErr, let sb = sampleBuffer,
-                  CMSampleBufferDataIsReady(sb) else { return }
+            guard let self = self else { return }
+            guard status == noErr, let sb = sampleBuffer, CMSampleBufferDataIsReady(sb) else {
+                debugPrint("⚠️ ClipBuffer: encode callback bad status \(status)")
+                return
+            }
             self.clipQueue.async { self.handleEncodedLocked(sb) }
+        }
+        if status != noErr {
+            debugPrint("⚠️ ClipBuffer: EncodeFrame returned \(status)")
         }
     }
 
@@ -272,9 +278,17 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
 
     // MARK: - Encoded-sample handling + ring pruning (clipQueue)
 
+    private var encodedCount = 0
+
     private func handleEncodedLocked(_ sb: CMSampleBuffer) {
         videoSamples.append(sb)
         pruneLocked()
+
+        encodedCount += 1
+        if encodedCount % 90 == 0, let first = videoSamples.first, let last = videoSamples.last {
+            let span = (CMSampleBufferGetPresentationTimeStamp(last) - CMSampleBufferGetPresentationTimeStamp(first)).seconds
+            debugPrint("🎬 ClipBuffer ring: \(videoSamples.count) frames, \(String(format: "%.1f", span))s")
+        }
 
         guard exporting, let input = writerVideoInput else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sb)
