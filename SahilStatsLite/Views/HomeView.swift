@@ -44,16 +44,7 @@ struct HomeView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .background(Chalk.board.ignoresSafeArea())
-        .overlay(alignment: .leading) {
-            if page > 0 {
-                pageArrow(Self.pageIcon(page - 1)) { withAnimation(.easeInOut(duration: 0.28)) { page -= 1 } }
-            }
-        }
-        .overlay(alignment: .trailing) {
-            if page < 4 {
-                pageArrow(Self.pageIcon(page + 1)) { withAnimation(.easeInOut(duration: 0.28)) { page += 1 } }
-            }
-        }
+        .safeAreaInset(edge: .bottom) { pageBar }
         .navigationBarHidden(true)
         .alert("Video Not Saved to Photos",
                isPresented: Binding(get: { appState.photosSaveFailureMessage != nil },
@@ -122,18 +113,30 @@ struct HomeView: View {
         }
     }
 
-    /// Subtle edge affordance to page left/right (replaces the home-screen dots).
-    private func pageArrow(_ system: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Chalk.chalk.opacity(0.9))
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Chalk.board2.opacity(0.75)))
-                .overlay(Circle().stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+    /// Bottom page bar — a chalk pill of the five page icons, current one lit.
+    /// Replaces the home-screen dots: clearer, anchored, tap any icon to jump.
+    private var pageBar: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<5, id: \.self) { i in
+                let active = (i == page)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.28)) { page = i }
+                } label: {
+                    Image(systemName: Self.pageIcon(i))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(active ? Chalk.board : Chalk.chalk.opacity(0.55))
+                        .frame(width: 44, height: 34)
+                        .background(active ? Chalk.yellow : Color.clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Chalk.board2.opacity(0.96), in: Capsule())
+        .overlay(Capsule().stroke(Chalk.chalk.opacity(0.14), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+        .padding(.bottom, 6)
     }
 
     /// Page 0 — the "home": wordmark, upcoming games, and the start-a-game actions.
