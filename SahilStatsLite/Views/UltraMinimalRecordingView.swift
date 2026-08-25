@@ -178,27 +178,33 @@ struct UltraMinimalRecordingView: View {
             // Full screen camera
             cameraPreview
 
-            // Top bar: REC dot (left) + Stats button (right)
+            // Top bar: Clip (left) · [clock chip is a separate centered overlay] · Sahil-stats (right)
             VStack {
                 HStack {
-                    recIndicator
-                        .padding(.leading, 20)
+                    clipButton
+                        .padding(.leading, 16)
 
-                    trackingStatus
+                    // Streaming indicator (only while live to YouTube)
+                    if recordingManager.isStreamingActive || streamingService.health.isActive {
+                        HStack(spacing: 3) {
+                            Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 9))
+                            Text("YT").font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundColor(streamingService.health.isActive ? Chalk.coral : Chalk.yellow)
+                    }
+
+                    trackingStatus  // debug-only
 
                     Spacer()
 
-                    // Stats button - frosted glass style for visibility against any background
+                    // Sahil stats (top-right)
                     Button(action: { showSahilStats = true }) {
                         Image(systemName: "person.fill")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(Chalk.chalk)
                             .frame(width: 40, height: 40)
-                            .background(
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-                            )
+                            .background(Circle().fill(Color(white: 0.08, opacity: 0.55)))
+                            .overlay(Circle().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
                     }
                     .padding(.trailing, 16)
                 }
@@ -566,6 +572,31 @@ struct UltraMinimalRecordingView: View {
 
     // MARK: - REC Indicator
 
+    // Recording video is active (drives the clock-chip coral glow, replacing a REC pill).
+    private var isRecordingLive: Bool {
+        hasGameStarted && !appState.isStatsOnly
+    }
+
+    // Clip — the retroactive highlight. Prominent, top-left, same spot in both modes.
+    // NOTE: action is a placeholder until #3 wires the rolling AVAssetWriter buffer.
+    private var clipButton: some View {
+        Button {
+            // TODO(#3): start the retroactive-buffer Clip.
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(Chalk.board).frame(width: 8, height: 8)
+                Text("Clip").font(.system(size: 14, weight: .bold))
+            }
+            .foregroundColor(Chalk.board)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 7)
+            .background(Chalk.coral, in: Capsule())
+            .shadow(color: Chalk.coral.opacity(0.4), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var recIndicator: some View {
         Group {
             if appState.isStatsOnly {
@@ -757,8 +788,13 @@ struct UltraMinimalRecordingView: View {
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Chalk.chalk.opacity(0.22), lineWidth: 1)  // solid over video (calmer than dashed)
+                    // Glows coral while recording video — the chip carries the recording
+                    // state (no separate REC pill).
+                    .stroke(isRecordingLive ? Chalk.coral.opacity(0.65) : Chalk.chalk.opacity(0.22),
+                            lineWidth: isRecordingLive ? 1.5 : 1)
             )
+            .shadow(color: isRecordingLive ? Chalk.coral.opacity(0.55) : .clear,
+                    radius: isRecordingLive ? 12 : 0)
 
             // Expanded controls — spring down, inline, auto-collapse
             if controlsExpanded {
