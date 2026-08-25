@@ -94,6 +94,14 @@ class RecordingManager: NSObject, ObservableObject {
     /// from one session together — even if the game itself is never saved.
     nonisolated(unsafe) var currentClipGameId: String?
 
+    /// Practice mode: clips are tagged "Practice" (no score/opponent) and grouped
+    /// separately in the Store.
+    nonisolated(unsafe) var isPracticeSession = false
+
+    /// Whether the clip ring should burn the scoreboard overlay in. True for stats-only
+    /// games; false for practice (no score to show).
+    nonisolated(unsafe) var compositeClipOverlay = true
+
     // MARK: - Completion Handler
 
     private var recordingFinishedContinuation: CheckedContinuation<URL?, Never>?
@@ -149,13 +157,23 @@ class RecordingManager: NSObject, ObservableObject {
     nonisolated private func handleClipSaved(_ url: URL) {
         let s = overlayRenderer.state
         let gameId = currentClipGameId
+        let practice = isPracticeSession
         Task { @MainActor in
-            HighlightStore.shared.add(
-                fileURL: url, gameId: gameId,
-                homeTeam: s.homeTeam, awayTeam: s.awayTeam,
-                homeScore: s.homeScore, awayScore: s.awayScore,
-                period: s.period, clockTime: s.clockTime
-            )
+            if practice {
+                HighlightStore.shared.add(
+                    fileURL: url, gameId: gameId,
+                    homeTeam: "Practice", awayTeam: "",
+                    homeScore: 0, awayScore: 0,
+                    period: "", clockTime: "", isPractice: true
+                )
+            } else {
+                HighlightStore.shared.add(
+                    fileURL: url, gameId: gameId,
+                    homeTeam: s.homeTeam, awayTeam: s.awayTeam,
+                    homeScore: s.homeScore, awayScore: s.awayScore,
+                    period: s.period, clockTime: s.clockTime
+                )
+            }
         }
 
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
@@ -791,9 +809,12 @@ extension RecordingManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
         // can be saved even when the full game isn't being recorded to a file.
         if clipBuffer.isArmed && pendingOutputURL == nil && assetWriter == nil {
             if output === videoDataOutput, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                clipBuffer.feedVideoCompositing(pb,
-                    timestamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
-                    overlay: overlayRenderer)
+                let ts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                if compositeClipOverlay {
+                    clipBuffer.feedVideoCompositing(pb, timestamp: ts, overlay: overlayRenderer)
+                } else {
+                    clipBuffer.feedVideo(pb, timestamp: ts)  // practice: clean, no scoreboard
+                }
             } else if output === audioDataOutput {
                 clipBuffer.feedAudio(sampleBuffer)
             }

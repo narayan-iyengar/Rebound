@@ -26,6 +26,7 @@ struct Highlight: Codable, Identifiable, Sendable {
     let awayScore: Int
     let period: String
     let clockTime: String
+    var isPractice: Bool = false
 
     var url: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -42,9 +43,13 @@ struct HighlightGroup: Identifiable, Sendable {
     let homeTeam: String      // Sahil's team
     let awayTeam: String      // opponent
     let date: Date            // earliest clip in the session
+    let isPractice: Bool
     let clips: [Highlight]    // newest first
 
-    var matchup: String { "\(homeTeam) vs \(awayTeam)" }
+    var matchup: String {
+        if isPractice { return "Practice" }
+        return awayTeam.isEmpty ? homeTeam : "\(homeTeam) vs \(awayTeam)"
+    }
 }
 
 @MainActor
@@ -63,6 +68,7 @@ final class HighlightStore: ObservableObject {
                 id: key,
                 homeTeam: anchor.homeTeam, awayTeam: anchor.awayTeam,
                 date: clips.map(\.createdAt).min() ?? anchor.createdAt,
+                isPractice: anchor.isPractice,
                 clips: sorted
             )
         }
@@ -90,11 +96,12 @@ final class HighlightStore: ObservableObject {
 
     /// Thread-safe entry point — hops to main to mutate published state.
     nonisolated func add(fileURL: URL, gameId: String?, homeTeam: String, awayTeam: String,
-                         homeScore: Int, awayScore: Int, period: String, clockTime: String) {
+                         homeScore: Int, awayScore: Int, period: String, clockTime: String,
+                         isPractice: Bool = false) {
         let h = Highlight(id: UUID(), fileName: fileURL.lastPathComponent, createdAt: Date(),
                           gameId: gameId, homeTeam: homeTeam, awayTeam: awayTeam,
                           homeScore: homeScore, awayScore: awayScore,
-                          period: period, clockTime: clockTime)
+                          period: period, clockTime: clockTime, isPractice: isPractice)
         Task { @MainActor in
             self.highlights.insert(h, at: 0)
             self.persist()

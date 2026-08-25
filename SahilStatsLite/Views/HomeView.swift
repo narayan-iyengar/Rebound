@@ -27,7 +27,6 @@ struct HomeView: View {
 
     // Home-screen-style paging: Game Setup · Career Stats · Game Log · Store · Settings
     @State private var page = 0
-    @State private var pageBarExpanded = false
 
     // Undo toast state
     @State private var hiddenGameID: String? = nil
@@ -46,11 +45,6 @@ struct HomeView: View {
         .tabViewStyle(.page(indexDisplayMode: .never))
         .background(Chalk.board.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) { pageBar }
-        .onChange(of: page) { _, _ in
-            if pageBarExpanded {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { pageBarExpanded = false }
-            }
-        }
         .navigationBarHidden(true)
         .alert("Video Not Saved to Photos",
                isPresented: Binding(get: { appState.photosSaveFailureMessage != nil },
@@ -121,70 +115,19 @@ struct HomeView: View {
         }
     }
 
-    static func pageTitle(_ index: Int) -> String {
-        switch index {
-        case 0: return "Home"
-        case 1: return "Career"
-        case 2: return "Game Log"
-        case 3: return "Store"
-        default: return "Settings"
-        }
-    }
-
-    /// Bottom page bar. Collapsed to a small pill (current page's icon + name) while
-    /// you're on a page; tap to expand into the full five-icon switcher. Tapping an
-    /// icon (or swiping) collapses it again — native, out-of-the-way.
+    /// Persistent icons-only page bar (a slim chalk tab bar). Always visible so every
+    /// page is one tap away; the active page's icon is lit in a yellow capsule.
     private var pageBar: some View {
-        Group {
-            if pageBarExpanded {
-                expandedPageBar
-                    .transition(.scale(scale: 0.85, anchor: .bottom).combined(with: .opacity))
-            } else {
-                collapsedPageBar
-                    .transition(.scale(scale: 0.85, anchor: .bottom).combined(with: .opacity))
-            }
-        }
-        .padding(.bottom, 6)
-    }
-
-    private var collapsedPageBar: some View {
-        Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { pageBarExpanded = true }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: Self.pageIcon(page))
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Chalk.yellow)
-                Text(Self.pageTitle(page))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Chalk.chalk)
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(Chalk.chalk.opacity(0.45))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(Chalk.board2.opacity(0.96), in: Capsule())
-            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.14), lineWidth: 1))
-            .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var expandedPageBar: some View {
         HStack(spacing: 4) {
             ForEach(0..<5, id: \.self) { i in
                 let active = (i == page)
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                        page = i
-                        pageBarExpanded = false
-                    }
+                    withAnimation(.easeInOut(duration: 0.28)) { page = i }
                 } label: {
                     Image(systemName: Self.pageIcon(i))
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(active ? Chalk.board : Chalk.chalk.opacity(0.55))
-                        .frame(width: 44, height: 34)
+                        .frame(width: 46, height: 34)
                         .background(active ? Chalk.yellow : Color.clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -195,6 +138,7 @@ struct HomeView: View {
         .background(Chalk.board2.opacity(0.96), in: Capsule())
         .overlay(Capsule().stroke(Chalk.chalk.opacity(0.14), lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+        .padding(.bottom, 6)
     }
 
     /// Page 0 — the "home": wordmark, upcoming games, and the start-a-game actions.
@@ -224,6 +168,10 @@ struct HomeView: View {
             ChalkButton(title: "New Game", icon: "video.fill") {
                 appState.isLogOnly = false
                 appState.currentScreen = .setup
+            }
+
+            ChalkButton(title: "Practice", icon: "figure.basketball", color: Chalk.sky, filled: false) {
+                appState.startPractice()
             }
 
             Button {

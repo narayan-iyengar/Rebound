@@ -151,19 +151,28 @@ private struct ClipCard: View {
                 .overlay(RoundedRectangle(cornerRadius: 9).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(clip.scoreLine)
-                    .font(.system(size: 15, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundColor(Chalk.chalk)
-                    .lineLimit(1)
-                HStack(spacing: 8) {
-                    Text(clip.period)
+                if clip.isPractice {
+                    Text("Practice clip")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Chalk.chalk)
+                    Text(clip.createdAt, format: .dateTime.hour().minute())
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Chalk.yellow)
-                    Text(clip.clockTime)
-                        .font(.system(size: 12, weight: .medium))
-                        .monospacedDigit()
                         .foregroundColor(Chalk.dust)
+                } else {
+                    Text(clip.scoreLine)
+                        .font(.system(size: 15, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundColor(Chalk.chalk)
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text(clip.period)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Chalk.yellow)
+                        Text(clip.clockTime)
+                            .font(.system(size: 12, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundColor(Chalk.dust)
+                    }
                 }
             }
             Spacer()
@@ -244,7 +253,7 @@ private struct ClipPlayerSheet: View {
                 }
                 Spacer()
                 HStack {
-                    Text(clip.scoreLine)
+                    Text(clip.isPractice ? "Practice" : clip.scoreLine)
                         .font(.system(size: 15, weight: .semibold))
                         .monospacedDigit()
                         .foregroundColor(.white)

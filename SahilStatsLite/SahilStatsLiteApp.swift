@@ -89,6 +89,10 @@ struct ContentView: View {
             case .summary:
                 GameSummaryView()
                     .environmentObject(appState)
+
+            case .practice:
+                PracticeView()
+                    .environmentObject(appState)
             }
         }
         .onChange(of: watchService.pendingGameFromWatch) { _, newGame in
@@ -133,6 +137,13 @@ class AppState: ObservableObject {
         case recording
         case statsEntry  // Manual stats entry (no video)
         case summary
+        case practice    // Clip-only practice session (no game/score)
+    }
+
+    @MainActor
+    func startPractice() {
+        currentGame = nil
+        currentScreen = .practice
     }
 
     @MainActor
