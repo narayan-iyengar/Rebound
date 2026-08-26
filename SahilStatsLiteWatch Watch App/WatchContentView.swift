@@ -252,17 +252,16 @@ struct WatchContentView: View {
 
     private var quickGameButton: some View {
         Button(action: { showQuickGameConfirmation = true }) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 12))
+                    .font(.system(size: 22, weight: .semibold))
                 Text("Quick Game")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 17, weight: .bold))
             }
-            .foregroundColor(WChalk.chalk.opacity(0.7))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(WChalk.chalk.opacity(0.1))
-            .cornerRadius(16)
+            .foregroundColor(WChalk.board)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(WChalk.yellow, in: Capsule())
         }
         .buttonStyle(.plain)
     }

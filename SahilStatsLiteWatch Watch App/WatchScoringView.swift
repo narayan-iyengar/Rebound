@@ -173,6 +173,11 @@ struct WatchScoringView: View {
                 Text(connectivity.isClockRunning ? "LIVE" : "PAUSED")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
+
+                // Mode: recording with the phone (video) vs watch-only stats.
+                Image(systemName: connectivity.phoneClipArmed ? "video.fill" : "pencil")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(connectivity.phoneClipArmed ? WChalk.sky : WChalk.dust)
             }
 
             Spacer()

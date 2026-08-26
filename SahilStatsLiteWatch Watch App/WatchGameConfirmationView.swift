@@ -137,9 +137,9 @@ struct WatchGameConfirmationView: View {
                         // Start Recording button
                         Button(action: startGame) {
                             HStack(spacing: 6) {
-                                Image(systemName: "record.circle")
+                                Image(systemName: connectivity.isPhoneReachable ? "record.circle" : "pencil.line")
                                     .font(.system(size: 14, weight: .semibold))
-                                Text("Start Recording")
+                                Text(connectivity.isPhoneReachable ? "Start Recording" : "Start · Stats Only")
                                     .font(.system(size: 13, weight: .bold))
                             }
                             .foregroundColor(WChalk.board)
@@ -271,9 +271,9 @@ struct WatchQuickGameConfirmationView: View {
                     VStack(spacing: 10) {
                         Button(action: startQuickGame) {
                             HStack(spacing: 6) {
-                                Image(systemName: "record.circle")
+                                Image(systemName: connectivity.isPhoneReachable ? "record.circle" : "pencil.line")
                                     .font(.system(size: 14, weight: .semibold))
-                                Text("Start Recording")
+                                Text(connectivity.isPhoneReachable ? "Start Recording" : "Start · Stats Only")
                                     .font(.system(size: 13, weight: .bold))
                             }
                             .foregroundColor(WChalk.board)
