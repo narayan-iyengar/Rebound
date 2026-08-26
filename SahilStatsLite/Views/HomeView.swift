@@ -165,12 +165,9 @@ struct HomeView: View {
     }
 
     private var startButtons: some View {
+        // "New Game" now lives as the trailing card in the games deck above, so this
+        // is just Practice + the quiet manual-entry link.
         VStack(spacing: 12) {
-            ChalkButton(title: "New Game", icon: "video.fill") {
-                appState.isLogOnly = false
-                appState.currentScreen = .setup
-            }
-
             ChalkButton(title: "Practice", icon: "figure.basketball", color: Chalk.sky, filled: false) {
                 appState.startPractice()
             }
@@ -347,21 +344,16 @@ struct HomeView: View {
     // MARK: - Upcoming Games Section (Hero Card Design)
 
     private var upcomingGamesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Wall-clock LIVE filter (evaluated at render, not just at load): a game
-            // drops out the moment its scheduled end passes, so an ended-but-unrecorded
-            // game never sticks around as the big hero card. Everything below derives
-            // from this one live list so the hero, today, and later stay consistent.
-            let now = Date()
-            let liveGames = calendarManager.upcomingGames.filter { $0.endTime > now }
-
-            if liveGames.isEmpty {
-                emptyGamesCard
-            } else {
-                // Flip-through deck of chalk game cards (swipe or arrows).
-                UpcomingGamesStack(games: liveGames, appState: appState, onHide: hideGame)
-            }
-        }
+        // Deck games: keep ALL of today's games (even ones whose scheduled time
+        // passed — delays mean you may still be on the "past" one, swipeable back)
+        // plus future games; drop past DAYS. The stack defaults to the current/next
+        // game and always ends with a "New Game" card (so no separate button).
+        let now = Date()
+        let cal = Calendar.current
+        let deckGames = calendarManager.upcomingGames
+            .filter { cal.isDateInToday($0.startTime) || $0.startTime > now }
+            .sorted { $0.startTime < $1.startTime }
+        return UpcomingGamesStack(games: deckGames, appState: appState, onHide: hideGame)
     }
 
     private var emptyGamesCard: some View {

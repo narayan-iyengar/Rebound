@@ -344,130 +344,107 @@ struct UpcomingGameListRow: View {
     }
 }
 
-// MARK: - Upcoming Games Stack (flip-through deck of chalk cards)
+// MARK: - Upcoming Games Stack (clean single-card swipe deck + trailing "New Game" card)
+//
+// One game per card, swipe/page between them, and the LAST card is a giant-+ New
+// Game (no separate button). Default card = the game happening now / next up; you
+// can swipe BACK to earlier same-day games (delays mean you may still be on the
+// "past" one). Same metaphor as the Watch.
 
 struct UpcomingGamesStack: View {
     let games: [GameCalendarManager.CalendarGame]
     let appState: AppState
     let onHide: (String) -> Void
 
-    @State private var order: [Int] = []      // game indices; order[0] = top card
-    @State private var viewedIndex: Int = 0   // which card you're on (for the "N / total")
-    @State private var drag: CGSize = .zero
+    @State private var index: Int = 0
+
+    // Default to the current/next game (first whose end time is still in the future);
+    // if every game's scheduled end has passed (a delayed last game), land on the last.
+    private var defaultIndex: Int {
+        let now = Date()
+        if let i = games.firstIndex(where: { $0.endTime > now }) { return i }
+        return max(0, games.count - 1)
+    }
+
+    private var pageCount: Int { games.count + 1 }  // +1 for the New Game card
 
     var body: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                ForEach(Array(order.enumerated()), id: \.element) { depth, gi in
-                    if depth < 3 {
-                        GameStackCard(game: games[gi], appState: appState, onHide: onHide)
-                            .scaleEffect(1 - CGFloat(depth) * 0.05)
-                            .offset(y: CGFloat(depth) * 14)
-                            .rotationEffect(.degrees(depth == 0 ? 0 : (depth.isMultiple(of: 2) ? 2 : -2)))
-                            .offset(depth == 0 ? drag : .zero)
-                            .opacity(depth == 0 ? 1 : (depth == 1 ? 0.85 : 0.5))
-                            .zIndex(Double(order.count - depth))
-                            .allowsHitTesting(depth == 0)
-                            .gesture(depth == 0 && games.count > 1 ? dragGesture : nil)
-                    }
+        VStack(spacing: 12) {
+            TabView(selection: $index) {
+                ForEach(Array(games.enumerated()), id: \.element.id) { i, game in
+                    GameCard(game: game, appState: appState, onHide: onHide)
+                        .padding(.horizontal, 2)
+                        .tag(i)
                 }
+                NewGameCard(appState: appState)
+                    .padding(.horizontal, 2)
+                    .tag(games.count)
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 320)
 
-            if games.count > 1 {
-                HStack(spacing: 20) {
-                    Button { advance(-1) } label: { chevron("chevron.left") }
-                    Text("\(viewedIndex + 1) / \(games.count)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Chalk.dust)
-                        .frame(minWidth: 54)
-                    Button { advance(1) } label: { chevron("chevron.right") }
+            // Custom page dots (active = wide yellow). Last dot = the New Game card.
+            HStack(spacing: 6) {
+                ForEach(0..<pageCount, id: \.self) { i in
+                    Capsule()
+                        .fill(i == index ? Chalk.yellow : Chalk.chalk.opacity(0.25))
+                        .frame(width: i == index ? 18 : 7, height: 7)
                 }
             }
         }
-        .onAppear { if order.isEmpty { order = Array(games.indices) } }
-        .onChange(of: games.count) { _, _ in order = Array(games.indices); viewedIndex = 0 }
-    }
-
-    private func chevron(_ name: String) -> some View {
-        Image(systemName: name)
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundColor(Chalk.chalk)
-            .frame(width: 44, height: 44)
-            .overlay(Circle().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture()
-            .onChanged { drag = $0.translation }
-            .onEnded { value in
-                if abs(value.translation.width) > 90 {
-                    let dir = value.translation.width > 0 ? -1 : 1
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                        drag = CGSize(width: dir > 0 ? -620 : 620, height: 0)
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
-                        advance(dir)
-                        drag = .zero
-                    }
-                } else {
-                    withAnimation(.spring()) { drag = .zero }
-                }
-            }
-    }
-
-    private func advance(_ dir: Int) {
-        guard games.count > 1 else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-            if dir > 0 { order.append(order.removeFirst()) }
-            else { order.insert(order.removeLast(), at: 0) }
-            viewedIndex = (viewedIndex + dir + games.count) % games.count
-        }
+        .onAppear { index = defaultIndex }
+        .onChange(of: games.count) { _, _ in index = defaultIndex }
     }
 }
 
-// One game card face for the stack.
-struct GameStackCard: View {
+// One clean game card — opponent is the hero (sky), team in yellow, tap Record.
+struct GameCard: View {
     let game: GameCalendarManager.CalendarGame
     let appState: AppState
     let onHide: (String) -> Void
 
     private var isToday: Bool { Calendar.current.isDateInToday(game.startTime) }
     private var isTomorrow: Bool { Calendar.current.isDateInTomorrow(game.startTime) }
-    private var dayLabel: String {
-        if isToday { return "TODAY" }
-        if isTomorrow { return "TOMORROW" }
-        let f = DateFormatter(); f.dateFormat = "EEE, MMM d"
-        return f.string(from: game.startTime).uppercased()
+    private var isLive: Bool { game.startTime <= Date() && game.endTime > Date() }
+    private var whenLabel: String {
+        let day: String
+        if isToday { day = "Today" }
+        else if isTomorrow { day = "Tomorrow" }
+        else { let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; day = f.string(from: game.startTime) }
+        return "\(day) · \(game.timeString)"
     }
     private var accent: Color { isToday ? Chalk.green : Chalk.yellow }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Day chip + hide
             HStack {
                 HStack(spacing: 6) {
                     Circle().fill(accent).frame(width: 8, height: 8)
-                    Text(dayLabel)
-                        .font(.system(size: 12, weight: .semibold)).tracking(0.8)
+                    Text(isLive ? "NOW" : (isToday ? "TODAY" : "UPCOMING"))
+                        .font(.system(size: 11, weight: .semibold)).tracking(0.8)
                         .foregroundColor(accent)
                 }
                 Spacer()
                 Button { onHide(game.id) } label: {
-                    Image(systemName: "eye.slash")
-                        .font(.footnote).foregroundColor(Chalk.dust.opacity(0.7))
+                    Image(systemName: "eye.slash").font(.footnote).foregroundColor(Chalk.dust.opacity(0.7))
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 10)
+            .padding(.horizontal, 20).padding(.top, 16)
 
-            VStack(spacing: 12) {
-                Text(game.timeString)
-                    .font(.system(size: 44, weight: .bold)).monospacedDigit()
-                    .foregroundColor(Chalk.crisp)
+            Spacer(minLength: 4)
+
+            VStack(spacing: 6) {
+                Text(whenLabel)
+                    .font(.system(size: 14, weight: .semibold)).monospacedDigit()
+                    .foregroundColor(Chalk.dust)
+                Text("vs").font(.chalkScript(20)).foregroundColor(Chalk.dust)
                 Text(game.opponent)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(Chalk.chalk)
-                    .multilineTextAlignment(.center).lineLimit(2)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundColor(Chalk.sky)
+                    .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.6)
                 if let team = game.detectedTeam {
-                    Text(team).font(.system(size: 13, weight: .medium)).foregroundColor(Chalk.sky)
+                    Text(team).font(.system(size: 15, weight: .semibold)).foregroundColor(Chalk.yellow)
                 }
                 if !game.location.isEmpty {
                     HStack(spacing: 4) {
@@ -477,7 +454,9 @@ struct GameStackCard: View {
                     .foregroundColor(Chalk.dust)
                 }
             }
-            .padding(.horizontal, 20).padding(.bottom, 16)
+            .padding(.horizontal, 20)
+
+            Spacer(minLength: 6)
 
             ChalkButton(title: "Record Game", icon: "video.fill", color: Chalk.yellow) {
                 appState.pendingCalendarGame = (opponent: game.opponent, location: game.location, team: game.detectedTeam)
@@ -486,6 +465,39 @@ struct GameStackCard: View {
             }
             .padding(.horizontal, 20).padding(.bottom, 18)
         }
+        .frame(maxHeight: .infinity)
         .chalkCard(padding: 0)
+    }
+}
+
+// The trailing "New Game" card (replaces the separate button). Whole card is tappable.
+struct NewGameCard: View {
+    let appState: AppState
+
+    private func start() {
+        appState.pendingCalendarGame = nil
+        appState.isLogOnly = false
+        appState.currentScreen = .setup
+    }
+
+    var body: some View {
+        Button(action: start) {
+            VStack(spacing: 14) {
+                Spacer()
+                ZStack {
+                    Circle().fill(Chalk.yellow).frame(width: 84, height: 84)
+                    Image(systemName: "plus")
+                        .font(.system(size: 42, weight: .regular))
+                        .foregroundColor(Chalk.board)
+                }
+                Text("New Game").font(.chalkScript(28)).foregroundColor(Chalk.chalk)
+                Text("Pick team & opponent · record")
+                    .font(.system(size: 13)).foregroundColor(Chalk.dust)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .chalkCard(padding: 0)
+        }
+        .buttonStyle(.plain)
     }
 }
