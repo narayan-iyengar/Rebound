@@ -230,8 +230,7 @@ private struct ChalkCard: ViewModifier {
                         in: RoundedRectangle(cornerRadius: Chalk.cardCorner))
             .overlay(
                 RoundedRectangle(cornerRadius: Chalk.cardCorner)
-                    .strokeBorder(Chalk.chalk.opacity(0.40),
-                                  style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    .strokeBorder(Chalk.chalk.opacity(0.30), lineWidth: 1.5)
             )
     }
 }

@@ -25,6 +25,74 @@ struct CareerStatsSheet: View {
     // Sahil's birthday for age calculation
     private let birthday = Calendar.current.date(from: DateComponents(year: 2016, month: 11, day: 1))!
 
+    // MARK: - Filters (season · team · age) — scope every card below
+
+    @State private var seasonFilter: String? = nil
+    @State private var teamFilter: String? = nil
+    @State private var ageFilter: String? = nil
+
+    private var allGames: [Game] { persistenceManager.savedGames }
+
+    /// Games matching the active filters (nil filter = "all").
+    private var filteredGames: [Game] {
+        allGames.filter { g in
+            (seasonFilter == nil || g.season == seasonFilter) &&
+            (teamFilter == nil || g.teamName == teamFilter) &&
+            (ageFilter == nil || g.ageLevel == ageFilter)
+        }
+    }
+
+    /// Distinct seasons present, newest first.
+    private var seasons: [String] {
+        var earliest: [String: Date] = [:]
+        for g in allGames {
+            let s = g.season
+            if earliest[s] == nil || g.date < earliest[s]! { earliest[s] = g.date }
+        }
+        return earliest.keys.sorted { earliest[$0]! > earliest[$1]! }
+    }
+    private var teams: [String] {
+        Array(Set(allGames.map { $0.teamName })).filter { !$0.isEmpty }.sorted()
+    }
+    private var ages: [String] {
+        Array(Set(allGames.compactMap { $0.ageLevel })).filter { !$0.isEmpty }.sorted()
+    }
+    private var anyFilterActive: Bool { seasonFilter != nil || teamFilter != nil || ageFilter != nil }
+
+    /// All career numbers, recomputed over the filtered subset.
+    private struct Agg {
+        var games = 0, wins = 0, losses = 0
+        var ppg = 0.0, rpg = 0.0, apg = 0.0, spg = 0.0, bpg = 0.0
+        var fgMade = 0, fgAtt = 0, tpMade = 0, tpAtt = 0, ftMade = 0, ftAtt = 0
+        var record: String { "\(wins)-\(losses)" }
+        var winPct: Double { games > 0 ? Double(wins) / Double(games) * 100 : 0 }
+        var fgPct: Double { fgAtt > 0 ? Double(fgMade) / Double(fgAtt) * 100 : 0 }
+        var tpPct: Double { tpAtt > 0 ? Double(tpMade) / Double(tpAtt) * 100 : 0 }
+        var ftPct: Double { ftAtt > 0 ? Double(ftMade) / Double(ftAtt) * 100 : 0 }
+    }
+
+    private var agg: Agg {
+        let g = filteredGames
+        var a = Agg()
+        a.games = g.count
+        guard !g.isEmpty else { return a }
+        func avg(_ f: (Game) -> Int) -> Double { Double(g.reduce(0) { $0 + f($1) }) / Double(g.count) }
+        a.ppg = avg { $0.playerStats.points }
+        a.rpg = avg { $0.playerStats.rebounds }
+        a.apg = avg { $0.playerStats.assists }
+        a.spg = avg { $0.playerStats.steals }
+        a.bpg = avg { $0.playerStats.blocks }
+        a.wins = g.filter { $0.isWin }.count
+        a.losses = g.filter { $0.isLoss }.count
+        a.fgMade = g.reduce(0) { $0 + $1.playerStats.fg2Made + $1.playerStats.fg3Made }
+        a.fgAtt = g.reduce(0) { $0 + $1.playerStats.fg2Attempted + $1.playerStats.fg3Attempted }
+        a.tpMade = g.reduce(0) { $0 + $1.playerStats.fg3Made }
+        a.tpAtt = g.reduce(0) { $0 + $1.playerStats.fg3Attempted }
+        a.ftMade = g.reduce(0) { $0 + $1.playerStats.ftMade }
+        a.ftAtt = g.reduce(0) { $0 + $1.playerStats.ftAttempted }
+        return a
+    }
+
     enum TimePeriod: String, CaseIterable {
         case lastFive = "Last 5"
         case byWeek = "By Week"
