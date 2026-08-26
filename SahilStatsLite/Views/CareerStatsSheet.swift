@@ -515,22 +515,31 @@ struct CareerStatsSheet: View {
     private var growthSection: some View {
         let data = seasonPPG
         if data.count > 1 {
-            sectionHeader("Growth", trailing: "PPG by season")
+            sectionHeader("Growth", trailing: "tap a season")
             let maxPPG = max(data.map { $0.ppg }.max() ?? 1, 1)
             HStack(alignment: .bottom, spacing: 10) {
                 ForEach(data, id: \.season) { d in
-                    VStack(spacing: 4) {
-                        Text(String(format: "%.1f", d.ppg))
-                            .font(.system(size: 12, weight: .bold)).monospacedDigit()
-                            .foregroundColor(d.current ? Chalk.yellow : Chalk.dust)
-                        RoundedRectangle(cornerRadius: 5)
-                            .fill(d.current ? Chalk.yellow : Chalk.sky.opacity(0.4))
-                            .frame(height: max(8, CGFloat(d.ppg / maxPPG) * 96))
-                        Text(shortSeason(d.season))
-                            .font(.system(size: 10)).foregroundColor(Chalk.dust)
-                            .lineLimit(1).fixedSize()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            seasonFilter = (seasonFilter == d.season) ? nil : d.season
+                        }
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text(String(format: "%.1f", d.ppg))
+                                .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                                .foregroundColor(d.current ? Chalk.yellow : Chalk.dust)
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(d.current ? Chalk.yellow : Chalk.sky.opacity(0.4))
+                                .frame(height: max(8, CGFloat(d.ppg / maxPPG) * 96))
+                            Text(shortSeason(d.season))
+                                .font(.system(size: 10, weight: d.current ? .bold : .regular))
+                                .foregroundColor(d.current ? Chalk.chalk : Chalk.dust)
+                                .lineLimit(1).fixedSize()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.plain)
                 }
             }
             .frame(height: 130)
@@ -794,182 +803,4 @@ struct CareerStatsSheet: View {
         }
     }
 
-    // MARK: - Recent Form Card
-
-    private var recentFormData: (ppg: Double, diff: Double, count: Int,
-                                  bestPts: Int, bestOpponent: String, bestDate: String)? {
-        let games = persistenceManager.savedGames
-        guard games.count >= 3 else { return nil }
-        let last5 = Array(games.prefix(5))
-        let ppg = last5.reduce(0.0) { $0 + Double($1.playerStats.points) } / Double(last5.count)
-        let diff = ppg - persistenceManager.careerPPG
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMM d"
-        if let best = games.max(by: { $0.playerStats.points < $1.playerStats.points }), best.playerStats.points > 0 {
-            return (ppg, diff, last5.count, best.playerStats.points, best.opponent, fmt.string(from: best.date))
-        }
-        return (ppg, diff, last5.count, 0, "", "")
-    }
-
-    @ViewBuilder
-    private var recentFormCard: some View {
-        if let d = recentFormData {
-            card {
-                VStack(spacing: 10) {
-                    HStack(spacing: 6) {
-                        Image(systemName: d.diff >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                            .foregroundColor(d.diff >= 0 ? Chalk.green : Chalk.coral)
-                        Text("Last \(d.count) games:")
-                            .font(.system(size: 15))
-                            .foregroundColor(Chalk.dust)
-                        Text(String(format: "%.1f PPG", d.ppg))
-                            .font(.system(size: 15, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundColor(Chalk.chalk)
-                        Text(String(format: "%+.1f vs season", d.diff))
-                            .font(.system(size: 12))
-                            .monospacedDigit()
-                            .foregroundColor(d.diff >= 0 ? Chalk.green : Chalk.coral)
-                        Spacer()
-                    }
-                    if d.bestPts > 0 {
-                        HStack(spacing: 6) {
-                            Image(systemName: "star.fill").foregroundColor(Chalk.yellow)
-                            Text("Best:").font(.system(size: 12)).foregroundColor(Chalk.dust)
-                            Text("\(d.bestPts) pts vs \(d.bestOpponent)")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(Chalk.chalk)
-                            Spacer()
-                            Text(d.bestDate).font(.caption2).foregroundColor(Chalk.dust)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Career Averages Card
-
-    private var careerAveragesCard: some View {
-        card {
-            VStack(spacing: 16) {
-                HStack {
-                    Text("Career Averages")
-                        .font(.chalkScript(22))
-                        .foregroundColor(Chalk.chalk)
-                    Spacer()
-                    Text("\(persistenceManager.careerGames) games")
-                        .font(.system(size: 12))
-                        .foregroundColor(Chalk.dust)
-                }
-
-                HStack(spacing: 0) {
-                    careerStat(value: String(format: "%.1f", persistenceManager.careerPPG), label: "PPG", color: Chalk.yellow)
-                    careerStat(value: String(format: "%.1f", persistenceManager.careerRPG), label: "RPG", color: Chalk.sky)
-                    careerStat(value: String(format: "%.1f", persistenceManager.careerAPG), label: "APG", color: Chalk.green)
-                    careerStat(value: String(format: "%.1f", persistenceManager.careerSPG), label: "SPG", color: Chalk.chalkDim)
-                    careerStat(value: String(format: "%.1f", persistenceManager.careerBPG), label: "BPG", color: Chalk.coral)
-                }
-
-                // Record
-                HStack(spacing: 20) {
-                    Label(persistenceManager.careerRecord, systemImage: "trophy.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundColor(Chalk.chalk)
-
-                    if persistenceManager.careerGames > 0 {
-                        let winPct = Double(persistenceManager.careerWins) / Double(persistenceManager.careerGames) * 100
-                        Text(String(format: "%.0f%% Win Rate", winPct))
-                            .font(.system(size: 15))
-                            .monospacedDigit()
-                            .foregroundColor(Chalk.dust)
-                    }
-                }
-            }
-        }
-    }
-
-    private func careerStat(value: String, label: String, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.system(size: 22, weight: .bold))
-                .monospacedDigit()
-                .foregroundColor(color)
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundColor(Chalk.dust)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Shooting Stats Card
-
-    private var shootingStatsCard: some View {
-        card {
-            VStack(spacing: 16) {
-                HStack {
-                    Text("Shooting")
-                        .font(.chalkScript(22))
-                        .foregroundColor(Chalk.chalk)
-                    Spacer()
-                }
-
-                HStack(spacing: 20) {
-                    shootingCircle(
-                        label: "FG",
-                        made: persistenceManager.careerFGMade,
-                        attempted: persistenceManager.careerFGAttempted,
-                        pct: persistenceManager.careerFGPercentage,
-                        color: Chalk.sky
-                    )
-                    shootingCircle(
-                        label: "3PT",
-                        made: persistenceManager.career3PMade,
-                        attempted: persistenceManager.career3PAttempted,
-                        pct: persistenceManager.career3PPercentage,
-                        color: Chalk.green
-                    )
-                    shootingCircle(
-                        label: "FT",
-                        made: persistenceManager.careerFTMade,
-                        attempted: persistenceManager.careerFTAttempted,
-                        pct: persistenceManager.careerFTPercentage,
-                        color: Chalk.yellow
-                    )
-                }
-            }
-        }
-    }
-
-    private func shootingCircle(label: String, made: Int, attempted: Int, pct: Double, color: Color) -> some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(Chalk.chalk.opacity(0.15), lineWidth: 6)
-                    .frame(width: 70, height: 70)
-
-                Circle()
-                    .trim(from: 0, to: min(pct / 100, 1.0))
-                    .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .frame(width: 70, height: 70)
-                    .rotationEffect(.degrees(-90))
-
-                Text(String(format: "%.0f%%", pct))
-                    .font(.system(size: 14, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundColor(color)
-            }
-
-            Text(label)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Chalk.chalk)
-
-            Text("\(made)/\(attempted)")
-                .font(.caption2)
-                .monospacedDigit()
-                .foregroundColor(Chalk.dust)
-        }
-        .frame(maxWidth: .infinity)
-    }
 }

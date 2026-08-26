@@ -913,8 +913,11 @@ struct UltraMinimalRecordingView: View {
             }
             .foregroundColor(color)
             .frame(width: 62, height: 50)
-            .background(color.opacity(0.15))
-            .cornerRadius(8)
+            // Solid dark chip + colored border so it stays legible over any video
+            // (the old translucent color fill washed out against bright footage).
+            .background(Color(white: 0.10, opacity: 0.92), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.75), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
         }
         .buttonStyle(.plain)
     }
