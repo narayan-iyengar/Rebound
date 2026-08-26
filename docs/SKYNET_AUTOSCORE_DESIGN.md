@@ -817,6 +817,18 @@ Ideas we considered and did **not** pursue, and why. New rejections append here 
 
 Every change appends here. This is the doc's ancestral record.
 
+### v2.1 — 2026-08-25 (supervision port ASSESSED; PolygonZone/LineZone added; ByteTrack + §17 found already-shipped)
+- **Who:** Narayan (pointed at roboflow/supervision) + Claude (code assessment + implementation)
+- **Trigger:** After the BallNet-R shelving, Narayan asked to "implement the robovision stuff" = Roboflow `supervision` (github.com/roboflow/supervision, MIT): ByteTrack, DetectionsSmoother, PolygonZone/LineZone.
+- **Assessment (read the actual code, not assumed):**
+  - **ByteTrack + OC-SORT are ALREADY implemented** in `DeepTracker.swift` — two-stage low-confidence re-matching, velocity consistency, appearance Re-ID, Kalman + observation momentum. No port needed.
+  - **§17 foreground-occlusion robustness is ALREADY implemented** in `AutoZoomManager.swift` — collapse detection + hold-don't-chase (coast on last stable center when the on-court set collapses or reliability < 0.25). No port needed.
+  - **DetectionsSmoother would be redundant** — the live path already smooths via Kalman + observation momentum + hold + SmoothZoomController. A second smoother = risk to a working system for marginal gain. Ported as an UNWIRED utility only.
+- **What was added:** `Services/SupervisionKit.swift` — Swift ports of **PolygonZone** (point-in-polygon + triggerCount + boundingBox), **LineZone** (directed-line crossing counter by tracker id, in/out), and **DetectionsSmoother** (per-track box moving-average, utility/unwired). Normalized AI-frame coords (0…1, y-up). Self-contained; depends on nothing in the tracker/camera path.
+- **Why it matters:** PolygonZone/LineZone are the **rim-ROI primitive for §16** (rim tap → PolygonZone around the hoop → gate on ball/pose entering the zone → LineZone for "ball crossed the rim plane downward"). Additive foundation for auto-scoring; touches nothing in the working tracker/camera path (zero regression risk).
+- **Constraint honored:** no live tracking/camera code changed. Any future tracker/camera edit stays behind a debug toggle pending the ship-or-kill 3-game gate.
+- **Next (open, product call):** §16 Phase 1 — rim tap-to-locate UI + shot-gate (pose/ball-in-zone). Claude's proposed lowest-risk first step = **"auto-clip on shot"** (fire the existing Clip on the shot-gate; no make/miss needed; reuses the shipped Clip infra; fails safe). make/miss + auto-score layer on after the gate is validated on real footage.
+
 ### v0.1 — 2026-06-27 (initial draft)
 - **Who:** Claude Sonnet 4.6 (architect, in session with Narayan)
 - **What:** Created §1-12 + Appendices A-B based on TrackNetV3 paper reading, `model.py` inspection, and existing Rebound codebase audit.
