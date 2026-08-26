@@ -41,6 +41,8 @@ struct GameDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var youtubeService = YouTubeService.shared
     @ObservedObject private var persistenceManager = GamePersistenceManager.shared
+    @ObservedObject private var highlightStore = HighlightStore.shared
+    @State private var playerItem: PlayerItem?
 
     // Edit state
     @State private var showEditSheet = false
@@ -255,6 +257,9 @@ struct GameDetailSheet: View {
                     }
                     .padding(.horizontal)
 
+                    // Video & Clips — watch the full game (local file) + this game's clips.
+                    videoAndClipsSection
+
                     // Player Stats
                     VStack(spacing: 16) {
                         Text("Player Stats")
@@ -287,6 +292,9 @@ struct GameDetailSheet: View {
             }
             .chalkBoard()
             .navigationBarHidden(true)
+            .fullScreenCover(item: $playerItem) { item in
+                VideoPlayerSheet(url: item.url, caption: item.caption)
+            }
             .sheet(isPresented: $showEditSheet) {
                 // Pass binding that saves via persistence manager
                 if let index = persistenceManager.savedGames.firstIndex(where: { $0.id == gameId }) {
@@ -296,6 +304,80 @@ struct GameDetailSheet: View {
                     ))
                 }
             }
+        }
+    }
+
+    // MARK: - Video & Clips
+
+    @ViewBuilder
+    private var videoAndClipsSection: some View {
+        let clips = highlightStore.clips(forGameId: game.id)
+        let localVideo = resolveVideoURL(for: game)
+
+        if localVideo != nil || !clips.isEmpty {
+            VStack(spacing: 14) {
+                Text("Video & Clips")
+                    .font(.chalkScript(22))
+                    .foregroundColor(Chalk.chalk)
+
+                if let localVideo {
+                    Button {
+                        playerItem = PlayerItem(url: localVideo, caption: game.scoreString)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "play.circle.fill").font(.system(size: 22))
+                            Text("Watch full game").font(.system(size: 15, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(Chalk.chalk)
+                        .padding()
+                        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                } else if game.youtubeStatus == .uploaded {
+                    Text("Full game is on YouTube (link above).")
+                        .font(.system(size: 12))
+                        .foregroundColor(Chalk.dust)
+                }
+
+                if !clips.isEmpty {
+                    HStack {
+                        Text("\(clips.count) clip\(clips.count == 1 ? "" : "s")")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Chalk.dust)
+                        Spacer()
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(clips) { clip in
+                                Button {
+                                    playerItem = PlayerItem(url: clip.url,
+                                                            caption: clip.isPractice ? "Practice" : clip.scoreLine)
+                                } label: {
+                                    ClipThumbnail(url: clip.url)
+                                        .frame(width: 132, height: 74)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(
+                                            Image(systemName: "play.circle.fill")
+                                                .font(.system(size: 26))
+                                                .foregroundColor(.white.opacity(0.9))
+                                                .shadow(radius: 3)
+                                        )
+                                        .overlay(RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Chalk.board2.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal)
         }
     }
 

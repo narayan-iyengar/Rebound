@@ -49,7 +49,7 @@ struct StoreView: View {
             if selecting { selectionBar }
         }
         .fullScreenCover(item: $playing) { clip in
-            ClipPlayerSheet(clip: clip)
+            VideoPlayerSheet(url: clip.url, caption: clip.isPractice ? "Practice" : clip.scoreLine)
         }
         .confirmationDialog("Delete \(selected.count) clip\(selected.count == 1 ? "" : "s")?",
                             isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -301,88 +301,3 @@ private struct ClipCard: View {
     }
 }
 
-// MARK: - Thumbnail (first frame)
-
-private struct ClipThumbnail: View {
-    let url: URL
-    @State private var image: UIImage?
-
-    var body: some View {
-        ZStack {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                LinearGradient(colors: [Chalk.board, Chalk.board2], startPoint: .top, endPoint: .bottom)
-            }
-        }
-        .task(id: url) { await load() }
-    }
-
-    private func load() async {
-        let asset = AVURLAsset(url: url)
-        let gen = AVAssetImageGenerator(asset: asset)
-        gen.appliesPreferredTrackTransform = true
-        gen.maximumSize = CGSize(width: 320, height: 320)
-        gen.requestedTimeToleranceBefore = CMTime(seconds: 1, preferredTimescale: 600)
-        gen.requestedTimeToleranceAfter = CMTime(seconds: 1, preferredTimescale: 600)
-        // Grab a frame ~1s in (past the opening keyframe) when possible.
-        let time = CMTime(seconds: 1, preferredTimescale: 600)
-        if let cg = try? await gen.image(at: time).image {
-            let img = UIImage(cgImage: cg)
-            await MainActor.run { self.image = img }
-        }
-    }
-}
-
-// MARK: - Player
-
-private struct ClipPlayerSheet: View {
-    let clip: Highlight
-    @Environment(\.dismiss) private var dismiss
-    @State private var player: AVPlayer?
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            if let player {
-                VideoPlayer(player: player)
-                    .ignoresSafeArea()
-                    .onAppear { player.play() }
-            }
-
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white.opacity(0.85))
-                            .shadow(radius: 4)
-                    }
-                    .padding(.top, 12)
-                    .padding(.trailing, 16)
-                }
-                Spacer()
-                HStack {
-                    Text(clip.isPractice ? "Practice" : clip.scoreLine)
-                        .font(.system(size: 15, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundColor(.white)
-                    Spacer()
-                    ShareLink(item: clip.url) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 28)
-            }
-        }
-        .onAppear { player = AVPlayer(url: clip.url) }
-        .onDisappear { player?.pause() }
-    }
-}
