@@ -142,7 +142,7 @@ struct WatchGameConfirmationView: View {
                                 Text("Start Recording")
                                     .font(.system(size: 13, weight: .bold))
                             }
-                            .foregroundColor(WChalk.chalk)
+                            .foregroundColor(WChalk.board)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(WChalk.yellow)
@@ -276,7 +276,7 @@ struct WatchQuickGameConfirmationView: View {
                                 Text("Start Recording")
                                     .font(.system(size: 13, weight: .bold))
                             }
-                            .foregroundColor(WChalk.chalk)
+                            .foregroundColor(WChalk.board)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(WChalk.yellow)

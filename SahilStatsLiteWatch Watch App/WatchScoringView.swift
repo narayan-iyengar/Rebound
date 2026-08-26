@@ -23,6 +23,7 @@ struct WatchScoringView: View {
     @State private var oppFeedback: Int? = nil
     @State private var colonVisible: Bool = true
     @State private var clipSent: Bool = false
+    @State private var clipInFlight: Bool = false
 
     private let layout: WatchLayout
 
@@ -127,24 +128,37 @@ struct WatchScoringView: View {
 
     // MARK: - Clip from the wrist
 
+    // Can we actually clip? Only when the phone is reachable AND its clip ring is armed
+    // (i.e. it's recording / stats-only buffering). Prevents phantom "Clipped" on a
+    // watch-only test when the phone isn't recording.
+    private var canClip: Bool { connectivity.isPhoneReachable && connectivity.phoneClipArmed }
+
     private var watchClipButton: some View {
         Button {
+            guard canClip, !clipInFlight else { return }
             connectivity.sendClip()
-            clipSent = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { clipSent = false }
+            clipInFlight = true
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: clipSent ? "checkmark" : "scissors")
+                Image(systemName: clipSent ? "checkmark" : (clipInFlight ? "hourglass" : "scissors"))
                     .font(.system(size: 11, weight: .bold))
-                Text(clipSent ? "Clipped" : "Clip")
+                Text(clipSent ? "Clipped" : (clipInFlight ? "Clipping…" : (canClip ? "Clip" : "Not recording")))
                     .font(.system(size: 13, weight: .bold))
             }
-            .foregroundColor(WChalk.board)
+            .foregroundColor((canClip || clipInFlight || clipSent) ? WChalk.board : WChalk.chalk.opacity(0.6))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
-            .background(Capsule().fill(clipSent ? WChalk.green : WChalk.coral))
+            .background(Capsule().fill(
+                clipSent ? WChalk.green : ((canClip || clipInFlight) ? WChalk.coral : WChalk.chalk.opacity(0.14))
+            ))
         }
         .buttonStyle(.plain)
+        .disabled(!canClip && !clipInFlight)
+        .onChange(of: connectivity.clipSavedTick) { _, _ in
+            clipInFlight = false
+            clipSent = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { clipSent = false }
+        }
     }
 
     // MARK: - Compact Header (Series 8 / smaller - live + period on one line)

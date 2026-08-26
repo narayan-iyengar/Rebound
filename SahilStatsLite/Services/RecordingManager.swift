@@ -114,7 +114,11 @@ class RecordingManager: NSObject, ObservableObject {
 
         // Surface clip state to the UI, and handle a finished clip (Photos + store).
         clipBuffer.onStateChange = { [weak self] st in
-            Task { @MainActor in self?.clipState = st }
+            Task { @MainActor in
+                self?.clipState = st
+                // Keep the watch's Clip button in sync with whether we can actually clip.
+                self?.pushClipArmedToWatch(st != .idle)
+            }
         }
         clipBuffer.onClipSaved = { [weak self] url in
             self?.handleClipSaved(url)
@@ -122,6 +126,11 @@ class RecordingManager: NSObject, ObservableObject {
     }
 
     // MARK: - Clip control
+
+    @MainActor
+    private func pushClipArmedToWatch(_ armed: Bool) {
+        WatchConnectivityService.shared.setClipArmed(armed)
+    }
 
     /// Save a retroactive highlight: buffered ~30s + forward window from Settings.
     @MainActor
@@ -182,6 +191,9 @@ class RecordingManager: NSObject, ObservableObject {
             }
         }
 
+        // Confirm the save to the watch (drives the wrist "Clipped ✓").
+        Task { @MainActor in WatchConnectivityService.shared.sendClipSaved() }
+
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else { return }
             var placeholderId: String?
@@ -191,7 +203,7 @@ class RecordingManager: NSObject, ObservableObject {
             } completionHandler: { success, error in
                 if let error = error { debugPrint("❌ Clip → Photos failed: \(error)") }
                 if success, let assetId = placeholderId {
-                    HighlightStore.shared.setPhotoAsset(id: clipId, assetId: assetId)
+                    Task { @MainActor in HighlightStore.shared.setPhotoAsset(id: clipId, assetId: assetId) }
                 }
             }
         }

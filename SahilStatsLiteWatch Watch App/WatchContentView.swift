@@ -62,8 +62,8 @@ struct WatchContentView: View {
                             .font(.system(size: 20))
                             .foregroundColor(WChalk.yellow)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("SahilStats")
-                                .font(.system(size: 14, weight: .semibold))
+                            Text("Rebound")
+                                .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(WChalk.chalk)
                             if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
                                 Text("build \(build)")

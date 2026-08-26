@@ -29,6 +29,8 @@ struct WatchMessage {
     static let upcomingGames = "upcomingGames"  // Calendar games sync
     static let requestState = "requestState" // Watch asks for current state
     static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
+    static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed (can we clip?)
+    static let clipSaved = "clipSaved"    // phone → watch: a clip just finished saving
 
     // Score update keys
     static let myScore = "myScore"
@@ -142,6 +144,22 @@ class WatchConnectivityService: NSObject, ObservableObject {
     /// secondsAtClockStart: how many seconds remained when clock started.
     /// Watch computes remaining = secondsAtClockStart - elapsed(since clockStartedAt).
     /// This eliminates BLE delay drift entirely — both devices read Date() independently.
+    /// Whether the phone's clip ring is armed (i.e. a Clip-from-wrist will actually
+    /// capture). Rides along in every snapshot; also pushed immediately on change.
+    nonisolated(unsafe) var clipArmed: Bool = false
+
+    /// Update the clip-armed state and tell the watch right away (idempotent).
+    func setClipArmed(_ armed: Bool) {
+        guard armed != clipArmed else { return }
+        clipArmed = armed
+        sendMessage([WatchMessage.clipStatus: armed])
+    }
+
+    /// Tell the watch a clip just saved (for the wrist "Clipped ✓" confirmation).
+    func sendClipSaved() {
+        sendMessage([WatchMessage.clipSaved: true])
+    }
+
     func sendFullSnapshot(
         hasActiveGame: Bool,
         teamName: String,
@@ -166,7 +184,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
             WatchMessage.remainingSeconds: remainingSeconds,
             WatchMessage.isRunning:      isClockRunning,
             WatchMessage.period:         period,
-            WatchMessage.periodIndex:    periodIndex
+            WatchMessage.periodIndex:    periodIndex,
+            WatchMessage.clipStatus:     clipArmed
         ]
 
         // sendMessage: immediate delivery when Watch is in foreground

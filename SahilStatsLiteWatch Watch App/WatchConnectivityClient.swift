@@ -29,6 +29,8 @@ struct WatchMessage {
     static let upcomingGames = "upcomingGames"
     static let requestState = "requestState"
     static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
+    static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed
+    static let clipSaved = "clipSaved"    // phone → watch: a clip just saved
 
     // Score update keys
     static let myScore = "myScore"
@@ -144,6 +146,11 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     @Published var blocks: Int = 0
     @Published var turnovers: Int = 0
     @Published var fouls: Int = 0
+
+    // Clip-from-wrist: is the phone's clip ring armed (can we actually clip?), and a
+    // tick that bumps each time the phone confirms a clip saved (drives "Clipped ✓").
+    @Published var phoneClipArmed: Bool = false
+    @Published var clipSavedTick: Int = 0
 
     private var session: WCSession?
     private var extendedSession: WKExtendedRuntimeSession?
@@ -506,6 +513,11 @@ extension WatchConnectivityClient: WCSessionDelegate {
             debugPrint("[Watch] Snapshot applied: \(teamName) vs \(opponent) | \(myScore)-\(oppScore)")
         }
 
+        // Clip-from-wrist sync: armed state (rides in the snapshot + pushed on change)
+        // and the save confirmation.
+        if let armed = message[WatchMessage.clipStatus] as? Bool { phoneClipArmed = armed }
+        if message[WatchMessage.clipSaved] != nil { clipSavedTick += 1 }
+
         // Score update from phone
         if message[WatchMessage.scoreUpdate] != nil {
             if let my = message[WatchMessage.myScore] as? Int {
@@ -524,6 +536,7 @@ extension WatchConnectivityClient: WCSessionDelegate {
         // End game from phone
         if message[WatchMessage.endGame] != nil {
             hasActiveGame = false
+            phoneClipArmed = false
             isEnding = false
         }
 
