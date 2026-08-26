@@ -204,12 +204,14 @@ struct UltraMinimalRecordingView: View {
 
                     // Sahil stats (top-right)
                     Button(action: { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats.toggle() } }) {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(Chalk.chalk)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(Color(white: 0.08, opacity: 0.55)))
-                            .overlay(Circle().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.fill").font(.system(size: 14, weight: .bold))
+                            Text("\(sahilPoints)").font(.system(size: 15, weight: .heavy)).monospacedDigit()
+                        }
+                        .foregroundColor(showSahilStats ? Chalk.board : Chalk.chalk)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Capsule().fill(showSahilStats ? Chalk.yellow : Color(white: 0.08, opacity: 0.55)))
+                        .overlay(Capsule().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
                     }
                     .padding(.trailing, 16)
                 }
@@ -345,18 +347,12 @@ struct UltraMinimalRecordingView: View {
             }
             .allowsHitTesting(false)
 
-            // Streamlined stat entry — a docked pad (expanded) or a minimized pill.
-            // Non-dimming: the game stays fully visible above it, in BOTH modes.
+            // Streamlined stat entry — a docked, non-dimming pad. Minimized state is just
+            // the top-right person+points pill; tapping it (or the pad's minimize bar) collapses.
             if showSahilStats {
                 statPad
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                statMiniPill
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(.leading, 16)
-                    .padding(.bottom, 18)
-                    .transition(.opacity)
             }
 
             // Clock control chip — its OWN top-center overlay, fully independent of the
@@ -1707,26 +1703,6 @@ struct UltraMinimalRecordingView: View {
         return "\(sahilPoints) pts · \(fgM)/\(fgA) FG · \(playerStats.rebounds) reb · \(playerStats.assists) ast"
     }
 
-    /// Minimized: a compact pill (Sahil's points) that expands the pad.
-    private var statMiniPill: some View {
-        Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = true }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "person.fill").font(.system(size: 12, weight: .bold))
-                Text("\(sahilPoints)").font(.system(size: 15, weight: .heavy)).monospacedDigit()
-                Text("pts").font(.system(size: 11, weight: .semibold)).foregroundColor(Chalk.dust)
-                Image(systemName: "chevron.up").font(.system(size: 9, weight: .bold)).foregroundColor(Chalk.dust)
-            }
-            .foregroundColor(Chalk.chalk)
-            .padding(.horizontal, 13).padding(.vertical, 8)
-            .background(Color(white: 0.08, opacity: 0.72), in: Capsule())
-            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.25), lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
-        }
-        .buttonStyle(.plain)
-    }
-
     /// Expanded: the docked, non-dimming stat pad.
     private var statPad: some View {
         VStack(spacing: 10) {
@@ -1767,7 +1743,11 @@ struct UltraMinimalRecordingView: View {
                 counterTile("REB", playerStats.rebounds, .reb, Chalk.yellow)
                 counterTile("AST", playerStats.assists, .ast, Chalk.green)
                 counterTile("STL", playerStats.steals, .stl, Chalk.sky)
+            }
+            HStack(spacing: 8) {
                 counterTile("BLK", playerStats.blocks, .blk, Chalk.coral)
+                counterTile("TO", playerStats.turnovers, .turnover, Chalk.coral)
+                counterTile("PF", playerStats.fouls, .foul, Chalk.dust)
             }
         }
         .padding(.horizontal, 12).padding(.bottom, 16).padding(.top, 4)
