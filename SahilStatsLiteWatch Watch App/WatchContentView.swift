@@ -20,6 +20,7 @@ struct WatchContentView: View {
     @State private var selectedTab: Int = 0
     @State private var showQuickGameConfirmation = false
     @State private var gameToHide: WatchGame?
+    @State private var deckSelection: Int = 0
 
     var body: some View {
         Group {
@@ -54,108 +55,12 @@ struct WatchContentView: View {
 
     private var gamePickerView: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 12) {
-                    // Header
-                    HStack {
-                        Image(systemName: "basketball.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(WChalk.yellow)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Rebound")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(WChalk.chalk)
-                            if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
-                                Text("build \(build)")
-                                    .font(.system(size: 8, weight: .regular))
-                                    .foregroundColor(WChalk.chalk.opacity(0.3))
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-
-                    // Show connection warning but don't block the UI anymore
-                    if !connectivity.isPhoneReachable {
-                        HStack(spacing: 6) {
-                            Image(systemName: "iphone.slash")
-                            Text("Phone offline")
-                        }
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(WChalk.coral)
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 8)
-                        .background(WChalk.coral.opacity(0.15))
-                        .cornerRadius(8)
-                    }
-
-                    if !calendarManager.hasCalendarAccess {
-                        if calendarManager.isAccessNotDetermined {
-                            Button(action: {
-                                calendarManager.requestAccess()
-                            }) {
-                                Text("Allow Calendar Access")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 12)
-                                    .background(WChalk.yellow.opacity(0.8))
-                                    .cornerRadius(8)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.vertical, 8)
-                        } else {
-                            VStack(spacing: 4) {
-                                Text("No Calendar Access")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text("Enable in Watch Settings")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(WChalk.dust)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding(.vertical, 8)
-                        }
-                    }
-
-                    if calendarManager.upcomingGames.isEmpty {
-                        // No games synced - show quick start
-                        VStack(spacing: 8) {
-                            Text("No games scheduled")
-                                .font(.system(size: 11))
-                                .foregroundColor(WChalk.chalk.opacity(0.5))
-
-                            quickGameButton
-                        }
-                        .padding(.vertical, 12)
-                    } else {
-                        // Show upcoming games from WATCH calendar directly
-                        VStack(spacing: 8) {
-                            // Today's games
-                            let todayGames = calendarManager.upcomingGames.filter { $0.isToday }
-                            if !todayGames.isEmpty {
-                                sectionHeader("Today")
-                                ForEach(todayGames) { game in
-                                    gameRow(game)
-                                }
-                            }
-
-                            // Upcoming games (not today)
-                            let futureGames = calendarManager.upcomingGames.filter { !$0.isToday }
-                            if !futureGames.isEmpty {
-                                sectionHeader("Upcoming")
-                                ForEach(futureGames.prefix(5)) { game in
-                                    gameRow(game)
-                                }
-                            }
-
-                            // Quick game option at bottom
-                            Divider()
-                                .background(WChalk.chalk.opacity(0.2))
-                                .padding(.vertical, 4)
-
-                            quickGameButton
-                        }
-                    }
+            Group {
+                if calendarManager.hasCalendarAccess || !calendarManager.isAccessNotDetermined {
+                    gameDeck
+                } else {
+                    accessCard
                 }
-                .padding(.horizontal, 8)
             }
             .watchBoard()
             .sheet(isPresented: $showQuickGameConfirmation) {
@@ -167,101 +72,177 @@ struct WatchContentView: View {
                 set: { if !$0 { gameToHide = nil } }
             ), titleVisibility: .visible) {
                 Button("Hide Game", role: .destructive) {
-                    if let game = gameToHide {
-                        calendarManager.ignoreGame(game.id)
-                    }
+                    if let game = gameToHide { calendarManager.ignoreGame(game.id) }
                     gameToHide = nil
                 }
-                Button("Cancel", role: .cancel) {
-                    gameToHide = nil
-                }
+                Button("Cancel", role: .cancel) { gameToHide = nil }
             } message: {
-                if let game = gameToHide {
-                    Text("vs \(game.opponent)")
-                }
+                if let game = gameToHide { Text("vs \(game.opponent)") }
             }
         }
     }
 
-    // MARK: - Section Header
-
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(WChalk.chalk.opacity(0.5))
-                .textCase(.uppercase)
-            Spacer()
-        }
-        .padding(.top, 4)
+    // Deck games: today's games (even if their time has passed — delays) + future;
+    // drop past days. Mirrors the phone.
+    private var deckGames: [WatchGame] {
+        let now = Date(); let cal = Calendar.current
+        return calendarManager.upcomingGames
+            .filter { cal.isDateInToday($0.startTime) || $0.startTime > now }
+            .sorted { $0.startTime < $1.startTime }
     }
 
-    // MARK: - Game Row (NavigationLink to confirmation)
+    // Default card = current/next game (estimated end still ahead); else the last.
+    private func defaultDeckIndex(_ games: [WatchGame]) -> Int {
+        let now = Date()
+        if let i = games.firstIndex(where: {
+            $0.startTime.addingTimeInterval(Double($0.halfLength * 2 + 20) * 60) > now
+        }) { return i }
+        return max(0, games.count - 1)
+    }
 
-    private func gameRow(_ game: WatchGame) -> some View {
-        NavigationLink(destination: WatchGameConfirmationView(game: game).environmentObject(connectivity)) {
-            HStack(spacing: 8) {
-                // Time
-                VStack(alignment: .leading, spacing: 2) {
-                    if !game.isToday {
-                        Text(game.dayString)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(WChalk.yellow)
-                    }
-                    Text(game.timeString)
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(WChalk.chalk)
-                }
-                .frame(width: 50, alignment: .leading)
+    // Single-card swipe deck + trailing New Game card — mirrors the phone home.
+    private var gameDeck: some View {
+        let games = deckGames
+        return TabView(selection: $deckSelection) {
+            ForEach(Array(games.enumerated()), id: \.element.id) { i, game in
+                WatchGameCard(game: game, onHide: { gameToHide = game })
+                    .environmentObject(connectivity)
+                    .tag(i)
+            }
+            WatchNewGameCard { showQuickGameConfirmation = true }
+                .tag(games.count)
+        }
+        .tabViewStyle(.page)
+        .onAppear { deckSelection = defaultDeckIndex(games) }
+        .onChange(of: games.count) { _, _ in deckSelection = defaultDeckIndex(games) }
+    }
 
-                // Opponent
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("vs \(game.opponent)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(WChalk.chalk)
-                        .lineLimit(1)
+    private var accessCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "calendar.badge.plus").font(.system(size: 30)).foregroundColor(WChalk.yellow)
+            Text("Connect Calendar").font(.system(size: 14, weight: .semibold)).foregroundColor(WChalk.chalk)
+            Button { calendarManager.requestAccess() } label: {
+                Text("Allow").font(.system(size: 13, weight: .bold)).foregroundColor(WChalk.board)
+                    .padding(.horizontal, 18).padding(.vertical, 8).background(WChalk.yellow, in: Capsule())
+            }.buttonStyle(.plain)
+            Button { showQuickGameConfirmation = true } label: {
+                Text("New Game").font(.system(size: 12, weight: .medium)).foregroundColor(WChalk.sky)
+            }.buttonStyle(.plain)
+        }
+        .padding()
+    }
+
+}
+
+// MARK: - Watch Game Card (mirrors phone GameCard)
+
+private struct WatchGameCard: View {
+    let game: WatchGame
+    let onHide: () -> Void
+    @EnvironmentObject var connectivity: WatchConnectivityClient
+
+    private var chip: (String, Color) {
+        if game.isToday { return ("TODAY", WChalk.yellow) }
+        return ("UPCOMING", WChalk.sky)
+    }
+
+    private var whenLabel: String {
+        game.isToday ? "Today · \(game.timeString)" : "\(game.dayString) · \(game.timeString)"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    // Chip
+                    Text(chip.0)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(chip.1)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(chip.1.opacity(0.15), in: Capsule())
+
+                    Text("vs")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(WChalk.dust)
+                        .padding(.top, 2)
+
+                    Text(game.opponent)
+                        .font(.system(size: 22, weight: .heavy))
+                        .foregroundColor(WChalk.sky)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
 
                     Text(game.teamName)
-                        .font(.system(size: 9))
-                        .foregroundColor(WChalk.yellow.opacity(0.8))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(WChalk.yellow)
                         .lineLimit(1)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock").font(.system(size: 9))
+                        Text(whenLabel).font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(WChalk.chalk.opacity(0.7))
+                    .padding(.top, 1)
+
+                    if !game.location.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mappin").font(.system(size: 9))
+                            Text(game.location).font(.system(size: 10)).lineLimit(1)
+                        }
+                        .foregroundColor(WChalk.chalk.opacity(0.5))
+                    }
                 }
-
-                Spacer()
-
-                Image(systemName: "chevron.right.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(WChalk.yellow.opacity(0.8))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
             }
+
+            NavigationLink(destination: WatchGameConfirmationView(game: game).environmentObject(connectivity)) {
+                HStack(spacing: 6) {
+                    Image(systemName: "video.fill").font(.system(size: 13, weight: .semibold))
+                    Text("Record").font(.system(size: 15, weight: .bold))
+                }
+                .foregroundColor(WChalk.board)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(WChalk.yellow, in: Capsule())
+            }
+            .buttonStyle(.plain)
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(WChalk.chalk.opacity(0.08))
-            .cornerRadius(10)
+            .padding(.bottom, 6)
         }
-        .buttonStyle(.plain)
-        // highPriorityGesture intercepts the long press before it becomes a tap,
-        // preventing the NavigationLink from triggering accidentally.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WChalk.chalk.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 2)
         .highPriorityGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-            // Haptic feedback for long press
             WKInterfaceDevice.current().play(.directionUp)
-            gameToHide = game
+            onHide()
         })
     }
+}
 
-    // MARK: - Quick Game Button
+// MARK: - Watch New Game Card (mirrors phone NewGameCard)
 
-    private var quickGameButton: some View {
-        Button(action: { showQuickGameConfirmation = true }) {
-            HStack(spacing: 8) {
+private struct WatchNewGameCard: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 10) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                Text("Quick Game")
+                    .font(.system(size: 52, weight: .semibold))
+                    .foregroundColor(WChalk.yellow)
+                Text("New Game")
                     .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(WChalk.chalk)
+                Text("start now")
+                    .font(.system(size: 11))
+                    .foregroundColor(WChalk.dust)
             }
-            .foregroundColor(WChalk.board)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(WChalk.yellow, in: Capsule())
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(WChalk.chalk.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 2)
         }
         .buttonStyle(.plain)
     }

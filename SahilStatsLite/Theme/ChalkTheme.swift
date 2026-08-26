@@ -226,7 +226,7 @@ private struct ChalkCard: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(padding)
-            .background(Color.white.opacity(0.015),
+            .background(Chalk.board2.opacity(0.55),
                         in: RoundedRectangle(cornerRadius: Chalk.cardCorner))
             .overlay(
                 RoundedRectangle(cornerRadius: Chalk.cardCorner)
