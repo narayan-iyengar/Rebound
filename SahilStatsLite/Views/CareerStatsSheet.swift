@@ -30,6 +30,10 @@ struct CareerStatsSheet: View {
     @State private var seasonFilter: String? = nil
     @State private var teamFilter: String? = nil
     @State private var ageFilter: String? = nil
+    @State private var showDetail = false          // reveals the week/month line chart
+    @State private var detailGame: IDWrap? = nil    // career-high tap → that game's detail
+
+    struct IDWrap: Identifiable { let id: String }
 
     private var allGames: [Game] { persistenceManager.savedGames }
 
@@ -76,7 +80,10 @@ struct CareerStatsSheet: View {
         var a = Agg()
         a.games = g.count
         guard !g.isEmpty else { return a }
-        func avg(_ f: (Game) -> Int) -> Double { Double(g.reduce(0) { $0 + f($1) }) / Double(g.count) }
+        func avg(_ f: (Game) -> Int) -> Double {
+            let total = g.reduce(0) { $0 + f($1) }
+            return Double(total) / Double(g.count)
+        }
         a.ppg = avg { $0.playerStats.points }
         a.rpg = avg { $0.playerStats.rebounds }
         a.apg = avg { $0.playerStats.assists }
@@ -184,7 +191,7 @@ struct CareerStatsSheet: View {
 
     // Group games by age and calculate stat averages
     private func statsByAge(for stat: TrendStat) -> [(label: String, value: Double)] {
-        let games = persistenceManager.savedGames
+        let games = filteredGames
         guard !games.isEmpty else { return [] }
 
         var gamesByAge: [Int: [Game]] = [:]
@@ -201,7 +208,7 @@ struct CareerStatsSheet: View {
 
     // Group games by week and calculate stat averages
     private func statsByWeek(for stat: TrendStat) -> [(label: String, value: Double)] {
-        let games = persistenceManager.savedGames
+        let games = filteredGames
         guard !games.isEmpty else { return [] }
 
         let calendar = Calendar.current
@@ -230,7 +237,7 @@ struct CareerStatsSheet: View {
 
     // Group games by month and calculate stat averages
     private func statsByMonth(for stat: TrendStat) -> [(label: String, value: Double)] {
-        let games = persistenceManager.savedGames
+        let games = filteredGames
         guard !games.isEmpty else { return [] }
 
         let calendar = Calendar.current
@@ -257,7 +264,7 @@ struct CareerStatsSheet: View {
 
     // Last 5 games individually
     private func statsByLastFive(for stat: TrendStat) -> [(label: String, value: Double)] {
-        let games = Array(persistenceManager.savedGames.prefix(5).reversed())
+        let games = Array(filteredGames.prefix(5).reversed())
         guard !games.isEmpty else { return [] }
         let fmt = DateFormatter()
         fmt.dateFormat = "M/d"
@@ -311,23 +318,30 @@ struct CareerStatsSheet: View {
                 .padding(.top, 8)
                 .padding(.bottom, 4)
 
+                filterBar
+
                 ScrollView {
-                    VStack(spacing: 20) {
-                        recentFormCard
-
-                        careerAveragesCard
-
-                        if !currentTrendData.isEmpty {
-                            trendCard
+                    VStack(spacing: 16) {
+                        if allGames.isEmpty {
+                            emptyCard("No games yet", "Record or log a game and Sahil's season board fills in here.")
+                        } else if filteredGames.isEmpty {
+                            emptyCard("No games match", "Nothing for this filter combination. Try clearing a filter.")
+                        } else {
+                            heroCard
+                            growthSection
+                            milestonesSection
+                            statLineBox
+                            detailDisclosure
                         }
-
-                        shootingStatsCard
                     }
                     .padding()
                 }
             }
             .chalkBoard()
             .navigationBarHidden(true)
+            .sheet(item: $detailGame) { wrap in
+                GameDetailSheet(gameId: wrap.id)
+            }
         }
     }
 
@@ -340,6 +354,292 @@ struct CareerStatsSheet: View {
             .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
+    }
+
+    // MARK: - Redesign: data
+
+    /// Growth ignores the season filter (it shows the arc across ALL seasons) but
+    /// still respects team + age.
+    private var growthGames: [Game] {
+        allGames.filter { g in
+            (teamFilter == nil || g.teamName == teamFilter) &&
+            (ageFilter == nil || g.ageLevel == ageFilter)
+        }
+    }
+    private var highlightSeason: String? {
+        seasonFilter ?? growthGames.max(by: { $0.date < $1.date })?.season
+    }
+    private var seasonPPG: [(season: String, ppg: Double, current: Bool)] {
+        let g = growthGames
+        guard !g.isEmpty else { return [] }
+        var byS: [String: [Game]] = [:]
+        var earliest: [String: Date] = [:]
+        for game in g {
+            byS[game.season, default: []].append(game)
+            let s = game.season
+            if earliest[s] == nil || game.date < earliest[s]! { earliest[s] = game.date }
+        }
+        let ordered = byS.keys.sorted { earliest[$0]! < earliest[$1]! }
+        return ordered.map { s in
+            let games = byS[s]!
+            let ppg = Double(games.reduce(0) { $0 + $1.playerStats.points }) / Double(games.count)
+            return (s, ppg, s == highlightSeason)
+        }
+    }
+    private var growthDelta: (delta: Double, prevSeason: String)? {
+        let arr = seasonPPG
+        guard let idx = arr.firstIndex(where: { $0.current }), idx > 0 else { return nil }
+        return (arr[idx].ppg - arr[idx - 1].ppg, arr[idx - 1].season)
+    }
+    private var careerHighGame: Game? {
+        filteredGames.filter { $0.playerStats.points > 0 }
+            .max { $0.playerStats.points < $1.playerStats.points }
+    }
+    private var longestWinStreak: Int {
+        let sorted = filteredGames.sorted { $0.date < $1.date }
+        var best = 0, run = 0
+        for g in sorted {
+            if g.isWin { run += 1; best = max(best, run) } else if g.isLoss { run = 0 }
+        }
+        return best
+    }
+    private var doubleDigitGames: Int { filteredGames.filter { $0.playerStats.points >= 10 }.count }
+    private var totalPoints: Int { filteredGames.reduce(0) { $0 + $1.playerStats.points } }
+
+    /// "Fall 2026" -> "Fall '26"
+    private func shortSeason(_ s: String) -> String {
+        let parts = s.split(separator: " ")
+        guard parts.count == 2, let yr = parts.last, yr.count == 4 else { return s }
+        return "\(parts[0]) '\(yr.suffix(2))"
+    }
+
+    private func sectionHeader(_ title: String, trailing: String?) -> some View {
+        HStack(spacing: 10) {
+            Text(title).font(.chalkScript(20)).foregroundColor(Chalk.chalk)
+            Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
+            if let trailing {
+                Text(trailing).font(.system(size: 11, weight: .medium)).foregroundColor(Chalk.dust)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    // MARK: - Redesign: filter bar
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if seasons.count > 1 {
+                    filterMenu(icon: "calendar", allLabel: "All seasons", options: seasons, selection: $seasonFilter)
+                }
+                if teams.count > 1 {
+                    filterMenu(icon: "tshirt", allLabel: "All teams", options: teams, selection: $teamFilter)
+                }
+                if !ages.isEmpty {
+                    filterMenu(icon: "figure.child", allLabel: "All ages", options: ages, selection: $ageFilter)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 10)
+        }
+    }
+
+    private func filterMenu(icon: String, allLabel: String, options: [String], selection: Binding<String?>) -> some View {
+        Menu {
+            Button { selection.wrappedValue = nil } label: {
+                if selection.wrappedValue == nil { Label(allLabel, systemImage: "checkmark") } else { Text(allLabel) }
+            }
+            ForEach(options, id: \.self) { opt in
+                Button { selection.wrappedValue = opt } label: {
+                    if selection.wrappedValue == opt { Label(opt, systemImage: "checkmark") } else { Text(opt) }
+                }
+            }
+        } label: {
+            let active = selection.wrappedValue != nil
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                Text(selection.wrappedValue ?? allLabel).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundColor(active ? Chalk.board : Chalk.dust)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(active ? Chalk.yellow : Chalk.board2, in: Capsule())
+            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+        }
+    }
+
+    private func emptyCard(_ title: String, _ subtitle: String) -> some View {
+        card {
+            VStack(spacing: 10) {
+                Image(systemName: "chart.bar.xaxis").font(.system(size: 40)).foregroundColor(Chalk.dust)
+                Text(title).font(.chalkScript(24)).foregroundColor(Chalk.chalk)
+                Text(subtitle).font(.system(size: 14)).foregroundColor(Chalk.dust).multilineTextAlignment(.center)
+            }.padding(.vertical, 20)
+        }
+    }
+
+    // MARK: - Redesign: hero
+
+    private var heroCard: some View {
+        VStack(spacing: 4) {
+            Text(highlightSeason ?? "Career")
+                .font(.chalkScript(30)).foregroundColor(Chalk.chalk)
+            HStack(spacing: 2) {
+                Text("\(agg.wins)").foregroundColor(Chalk.green)
+                Text("–").foregroundColor(Chalk.dust.opacity(0.6))
+                Text("\(agg.losses)").foregroundColor(Chalk.coral)
+            }
+            .font(.system(size: 58, weight: .heavy)).monospacedDigit()
+            Text("\(Int(agg.winPct.rounded()))% wins · \(agg.games) game\(agg.games == 1 ? "" : "s")")
+                .font(.chalkScript(16)).foregroundColor(Chalk.sky)
+            HStack(spacing: 5) {
+                Text(String(format: "Averaging %.1f PPG", agg.ppg))
+                    .font(.system(size: 14)).foregroundColor(Chalk.chalkDim)
+                if let d = growthDelta {
+                    Text(String(format: "%@ %+.1f", d.delta >= 0 ? "↑" : "↓", d.delta))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(d.delta >= 0 ? Chalk.green : Chalk.coral)
+                    Text("vs \(shortSeason(d.prevSeason))")
+                        .font(.system(size: 13)).foregroundColor(Chalk.dust)
+                }
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - Redesign: growth
+
+    @ViewBuilder
+    private var growthSection: some View {
+        let data = seasonPPG
+        if data.count > 1 {
+            sectionHeader("Growth", trailing: "PPG by season")
+            let maxPPG = max(data.map { $0.ppg }.max() ?? 1, 1)
+            HStack(alignment: .bottom, spacing: 10) {
+                ForEach(data, id: \.season) { d in
+                    VStack(spacing: 4) {
+                        Text(String(format: "%.1f", d.ppg))
+                            .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                            .foregroundColor(d.current ? Chalk.yellow : Chalk.dust)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(d.current ? Chalk.yellow : Chalk.sky.opacity(0.4))
+                            .frame(height: max(8, CGFloat(d.ppg / maxPPG) * 96))
+                        Text(shortSeason(d.season))
+                            .font(.system(size: 10)).foregroundColor(Chalk.dust)
+                            .lineLimit(1).fixedSize()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 130)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: - Redesign: milestones
+
+    private var milestonesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Milestones", trailing: nil)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                if let high = careerHighGame {
+                    Button { detailGame = IDWrap(id: high.id) } label: {
+                        milestone("⭐", "\(high.playerStats.points)", "High vs \(high.opponent)", Chalk.yellow, tappable: true)
+                    }.buttonStyle(.plain)
+                }
+                milestone("🔥", "\(longestWinStreak)", "Win streak", Chalk.coral, tappable: false)
+                milestone("🎯", "\(doubleDigitGames)", "Double-digit games", Chalk.green, tappable: false)
+                milestone("🏀", "\(totalPoints)", "Total points", Chalk.sky, tappable: false)
+            }
+        }
+    }
+
+    private func milestone(_ icon: String, _ value: String, _ label: String, _ color: Color, tappable: Bool) -> some View {
+        HStack(spacing: 10) {
+            Text(icon).font(.system(size: 22))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value).font(.system(size: 19, weight: .heavy)).monospacedDigit().foregroundColor(color)
+                Text(label).font(.system(size: 11)).foregroundColor(Chalk.dust).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if tappable {
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity)
+        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1.5))
+    }
+
+    // MARK: - Redesign: stat line
+
+    private var statLineBox: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Stat line", trailing: nil)
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    statCell(String(format: "%.1f", agg.ppg), "PPG", Chalk.yellow)
+                    statCell(String(format: "%.1f", agg.rpg), "RPG", Chalk.sky)
+                    statCell(String(format: "%.1f", agg.apg), "APG", Chalk.green)
+                    statCell(String(format: "%.1f", agg.spg), "SPG", Chalk.chalkDim)
+                    statCell(String(format: "%.1f", agg.bpg), "BPG", Chalk.coral)
+                }
+                Divider().overlay(Chalk.chalk.opacity(0.12))
+                HStack(spacing: 0) {
+                    shootCell("FG", agg.fgPct, agg.fgMade, agg.fgAtt, Chalk.sky)
+                    shootCell("3PT", agg.tpPct, agg.tpMade, agg.tpAtt, Chalk.green)
+                    shootCell("FT", agg.ftPct, agg.ftMade, agg.ftAtt, Chalk.yellow)
+                }
+            }
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1.5))
+        }
+    }
+
+    private func statCell(_ value: String, _ label: String, _ color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value).font(.system(size: 21, weight: .heavy)).monospacedDigit().foregroundColor(color)
+            Text(label).font(.system(size: 10)).foregroundColor(Chalk.dust)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
+
+    private func shootCell(_ label: String, _ pct: Double, _ made: Int, _ att: Int, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(String(format: "%.0f%%", pct)).font(.system(size: 16, weight: .heavy)).monospacedDigit().foregroundColor(color)
+            Text("\(made)/\(att)").font(.system(size: 10)).foregroundColor(Chalk.dust).monospacedDigit()
+            Text(label).font(.system(size: 10, weight: .semibold)).foregroundColor(Chalk.chalkDim)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Redesign: detail disclosure (the existing week/month line chart, tucked away)
+
+    @ViewBuilder
+    private var detailDisclosure: some View {
+        if filteredGames.count > 1 {
+            VStack(spacing: 10) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) { showDetail.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(showDetail ? "Hide progress detail" : "Show progress detail")
+                            .font(.system(size: 14, weight: .semibold)).foregroundColor(Chalk.sky)
+                        Image(systemName: showDetail ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.sky)
+                    }
+                }.buttonStyle(.plain)
+                if showDetail && !currentTrendData.isEmpty {
+                    trendCard
+                }
+            }
+            .padding(.top, 4)
+        }
     }
 
     // MARK: - Trend Card
@@ -457,8 +757,7 @@ struct CareerStatsSheet: View {
                         .foregroundStyle(selectedTrendStat.color.opacity(0.1).gradient)
                     }
                 }
-                .frame(width: max(UIScreen.main.bounds.width - 64,
-                                  CGFloat(currentTrendData.count) * 44),
+                .frame(width: max(300, CGFloat(currentTrendData.count) * 48),
                        height: 160)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
