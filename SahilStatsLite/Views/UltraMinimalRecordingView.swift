@@ -350,9 +350,20 @@ struct UltraMinimalRecordingView: View {
             // Streamlined stat entry — a docked, non-dimming pad. Minimized state is just
             // the top-right person+points pill; tapping it (or the pad's minimize bar) collapses.
             if showSahilStats {
-                statPad
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                ZStack(alignment: .bottom) {
+                    // Transparent (non-dimming) catcher: absorbs taps OUTSIDE the pad so they
+                    // never fall through to the scoring zones; tapping outside collapses the pad.
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
+                        }
+                    statPad
+                        .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             // Clock control chip — its OWN top-center overlay, fully independent of the
