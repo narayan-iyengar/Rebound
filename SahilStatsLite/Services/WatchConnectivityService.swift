@@ -31,6 +31,7 @@ struct WatchMessage {
     static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
     static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed (can we clip?)
     static let clipSaved = "clipSaved"    // phone → watch: a clip just finished saving
+    static let teams = "teams"            // phone → watch: Sahil's saved team names (for the picker)
 
     // Score update keys
     static let myScore = "myScore"
@@ -158,6 +159,12 @@ class WatchConnectivityService: NSObject, ObservableObject {
     /// Tell the watch a clip just saved (for the wrist "Clipped ✓" confirmation).
     func sendClipSaved() {
         sendMessage([WatchMessage.clipSaved: true])
+    }
+
+    /// Push Sahil's saved team names so the watch quick-game screen can offer a picker.
+    func sendTeams(_ teams: [String]) {
+        guard !teams.isEmpty else { return }
+        sendMessage([WatchMessage.teams: teams])
     }
 
     func sendFullSnapshot(
@@ -465,6 +472,7 @@ extension WatchConnectivityService: WCSessionDelegate {
             
             // 1. Sync Calendar Games (so the Watch gets the list if it missed it)
             syncCalendarGames()
+            sendTeams(GameCalendarManager.shared.knownTeamNames)
             
             // 2. Sync Active Game State (if there is one)
             onRequestState?()

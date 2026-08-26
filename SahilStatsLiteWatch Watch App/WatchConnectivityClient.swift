@@ -31,6 +31,7 @@ struct WatchMessage {
     static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
     static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed
     static let clipSaved = "clipSaved"    // phone → watch: a clip just saved
+    static let teams = "teams"            // phone → watch: Sahil's saved team names
 
     // Score update keys
     static let myScore = "myScore"
@@ -151,6 +152,9 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     // tick that bumps each time the phone confirms a clip saved (drives "Clipped ✓").
     @Published var phoneClipArmed: Bool = false
     @Published var clipSavedTick: Int = 0
+
+    // Sahil's saved team names, synced from the phone (for the quick-game team picker).
+    @Published var myTeams: [String] = []
 
     private var session: WCSession?
     private var extendedSession: WKExtendedRuntimeSession?
@@ -310,7 +314,7 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     }
 
     /// Start a quick game with just opponent name (fallback)
-    func startQuickGame(opponent: String = "Away") {
+    func startQuickGame(opponent: String = "Opponent") {
         let game = WatchGame(
             id: UUID().uuidString,
             opponent: opponent,
@@ -517,6 +521,7 @@ extension WatchConnectivityClient: WCSessionDelegate {
         // and the save confirmation.
         if let armed = message[WatchMessage.clipStatus] as? Bool { phoneClipArmed = armed }
         if message[WatchMessage.clipSaved] != nil { clipSavedTick += 1 }
+        if let teams = message[WatchMessage.teams] as? [String], !teams.isEmpty { myTeams = teams }
 
         // Score update from phone
         if message[WatchMessage.scoreUpdate] != nil {

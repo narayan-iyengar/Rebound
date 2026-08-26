@@ -76,6 +76,7 @@ struct HomeView: View {
         .onAppear {
             // Sync calendar games to Watch when home view appears
             WatchConnectivityService.shared.syncCalendarGames()
+            WatchConnectivityService.shared.sendTeams(GameCalendarManager.shared.knownTeamNames)
             calendarManager.loadUpcomingGames()
         }
         .onChange(of: scenePhase) { _, phase in

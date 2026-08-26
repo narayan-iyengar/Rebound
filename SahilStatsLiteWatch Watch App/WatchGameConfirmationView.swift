@@ -205,36 +205,67 @@ struct WatchQuickGameConfirmationView: View {
     @EnvironmentObject var connectivity: WatchConnectivityClient
     @Environment(\.dismiss) private var dismiss
 
-    @State private var opponent: String = "Away"
-    @State private var teamName: String = "Lava"
+    @State private var opponent: String = ""      // free-form (no calendar → type it)
+    @State private var teamName: String = ""      // picked from synced teams, or typed
+    @State private var addingTeam = false
     @State private var halfLength: Int = 18
     @State private var isStarting = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                // Team name picker (Home)
+                // My Team — pick from synced teams, or add a new one (like the phone)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("My Team")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(WChalk.chalk.opacity(0.5))
 
-                    TextField("Home Team", text: $teamName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(WChalk.yellow)
-                        .textFieldStyle(.plain)
-                        .padding(10)
-                        .background(WChalk.chalk.opacity(0.1))
-                        .cornerRadius(8)
+                    if !connectivity.myTeams.isEmpty && !addingTeam {
+                        // Tappable team chips (like the phone) + add-new.
+                        ForEach(connectivity.myTeams, id: \.self) { t in
+                            Button { teamName = t } label: {
+                                HStack {
+                                    Text(t).font(.system(size: 13, weight: .semibold))
+                                    Spacer()
+                                    if teamName == t {
+                                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold))
+                                    }
+                                }
+                                .foregroundColor(teamName == t ? WChalk.board : WChalk.chalk)
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                                .background(teamName == t ? WChalk.yellow : WChalk.chalk.opacity(0.1))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Button { addingTeam = true; teamName = "" } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus")
+                                Text("New team")
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(WChalk.sky)
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        TextField("Team name", text: $teamName)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(WChalk.yellow)
+                            .textFieldStyle(.plain)
+                            .padding(10)
+                            .background(WChalk.chalk.opacity(0.1))
+                            .cornerRadius(8)
+                    }
                 }
 
-                // Opponent picker
+                // Opponent — free-form (we don't know it without a calendar game)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Opponent")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(WChalk.chalk.opacity(0.5))
 
-                    TextField("Away Team", text: $opponent)
+                    TextField("Opponent", text: $opponent)
                         .font(.system(size: 14, weight: .semibold))
                         .textFieldStyle(.plain)
                         .padding(10)
@@ -298,6 +329,10 @@ struct WatchQuickGameConfirmationView: View {
         .watchBoard()
         .navigationTitle("Quick Game")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            // Pre-select the first saved team so the picker isn't empty.
+            if teamName.isEmpty, let first = connectivity.myTeams.first { teamName = first }
+        }
     }
 
     private func startQuickGame() {
@@ -306,8 +341,8 @@ struct WatchQuickGameConfirmationView: View {
 
         let game = WatchGame(
             id: UUID().uuidString,
-            opponent: opponent.isEmpty ? "Away" : opponent,
-            teamName: teamName.isEmpty ? "Home" : teamName,
+            opponent: opponent.trimmingCharacters(in: .whitespaces).isEmpty ? "Opponent" : opponent,
+            teamName: teamName.trimmingCharacters(in: .whitespaces).isEmpty ? "My Team" : teamName,
             location: "",
             startTime: Date(),
             halfLength: halfLength
