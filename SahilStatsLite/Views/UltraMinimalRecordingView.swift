@@ -73,7 +73,12 @@ struct UltraMinimalRecordingView: View {
     @State private var showOppSubtract: Bool = false
 
     // UI state
-    @State private var showSahilStats: Bool = false
+    @State private var showSahilStats: Bool = false      // stat pad expanded vs minimized pill
+    @State private var statUndo: [StatEvent] = []        // undo stack for live stat taps
+
+    private enum StatEvent: Equatable {
+        case make2, miss2, make3, miss3, makeFT, missFT, reb, ast, stl, blk, turnover, foul
+    }
     @State private var showEndConfirmation: Bool = false
     // Collapsing clock chip (top-center). Collapsed = one-tap pause/resume;
     // expand chevron reveals Period / +1:00 / End. Auto-collapses when idle.
@@ -198,7 +203,7 @@ struct UltraMinimalRecordingView: View {
                     Spacer()
 
                     // Sahil stats (top-right)
-                    Button(action: { showSahilStats = true }) {
+                    Button(action: { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats.toggle() } }) {
                         Image(systemName: "person.fill")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(Chalk.chalk)
@@ -340,9 +345,18 @@ struct UltraMinimalRecordingView: View {
             }
             .allowsHitTesting(false)
 
+            // Streamlined stat entry — a docked pad (expanded) or a minimized pill.
+            // Non-dimming: the game stays fully visible above it, in BOTH modes.
             if showSahilStats {
-                sahilStatsOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                statPad
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                statMiniPill
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 16)
+                    .padding(.bottom, 18)
+                    .transition(.opacity)
             }
 
             // Clock control chip — its OWN top-center overlay, fully independent of the
@@ -1686,111 +1700,160 @@ struct UltraMinimalRecordingView: View {
 
     // MARK: - Stats Overlay
 
-    private var sahilStatsOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-                .onTapGesture { showSahilStats = false }
+    // MARK: - Streamlined stat entry (docked pad + minimized pill)
 
-            VStack(spacing: 14) {
-                // Header
-                HStack {
-                    HStack(spacing: 8) {
-                        Image(systemName: "person.fill")
-                            .foregroundColor(Chalk.coral)
-                        Text("Player Stats")
-                            .font(.chalkScript(22))
-                            .foregroundColor(Chalk.chalk)
-                    }
+    private var liveStatLine: String {
+        let fgM = fg2Made + fg3Made, fgA = fg2Att + fg3Att
+        return "\(sahilPoints) pts · \(fgM)/\(fgA) FG · \(playerStats.rebounds) reb · \(playerStats.assists) ast"
+    }
 
-                    Spacer()
-
-                    Text("\(sahilPoints) pts")
-                        .font(.system(size: 24, weight: .bold)).monospacedDigit()
-                        .foregroundColor(Chalk.yellow)
-
-                    Spacer()
-
-                    Button(action: { showSahilStats = false }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(Chalk.dust)
-                    }
-                }
-
-                Divider()
-
-                // Shooting stats
-                HStack(spacing: 12) {
-                    shootingTile("2PT", made: $fg2Made, att: $fg2Att, pts: 2, color: Chalk.sky)
-                    shootingTile("3PT", made: $fg3Made, att: $fg3Att, pts: 3, color: Chalk.yellow)
-                    shootingTile("FT", made: $ftMade, att: $ftAtt, pts: 1, color: Chalk.green)
-                }
-
-                // Other stats
-                HStack(spacing: 8) {
-                    statTile("AST", $playerStats.assists, Chalk.green)
-                    statTile("REB", $playerStats.rebounds, Chalk.yellow)
-                    statTile("STL", $playerStats.steals, Chalk.sky)
-                    statTile("BLK", $playerStats.blocks, Chalk.coral)
-                    statTile("TO", $playerStats.turnovers, Chalk.coral)
-                    statTile("PF", $playerStats.fouls, Chalk.dust)
-                }
-                
-                Divider()
-
-                // Game controls (Pause, Period, +1:00, End) live in the persistent
-                // bottom-left control bar now — this sheet is for player stats + camera only.
-
-                // Camera & Gimbal Controls (Manual Override)
-                if !appState.isStatsOnly {
-                    HStack(spacing: 12) {
-                        // Skynet Toggle
-                        Button(action: {
-                            autoZoomManager.mode = autoZoomManager.mode == .auto ? .off : .auto
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: autoZoomManager.mode == .auto ? "brain.head.profile" : "brain.head.profile")
-                                Text(autoZoomManager.mode == .auto ? "Skynet ON" : "Skynet OFF")
-                            }
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(autoZoomManager.mode == .auto ? Chalk.board : Chalk.dust)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(autoZoomManager.mode == .auto ? Chalk.yellow : Chalk.board.opacity(0.6))
-                            .cornerRadius(8)
-                        }
-                        
-                        // Gimbal Mode
-                        Menu {
-                            Picker("Mode", selection: $gimbalManager.gimbalMode) {
-                                ForEach(GimbalMode.allCases, id: \.self) { mode in
-                                    Label(mode.rawValue, systemImage: mode.icon).tag(mode)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: gimbalManager.gimbalMode.icon)
-                                Text(gimbalManager.gimbalMode.rawValue)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption2)
-                            }
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(gimbalManager.gimbalMode == .track ? Chalk.board : Chalk.dust)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(gimbalManager.gimbalMode == .track ? Chalk.green : Chalk.board.opacity(0.6))
-                            .cornerRadius(8)
-                        }
-                    }
-                    .padding(.top, 4)
-                }
+    /// Minimized: a compact pill (Sahil's points) that expands the pad.
+    private var statMiniPill: some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = true }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "person.fill").font(.system(size: 12, weight: .bold))
+                Text("\(sahilPoints)").font(.system(size: 15, weight: .heavy)).monospacedDigit()
+                Text("pts").font(.system(size: 11, weight: .semibold)).foregroundColor(Chalk.dust)
+                Image(systemName: "chevron.up").font(.system(size: 9, weight: .bold)).foregroundColor(Chalk.dust)
             }
-            .padding(18)
-            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
-            .shadow(color: Color.black.opacity(0.35), radius: 20, y: 5)
-            .padding(.horizontal, 40)
+            .foregroundColor(Chalk.chalk)
+            .padding(.horizontal, 13).padding(.vertical, 8)
+            .background(Color(white: 0.08, opacity: 0.72), in: Capsule())
+            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.25), lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Expanded: the docked, non-dimming stat pad.
+    private var statPad: some View {
+        VStack(spacing: 10) {
+            Capsule().fill(Chalk.chalk.opacity(0.3)).frame(width: 40, height: 4)
+                .padding(.top, 3)
+                .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false } }
+
+            // Live line + undo + collapse
+            HStack(spacing: 8) {
+                Text("Sahil").font(.chalkScript(18)).foregroundColor(Chalk.yellow)
+                Text(liveStatLine).font(.system(size: 12.5, weight: .medium)).monospacedDigit()
+                    .foregroundColor(Chalk.chalkDim).lineLimit(1).minimumScaleFactor(0.7)
+                Spacer(minLength: 4)
+                Button { undoStat() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.uturn.backward").font(.system(size: 11, weight: .bold))
+                        Text("Undo").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(statUndo.isEmpty ? Chalk.dust.opacity(0.5) : Chalk.sky)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .overlay(Capsule().stroke((statUndo.isEmpty ? Chalk.dust : Chalk.sky).opacity(0.4), lineWidth: 1))
+                }
+                .buttonStyle(.plain).disabled(statUndo.isEmpty)
+                Button { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false } } label: {
+                    Image(systemName: "chevron.down").font(.system(size: 14, weight: .bold)).foregroundColor(Chalk.dust).padding(4)
+                }.buttonStyle(.plain)
+            }
+
+            // Shooting — one tap Make (make+attempt+points) or a small Miss (attempt only)
+            HStack(spacing: 8) {
+                makeMissTile("2PT", made: fg2Made, att: fg2Att, make: .make2, miss: .miss2, color: Chalk.sky)
+                makeMissTile("3PT", made: fg3Made, att: fg3Att, make: .make3, miss: .miss3, color: Chalk.yellow)
+                makeMissTile("FT", made: ftMade, att: ftAtt, make: .makeFT, miss: .missFT, color: Chalk.green)
+            }
+
+            // Counters — one tap +1, long-press −1
+            HStack(spacing: 8) {
+                counterTile("REB", playerStats.rebounds, .reb, Chalk.yellow)
+                counterTile("AST", playerStats.assists, .ast, Chalk.green)
+                counterTile("STL", playerStats.steals, .stl, Chalk.sky)
+                counterTile("BLK", playerStats.blocks, .blk, Chalk.coral)
+            }
+        }
+        .padding(.horizontal, 12).padding(.bottom, 16).padding(.top, 4)
+        .background(
+            LinearGradient(colors: [Color(white: 0.08, opacity: 0.88), Color(white: 0.05, opacity: 0.97)],
+                           startPoint: .top, endPoint: .bottom)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Chalk.chalk.opacity(0.16), lineWidth: 1)
+        )
+        .padding(.horizontal, 8)
+        .shadow(color: .black.opacity(0.45), radius: 16, y: -2)
+    }
+
+    private func makeMissTile(_ label: String, made: Int, att: Int, make: StatEvent, miss: StatEvent, color: Color) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Text(label).font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.dust)
+                Spacer()
+                Text("\(made)/\(att)").font(.system(size: 12, weight: .bold)).monospacedDigit().foregroundColor(color)
+            }
+            HStack(spacing: 5) {
+                Button { logStat(make) } label: {
+                    Text("✓ Make").font(.system(size: 13, weight: .heavy)).foregroundColor(Color(white: 0.1))
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(color, in: RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain)
+                Button { logStat(miss) } label: {
+                    Text("Miss").font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.coral)
+                        .frame(width: 50).padding(.vertical, 9)
+                        .background(Chalk.coral.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Chalk.coral.opacity(0.4), lineWidth: 1))
+                }.buttonStyle(.plain)
+            }
+        }
+        .padding(8)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+    }
+
+    private func counterTile(_ label: String, _ value: Int, _ event: StatEvent, _ color: Color) -> some View {
+        Button { logStat(event) } label: {
+            VStack(spacing: 2) {
+                Text("\(value)").font(.system(size: 22, weight: .heavy)).monospacedDigit().foregroundColor(color)
+                Text("\(label) +").font(.system(size: 11, weight: .semibold)).foregroundColor(Chalk.dust)
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 9)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.4).onEnded { _ in decStat(event) })
+    }
+
+    private func logStat(_ e: StatEvent) {
+        apply(e, +1)
+        statUndo.append(e)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    private func undoStat() {
+        guard let e = statUndo.popLast() else { return }
+        apply(e, -1)
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+    private func decStat(_ e: StatEvent) {
+        apply(e, -1)
+        if let idx = statUndo.lastIndex(of: e) { statUndo.remove(at: idx) }
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+    private func apply(_ e: StatEvent, _ s: Int) {
+        func adj(_ v: inout Int) { v = max(0, v + s) }
+        switch e {
+        case .make2: adj(&fg2Made); adj(&fg2Att)
+        case .miss2: adj(&fg2Att)
+        case .make3: adj(&fg3Made); adj(&fg3Att)
+        case .miss3: adj(&fg3Att)
+        case .makeFT: adj(&ftMade); adj(&ftAtt)
+        case .missFT: adj(&ftAtt)
+        case .reb: adj(&playerStats.rebounds)
+        case .ast: adj(&playerStats.assists)
+        case .stl: adj(&playerStats.steals)
+        case .blk: adj(&playerStats.blocks)
+        case .turnover: adj(&playerStats.turnovers)
+        case .foul: adj(&playerStats.fouls)
         }
     }
 
