@@ -31,11 +31,11 @@ struct WatchGameConfirmationView: View {
                     // Your team
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(Color.orange)
+                            .fill(WChalk.yellow)
                             .frame(width: 6, height: 6)
                         TextField("My Team", text: $editedTeam)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.orange)
+                            .foregroundColor(WChalk.yellow)
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.center)
                     }
@@ -44,33 +44,33 @@ struct WatchGameConfirmationView: View {
                     HStack(spacing: 4) {
                         Text("vs")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(WChalk.chalk.opacity(0.7))
                         
                         TextField("Opponent", text: $editedOpponent)
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(WChalk.chalk)
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.center)
                     }
 
                     Divider()
-                        .background(Color.white.opacity(0.2))
+                        .background(WChalk.chalk.opacity(0.2))
                         .padding(.vertical, 4)
 
                     // Time
                     HStack(spacing: 6) {
                         Image(systemName: "clock.fill")
                             .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.5))
+                            .foregroundColor(WChalk.chalk.opacity(0.5))
 
                         if game.isToday {
                             Text(game.timeString)
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.white)
+                                .foregroundColor(WChalk.chalk)
                         } else {
                             Text("\(game.dayString) \(game.timeString)")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
+                                .foregroundColor(WChalk.chalk)
                         }
                     }
 
@@ -79,10 +79,10 @@ struct WatchGameConfirmationView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "location.fill")
                                 .font(.system(size: 10))
-                                .foregroundColor(.white.opacity(0.5))
+                                .foregroundColor(WChalk.chalk.opacity(0.5))
                             Text(game.location)
                                 .font(.system(size: 10))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(WChalk.chalk.opacity(0.7))
                                 .lineLimit(1)
                         }
                     }
@@ -100,23 +100,23 @@ struct WatchGameConfirmationView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "timer")
                                 .font(.system(size: 10))
-                                .foregroundColor(.orange)
+                                .foregroundColor(WChalk.yellow)
                             Text("\(selectedHalfLength) min halves")
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.orange)
+                                .foregroundColor(WChalk.yellow)
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.system(size: 8))
-                                .foregroundColor(.orange.opacity(0.7))
+                                .foregroundColor(WChalk.yellow.opacity(0.7))
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.15))
+                        .background(WChalk.yellow.opacity(0.15))
                         .cornerRadius(8)
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(12)
-                .background(Color.white.opacity(0.08))
+                .background(WChalk.chalk.opacity(0.08))
                 .cornerRadius(12)
 
                 Spacer(minLength: 8)
@@ -126,10 +126,10 @@ struct WatchGameConfirmationView: View {
                     // Starting state
                     VStack(spacing: 8) {
                         ProgressView()
-                            .tint(.orange)
+                            .tint(WChalk.yellow)
                         Text("Starting...")
                             .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(WChalk.chalk.opacity(0.6))
                     }
                     .padding(.vertical, 12)
                 } else {
@@ -142,10 +142,10 @@ struct WatchGameConfirmationView: View {
                                 Text("Start Recording")
                                     .font(.system(size: 13, weight: .bold))
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(WChalk.chalk)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color.orange)
+                            .background(WChalk.yellow)
                             .cornerRadius(20)
                         }
                         .buttonStyle(.plain)
@@ -154,7 +154,7 @@ struct WatchGameConfirmationView: View {
                         Button(action: { dismiss() }) {
                             Text("Cancel")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.6))
+                                .foregroundColor(WChalk.chalk.opacity(0.6))
                         }
                         .buttonStyle(.plain)
                     }
@@ -163,6 +163,7 @@ struct WatchGameConfirmationView: View {
             .padding(.horizontal, 8)
             .padding(.top, 4)
         }
+        .watchBoard()
         .navigationTitle("Confirm")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -216,14 +217,14 @@ struct WatchQuickGameConfirmationView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("My Team")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(WChalk.chalk.opacity(0.5))
 
                     TextField("Home Team", text: $teamName)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.orange)
+                        .foregroundColor(WChalk.yellow)
                         .textFieldStyle(.plain)
                         .padding(10)
-                        .background(Color.white.opacity(0.1))
+                        .background(WChalk.chalk.opacity(0.1))
                         .cornerRadius(8)
                 }
 
@@ -231,13 +232,13 @@ struct WatchQuickGameConfirmationView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Opponent")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(WChalk.chalk.opacity(0.5))
 
                     TextField("Away Team", text: $opponent)
                         .font(.system(size: 14, weight: .semibold))
                         .textFieldStyle(.plain)
                         .padding(10)
-                        .background(Color.white.opacity(0.1))
+                        .background(WChalk.chalk.opacity(0.1))
                         .cornerRadius(8)
                 }
 
@@ -245,7 +246,7 @@ struct WatchQuickGameConfirmationView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Half Length")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(WChalk.chalk.opacity(0.5))
 
                     Picker("Half", selection: $halfLength) {
                         Text("18 min").tag(18)
@@ -261,10 +262,10 @@ struct WatchQuickGameConfirmationView: View {
                 if isStarting {
                     VStack(spacing: 8) {
                         ProgressView()
-                            .tint(.orange)
+                            .tint(WChalk.yellow)
                         Text("Starting...")
                             .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(WChalk.chalk.opacity(0.6))
                     }
                 } else {
                     VStack(spacing: 10) {
@@ -275,10 +276,10 @@ struct WatchQuickGameConfirmationView: View {
                                 Text("Start Recording")
                                     .font(.system(size: 13, weight: .bold))
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(WChalk.chalk)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color.orange)
+                            .background(WChalk.yellow)
                             .cornerRadius(20)
                         }
                         .buttonStyle(.plain)
@@ -286,7 +287,7 @@ struct WatchQuickGameConfirmationView: View {
                         Button(action: { dismiss() }) {
                             Text("Cancel")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.6))
+                                .foregroundColor(WChalk.chalk.opacity(0.6))
                         }
                         .buttonStyle(.plain)
                     }
@@ -294,6 +295,7 @@ struct WatchQuickGameConfirmationView: View {
             }
             .padding(.horizontal, 8)
         }
+        .watchBoard()
         .navigationTitle("Quick Game")
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -22,6 +22,7 @@ struct WatchScoringView: View {
     @State private var myFeedback: Int? = nil
     @State private var oppFeedback: Int? = nil
     @State private var colonVisible: Bool = true
+    @State private var clipSent: Bool = false
 
     private let layout: WatchLayout
 
@@ -39,7 +40,8 @@ struct WatchScoringView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            LinearGradient(colors: [WChalk.board2, WChalk.board], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Header: combined on smaller screens, separate on Ultra
@@ -69,7 +71,7 @@ struct WatchScoringView: View {
                     Rectangle()
                         .fill(
                             LinearGradient(
-                                colors: [.clear, .white.opacity(0.15), .clear],
+                                colors: [.clear, WChalk.chalk.opacity(0.15), .clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -91,6 +93,11 @@ struct WatchScoringView: View {
 
                 // Clock
                 clockArea
+
+                // Clip from the wrist → phone saves a highlight
+                watchClipButton
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, layout.showSwipeHint ? 2 : 5)
 
                 // Swipe hint (Ultra only - extra room)
                 if layout.showSwipeHint {
@@ -118,18 +125,40 @@ struct WatchScoringView: View {
         }
     }
 
+    // MARK: - Clip from the wrist
+
+    private var watchClipButton: some View {
+        Button {
+            connectivity.sendClip()
+            clipSent = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { clipSent = false }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: clipSent ? "checkmark" : "scissors")
+                    .font(.system(size: 11, weight: .bold))
+                Text(clipSent ? "Clipped" : "Clip")
+                    .font(.system(size: 13, weight: .bold))
+            }
+            .foregroundColor(WChalk.board)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(clipSent ? WChalk.green : WChalk.coral))
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Compact Header (Series 8 / smaller - live + period on one line)
 
     private var compactHeader: some View {
         HStack {
             HStack(spacing: 4) {
                 Circle()
-                    .fill(connectivity.isClockRunning ? Color.green : Color.orange)
+                    .fill(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
                     .frame(width: 6, height: 6)
 
                 Text(connectivity.isClockRunning ? "LIVE" : "PAUSED")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(connectivity.isClockRunning ? .green : .orange)
+                    .foregroundColor(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
             }
 
             Spacer()
@@ -139,10 +168,10 @@ struct WatchScoringView: View {
             } label: {
                 Text(connectivity.period)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(WChalk.chalk.opacity(0.5))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.08))
+                    .background(WChalk.chalk.opacity(0.08))
                     .cornerRadius(6)
             }
             .buttonStyle(.plain)
@@ -155,12 +184,12 @@ struct WatchScoringView: View {
     private var liveIndicator: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(connectivity.isClockRunning ? Color.green : Color.orange)
+                .fill(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
                 .frame(width: 6, height: 6)
 
             Text(connectivity.isClockRunning ? "LIVE" : "PAUSED")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundColor(connectivity.isClockRunning ? .green : .orange)
+                .foregroundColor(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
         }
     }
 
@@ -172,10 +201,10 @@ struct WatchScoringView: View {
         } label: {
             Text(connectivity.period)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(WChalk.chalk.opacity(0.5))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .background(Color.white.opacity(0.08))
+                .background(WChalk.chalk.opacity(0.08))
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)
@@ -195,9 +224,9 @@ struct WatchScoringView: View {
             ZStack {
                 Text("\(score)")
                     .font(.system(size: layout.scoreFontSize, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(WChalk.chalk)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.white.opacity(0.05))
+                    .background(WChalk.chalk.opacity(0.05))
                     .cornerRadius(12)
                     .contentShape(Rectangle())
                     .highPriorityGesture(
@@ -219,7 +248,7 @@ struct WatchScoringView: View {
                 if let points = feedback {
                     Text(points > 0 ? "+\(points)" : "\(points)")
                         .font(.system(size: layout.feedbackFontSize, weight: .bold))
-                        .foregroundColor(points > 0 ? .orange : .red)
+                        .foregroundColor(points > 0 ? WChalk.yellow : .red)
                         .offset(y: -30)
                         .transition(.scale.combined(with: .opacity))
                 }
@@ -227,7 +256,7 @@ struct WatchScoringView: View {
 
             Text(String(name.prefix(4)).uppercased())
                 .font(.system(size: layout.teamNameFontSize, weight: .semibold))
-                .foregroundColor(isMyTeam ? .orange : .white.opacity(0.5))
+                .foregroundColor(isMyTeam ? WChalk.yellow : WChalk.chalk.opacity(0.5))
         }
         .frame(maxWidth: .infinity)
     }
@@ -241,7 +270,7 @@ struct WatchScoringView: View {
             if layout.showClockHelper {
                 Text(connectivity.isClockRunning ? "running" : "hold to end")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(.white.opacity(0.3))
+                    .foregroundColor(WChalk.chalk.opacity(0.3))
                     .allowsHitTesting(false)
             }
         }
@@ -258,10 +287,10 @@ struct WatchScoringView: View {
             Text(clockSeconds)
                 .font(.system(size: layout.clockFontSize, weight: .semibold, design: .monospaced))
         }
-        .foregroundColor(connectivity.isClockRunning ? .white : .orange)
+        .foregroundColor(connectivity.isClockRunning ? WChalk.chalk : WChalk.yellow)
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
-        .background(Color.white.opacity(0.1))
+        .background(WChalk.chalk.opacity(0.1))
         .cornerRadius(8)
         .onTapGesture {
             connectivity.toggleClock()
@@ -276,12 +305,12 @@ struct WatchScoringView: View {
     private var swipeHint: some View {
         VStack(spacing: 2) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.white.opacity(0.3))
+                .fill(WChalk.chalk.opacity(0.3))
                 .frame(width: 30, height: 3)
 
             Text("Stats")
                 .font(.system(size: 8, weight: .medium))
-                .foregroundColor(.white.opacity(0.3))
+                .foregroundColor(WChalk.chalk.opacity(0.3))
         }
     }
 
@@ -294,11 +323,11 @@ struct WatchScoringView: View {
             VStack(spacing: 12) {
                 Text("End Game?")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(WChalk.chalk)
 
                 Text("\(connectivity.myScore) - \(connectivity.oppScore)")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundColor(connectivity.myScore > connectivity.oppScore ? .green : (connectivity.myScore < connectivity.oppScore ? .red : .white))
+                    .foregroundColor(connectivity.myScore > connectivity.oppScore ? WChalk.green : (connectivity.myScore < connectivity.oppScore ? WChalk.coral : WChalk.chalk))
 
                 HStack(spacing: 12) {
                     Button {
@@ -306,10 +335,10 @@ struct WatchScoringView: View {
                     } label: {
                         Text("Cancel")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
+                            .foregroundColor(WChalk.chalk)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(Color.white.opacity(0.2))
+                            .background(WChalk.chalk.opacity(0.2))
                             .cornerRadius(16)
                     }
                     .buttonStyle(.plain)
@@ -323,7 +352,7 @@ struct WatchScoringView: View {
                             .foregroundColor(.black)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 8)
-                            .background(Color.orange)
+                            .background(WChalk.yellow)
                             .cornerRadius(16)
                     }
                     .buttonStyle(.plain)
@@ -340,16 +369,16 @@ struct WatchScoringView: View {
             
             VStack(spacing: 12) {
                 ProgressView()
-                    .tint(.orange)
+                    .tint(WChalk.yellow)
                     .scaleEffect(1.5)
                 
                 Text("Ending Game...")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(WChalk.chalk)
                 
                 Text("Saving video on phone")
                     .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(WChalk.chalk.opacity(0.7))
             }
         }
     }

@@ -28,6 +28,7 @@ struct WatchMessage {
     static let startGame = "startGame"  // Start game from watch
     static let upcomingGames = "upcomingGames"  // Calendar games sync
     static let requestState = "requestState" // Watch asks for current state
+    static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
 
     // Score update keys
     static let myScore = "myScore"
@@ -426,6 +427,12 @@ extension WatchConnectivityService: WCSessionDelegate {
            let statType = message[WatchMessage.statType] as? String,
            let value = message[WatchMessage.statValue] as? Int {
             onStatUpdate?(statType, value)
+        }
+
+        // Clip from the wrist → trigger a clip on the phone (works in recording +
+        // stats-only whenever the clip ring is armed).
+        if message[WatchMessage.clip] != nil {
+            Task { @MainActor in RecordingManager.shared.triggerClip() }
         }
 
         // End game from watch

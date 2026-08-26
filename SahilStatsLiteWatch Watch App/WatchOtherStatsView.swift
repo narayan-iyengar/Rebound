@@ -21,7 +21,7 @@ struct WatchOtherStatsView: View {
             HStack {
                 Text("Detail Stats")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(WChalk.chalk.opacity(0.8))
                 Spacer()
             }
             .padding(.horizontal, 8)
@@ -33,22 +33,22 @@ struct WatchOtherStatsView: View {
                 GridItem(.flexible(), spacing: 8),
                 GridItem(.flexible(), spacing: 8)
             ], spacing: 8) {
-                statTile("AST", connectivity.assists, .green) {
+                statTile("AST", connectivity.assists, WChalk.green) {
                     connectivity.updateStat("assists", value: 1)
                 }
-                statTile("REB", connectivity.rebounds, .orange) {
+                statTile("REB", connectivity.rebounds, WChalk.yellow) {
                     connectivity.updateStat("rebounds", value: 1)
                 }
-                statTile("STL", connectivity.steals, .cyan) {
+                statTile("STL", connectivity.steals, WChalk.sky) {
                     connectivity.updateStat("steals", value: 1)
                 }
-                statTile("BLK", connectivity.blocks, .purple) {
+                statTile("BLK", connectivity.blocks, WChalk.coral) {
                     connectivity.updateStat("blocks", value: 1)
                 }
-                statTile("TO", connectivity.turnovers, .red) {
+                statTile("TO", connectivity.turnovers, WChalk.coral) {
                     connectivity.updateStat("turnovers", value: 1)
                 }
-                statTile("PF", connectivity.fouls, .gray) {
+                statTile("PF", connectivity.fouls, WChalk.dust) {
                     connectivity.updateStat("fouls", value: 1)
                 }
             }
@@ -56,6 +56,7 @@ struct WatchOtherStatsView: View {
 
             Spacer()
         }
+        .watchBoard()
     }
 
     // MARK: - Stat Tile
@@ -68,7 +69,7 @@ struct WatchOtherStatsView: View {
             VStack(spacing: 2) {
                 Text("\(value)")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(WChalk.chalk)
                 Text(label)
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(color)

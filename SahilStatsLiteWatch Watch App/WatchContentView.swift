@@ -60,15 +60,15 @@ struct WatchContentView: View {
                     HStack {
                         Image(systemName: "basketball.fill")
                             .font(.system(size: 20))
-                            .foregroundColor(.orange)
+                            .foregroundColor(WChalk.yellow)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("SahilStats")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(WChalk.chalk)
                             if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
                                 Text("build \(build)")
                                     .font(.system(size: 8, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.3))
+                                    .foregroundColor(WChalk.chalk.opacity(0.3))
                             }
                         }
                     }
@@ -81,10 +81,10 @@ struct WatchContentView: View {
                             Text("Phone offline")
                         }
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.red.opacity(0.8))
+                        .foregroundColor(WChalk.coral)
                         .padding(.vertical, 4)
                         .padding(.horizontal, 8)
-                        .background(Color.red.opacity(0.15))
+                        .background(WChalk.coral.opacity(0.15))
                         .cornerRadius(8)
                     }
 
@@ -97,7 +97,7 @@ struct WatchContentView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .padding(.vertical, 8)
                                     .padding(.horizontal, 12)
-                                    .background(Color.orange.opacity(0.8))
+                                    .background(WChalk.yellow.opacity(0.8))
                                     .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
@@ -108,7 +108,7 @@ struct WatchContentView: View {
                                     .font(.system(size: 11, weight: .semibold))
                                 Text("Enable in Watch Settings")
                                     .font(.system(size: 9))
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(WChalk.dust)
                                     .multilineTextAlignment(.center)
                             }
                             .padding(.vertical, 8)
@@ -120,7 +120,7 @@ struct WatchContentView: View {
                         VStack(spacing: 8) {
                             Text("No games scheduled")
                                 .font(.system(size: 11))
-                                .foregroundColor(.white.opacity(0.5))
+                                .foregroundColor(WChalk.chalk.opacity(0.5))
 
                             quickGameButton
                         }
@@ -148,7 +148,7 @@ struct WatchContentView: View {
 
                             // Quick game option at bottom
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(WChalk.chalk.opacity(0.2))
                                 .padding(.vertical, 4)
 
                             quickGameButton
@@ -157,6 +157,7 @@ struct WatchContentView: View {
                 }
                 .padding(.horizontal, 8)
             }
+            .watchBoard()
             .sheet(isPresented: $showQuickGameConfirmation) {
                 WatchQuickGameConfirmationView()
                     .environmentObject(connectivity)
@@ -188,7 +189,7 @@ struct WatchContentView: View {
         HStack {
             Text(title)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(WChalk.chalk.opacity(0.5))
                 .textCase(.uppercase)
             Spacer()
         }
@@ -205,11 +206,11 @@ struct WatchContentView: View {
                     if !game.isToday {
                         Text(game.dayString)
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.orange)
+                            .foregroundColor(WChalk.yellow)
                     }
                     Text(game.timeString)
                         .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
+                        .foregroundColor(WChalk.chalk)
                 }
                 .frame(width: 50, alignment: .leading)
 
@@ -217,12 +218,12 @@ struct WatchContentView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("vs \(game.opponent)")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(WChalk.chalk)
                         .lineLimit(1)
 
                     Text(game.teamName)
                         .font(.system(size: 9))
-                        .foregroundColor(.orange.opacity(0.8))
+                        .foregroundColor(WChalk.yellow.opacity(0.8))
                         .lineLimit(1)
                 }
 
@@ -230,11 +231,11 @@ struct WatchContentView: View {
 
                 Image(systemName: "chevron.right.circle.fill")
                     .font(.system(size: 16))
-                    .foregroundColor(.orange.opacity(0.8))
+                    .foregroundColor(WChalk.yellow.opacity(0.8))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.08))
+            .background(WChalk.chalk.opacity(0.08))
             .cornerRadius(10)
         }
         .buttonStyle(.plain)
@@ -257,10 +258,10 @@ struct WatchContentView: View {
                 Text("Quick Game")
                     .font(.system(size: 11, weight: .medium))
             }
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(WChalk.chalk.opacity(0.7))
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.1))
+            .background(WChalk.chalk.opacity(0.1))
             .cornerRadius(16)
         }
         .buttonStyle(.plain)

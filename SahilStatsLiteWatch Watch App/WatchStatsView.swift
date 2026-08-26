@@ -48,14 +48,14 @@ struct WatchShootingStatsView: View {
             HStack {
                 Text("\(points)")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.orange)
+                    .foregroundColor(WChalk.yellow)
                 Text("PTS")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.orange.opacity(0.7))
+                    .foregroundColor(WChalk.yellow.opacity(0.7))
                 Spacer()
                 Text("\(currentMade)/\(currentAtt)")
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(WChalk.chalk.opacity(0.6))
             }
             .padding(.horizontal, 12)
             .padding(.top, 4)
@@ -70,19 +70,19 @@ struct WatchShootingStatsView: View {
                     } label: {
                         Text(type.rawValue)
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(selectedShotType == type ? .black : .white.opacity(0.6))
+                            .foregroundColor(selectedShotType == type ? .black : WChalk.chalk.opacity(0.6))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                             .background(
                                 selectedShotType == type
-                                    ? Color.white
+                                    ? WChalk.chalk
                                     : Color.clear
                             )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .background(Color.white.opacity(0.15))
+            .background(WChalk.chalk.opacity(0.15))
             .cornerRadius(20)
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -101,11 +101,11 @@ struct WatchShootingStatsView: View {
                         Text("MAKE")
                             .font(.system(size: 10, weight: .bold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(WChalk.chalk)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.green)
+                            .fill(WChalk.green)
                     )
                 }
                 .buttonStyle(.plain)
@@ -120,11 +120,11 @@ struct WatchShootingStatsView: View {
                         Text("MISS")
                             .font(.system(size: 10, weight: .bold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(WChalk.chalk)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.red.opacity(0.85))
+                            .fill(WChalk.coral.opacity(0.85))
                     )
                 }
                 .buttonStyle(.plain)
@@ -133,6 +133,7 @@ struct WatchShootingStatsView: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
         }
+        .watchBoard()
     }
 
     // MARK: - Actions

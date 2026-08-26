@@ -28,6 +28,7 @@ struct WatchMessage {
     static let startGame = "startGame"
     static let upcomingGames = "upcomingGames"
     static let requestState = "requestState"
+    static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
 
     // Score update keys
     static let myScore = "myScore"
@@ -381,6 +382,12 @@ class WatchConnectivityClient: NSObject, ObservableObject {
             WatchMessage.statType: statType,
             WatchMessage.statValue: value
         ])
+    }
+
+    /// Clip from the wrist — tell the phone to save a highlight now.
+    func sendClip() {
+        sendMessage([WatchMessage.clip: true])
+        WKInterfaceDevice.current().play(.click)
     }
 
     /// End game — use sendMessage (immediate) so spinner shows quickly,
