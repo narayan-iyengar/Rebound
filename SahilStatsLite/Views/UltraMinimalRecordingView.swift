@@ -547,7 +547,10 @@ struct UltraMinimalRecordingView: View {
             myScore: myScore, oppScore: opponentScore,
             remainingSeconds: remainingSeconds, isClockRunning: isClockRunning,
             period: period, periodIndex: periodIdx,
-            clockStartedAt: clockStartedAt, secondsAtClockStart: secondsAtClockStart
+            clockStartedAt: clockStartedAt, secondsAtClockStart: secondsAtClockStart,
+            // Warmup = video game loaded, camera learning, clock never started.
+            // Tells the watch to show "Ready · tap clock to start" vs a live/paused game.
+            warmup: hasCameraStarted && !hasGameStarted && !appState.isStatsOnly
         )
     }
 

@@ -39,6 +39,22 @@ struct WatchScoringView: View {
         String(format: "%02d", connectivity.remainingSeconds % 60)
     }
 
+    // Warmup-aware status shown in the header pill and clock helper. Warmup means the
+    // phone camera is calibrating and the clock hasn't started — so a paused 18:00 reads
+    // as "get ready", not "stopped game".
+    private var statusText: String {
+        if connectivity.isWarmup { return "WARM-UP" }
+        return connectivity.isClockRunning ? "LIVE" : "PAUSED"
+    }
+    private var statusColor: Color {
+        if connectivity.isWarmup { return WChalk.sky }
+        return connectivity.isClockRunning ? WChalk.green : WChalk.yellow
+    }
+    private var clockHelperText: String {
+        if connectivity.isWarmup { return "tap clock to start" }
+        return connectivity.isClockRunning ? "running" : "hold to end"
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(colors: [WChalk.board2, WChalk.board], startPoint: .top, endPoint: .bottom)
@@ -167,12 +183,12 @@ struct WatchScoringView: View {
         HStack {
             HStack(spacing: 4) {
                 Circle()
-                    .fill(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
+                    .fill(statusColor)
                     .frame(width: 6, height: 6)
 
-                Text(connectivity.isClockRunning ? "LIVE" : "PAUSED")
+                Text(statusText)
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
+                    .foregroundColor(statusColor)
 
                 // Mode: recording with the phone (video) vs watch-only stats.
                 Image(systemName: connectivity.phoneClipArmed ? "video.fill" : "pencil")
@@ -203,12 +219,12 @@ struct WatchScoringView: View {
     private var liveIndicator: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
+                .fill(statusColor)
                 .frame(width: 6, height: 6)
 
-            Text(connectivity.isClockRunning ? "LIVE" : "PAUSED")
+            Text(statusText)
                 .font(.system(size: 8, weight: .bold))
-                .foregroundColor(connectivity.isClockRunning ? WChalk.green : WChalk.yellow)
+                .foregroundColor(statusColor)
         }
     }
 
@@ -283,13 +299,15 @@ struct WatchScoringView: View {
     // MARK: - Clock Area (adaptive)
 
     private var clockArea: some View {
-        VStack(spacing: layout.showClockHelper ? 4 : 2) {
+        VStack(spacing: (layout.showClockHelper || connectivity.isWarmup) ? 4 : 2) {
             clockButton
 
-            if layout.showClockHelper {
-                Text(connectivity.isClockRunning ? "running" : "hold to end")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(WChalk.chalk.opacity(0.3))
+            // Always surface the helper during warmup — that's the moment it matters most,
+            // even on the compact (Series 8) layout that normally hides it.
+            if layout.showClockHelper || connectivity.isWarmup {
+                Text(clockHelperText)
+                    .font(.system(size: 9, weight: connectivity.isWarmup ? .bold : .medium))
+                    .foregroundColor(connectivity.isWarmup ? WChalk.sky : WChalk.chalk.opacity(0.3))
                     .allowsHitTesting(false)
             }
         }

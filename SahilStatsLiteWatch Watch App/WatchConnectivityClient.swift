@@ -32,6 +32,7 @@ struct WatchMessage {
     static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed
     static let clipSaved = "clipSaved"    // phone → watch: a clip just saved
     static let teams = "teams"            // phone → watch: Sahil's saved team names
+    static let warmup = "warmup"          // phone → watch: camera warming up, clock not yet started
 
     // Score update keys
     static let myScore = "myScore"
@@ -152,6 +153,11 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     // tick that bumps each time the phone confirms a clip saved (drives "Clipped ✓").
     @Published var phoneClipArmed: Bool = false
     @Published var clipSavedTick: Int = 0
+
+    // Phone is in warmup: video game loaded, camera calibrating, clock not started yet.
+    // Drives the "Ready · tap clock to start" indicator so a paused 18:00 isn't mistaken
+    // for a stopped game.
+    @Published var isWarmup: Bool = false
 
     // Sahil's saved team names, synced from the phone (for the quick-game team picker).
     @Published var myTeams: [String] = []
@@ -523,6 +529,11 @@ extension WatchConnectivityClient: WCSessionDelegate {
         if message[WatchMessage.clipSaved] != nil { clipSavedTick += 1 }
         if let teams = message[WatchMessage.teams] as? [String], !teams.isEmpty { myTeams = teams }
 
+        // Warmup indicator: honor the phone's flag, but a running clock always wins
+        // (belt-and-suspenders in case a stale warmup:true arrives out of order).
+        if let warm = message[WatchMessage.warmup] as? Bool { isWarmup = warm && !isClockRunning }
+        if isClockRunning { isWarmup = false }
+
         // Score update from phone
         if message[WatchMessage.scoreUpdate] != nil {
             if let my = message[WatchMessage.myScore] as? Int {
@@ -542,6 +553,7 @@ extension WatchConnectivityClient: WCSessionDelegate {
         if message[WatchMessage.endGame] != nil {
             hasActiveGame = false
             phoneClipArmed = false
+            isWarmup = false
             isEnding = false
         }
 

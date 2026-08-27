@@ -43,6 +43,7 @@ struct WatchMessage {
     // Clock keys
     static let isRunning = "isRunning"
     static let remainingSeconds = "remainingSeconds"
+    static let warmup = "warmup"  // phone → watch: video game loaded, camera warming up, clock not yet started
 
     // Period keys
     static let period = "period"
@@ -178,7 +179,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
         remainingSeconds: Int,          // paused value (used when clockStartedAt == 0)
         isClockRunning: Bool,
         period: String,
-        periodIndex: Int
+        periodIndex: Int,
+        warmup: Bool = false
     ) {
         let snapshot: [String: Any] = [
             "hasActiveGame":      hasActiveGame,
@@ -192,7 +194,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
             WatchMessage.isRunning:      isClockRunning,
             WatchMessage.period:         period,
             WatchMessage.periodIndex:    periodIndex,
-            WatchMessage.clipStatus:     clipArmed
+            WatchMessage.clipStatus:     clipArmed,
+            WatchMessage.warmup:         warmup
         ]
 
         // sendMessage: immediate delivery when Watch is in foreground
@@ -213,12 +216,13 @@ class WatchConnectivityService: NSObject, ObservableObject {
 
     func sendGameState(teamName: String, opponent: String, myScore: Int, oppScore: Int,
                        remainingSeconds: Int, isClockRunning: Bool, period: String, periodIndex: Int,
-                       clockStartedAt: TimeInterval = 0, secondsAtClockStart: Int = 0) {
+                       clockStartedAt: TimeInterval = 0, secondsAtClockStart: Int = 0,
+                       warmup: Bool = false) {
         sendFullSnapshot(hasActiveGame: true, teamName: teamName, opponent: opponent,
                          myScore: myScore, oppScore: oppScore,
                          clockStartedAt: clockStartedAt, secondsAtClockStart: secondsAtClockStart,
                          remainingSeconds: remainingSeconds, isClockRunning: isClockRunning,
-                         period: period, periodIndex: periodIndex)
+                         period: period, periodIndex: periodIndex, warmup: warmup)
     }
 
     func sendScoreUpdate(myScore: Int, oppScore: Int,
@@ -242,7 +246,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
             WatchMessage.remainingSeconds: remainingSeconds,
             WatchMessage.isRunning:       isRunning,
             "clockStartedAt":      clockStartedAt,
-            "secondsAtClockStart": secondsAtClockStart
+            "secondsAtClockStart": secondsAtClockStart,
+            WatchMessage.warmup:          false   // any clock update means play has begun
         ]
         sendMessage(snapshot)
         guard let session = session else { return }
@@ -262,7 +267,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
             WatchMessage.remainingSeconds: remainingSeconds,
             WatchMessage.isRunning:       isRunning,
             "clockStartedAt":      clockStartedAt,
-            "secondsAtClockStart": secondsAtClockStart
+            "secondsAtClockStart": secondsAtClockStart,
+            WatchMessage.warmup:          false
         ]
         sendMessage(snapshot)
         guard let session = session else { return }
