@@ -29,8 +29,10 @@ struct WatchMessage {
     static let upcomingGames = "upcomingGames"  // Calendar games sync
     static let requestState = "requestState" // Watch asks for current state
     static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
+    static let clipStop = "clipStop"      // watch → phone: cut the forward window short, save now
     static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed (can we clip?)
     static let clipSaved = "clipSaved"    // phone → watch: a clip just finished saving
+    static let clipSavedCount = "clipSavedCount"  // phone → watch: monotonic saved counter (reliable delivery)
     static let teams = "teams"            // phone → watch: Sahil's saved team names (for the picker)
 
     // Score update keys
@@ -150,16 +152,38 @@ class WatchConnectivityService: NSObject, ObservableObject {
     /// capture). Rides along in every snapshot; also pushed immediately on change.
     nonisolated(unsafe) var clipArmed: Bool = false
 
+    /// Monotonic count of clips saved this session — rides in the sticky context so the
+    /// wrist "Clipped ✓" confirmation survives a dropped live message.
+    nonisolated(unsafe) private var clipSavedCounter: Int = 0
+
     /// Update the clip-armed state and tell the watch right away (idempotent).
+    /// Delivered two ways: an immediate message AND a merge into the sticky context, so
+    /// the wrist's Clip button lights up reliably right when recording starts (a bare
+    /// sendMessage is often dropped in that busy moment).
     func setClipArmed(_ armed: Bool) {
         guard armed != clipArmed else { return }
         clipArmed = armed
         sendMessage([WatchMessage.clipStatus: armed])
+        mergeIntoContext([WatchMessage.clipStatus: armed])
     }
 
     /// Tell the watch a clip just saved (for the wrist "Clipped ✓" confirmation).
+    /// Uses a monotonic counter delivered on both channels; the watch bumps its tick when
+    /// the count increases, so neither a dropped message nor a duplicate double-fires.
     func sendClipSaved() {
-        sendMessage([WatchMessage.clipSaved: true])
+        clipSavedCounter += 1
+        let payload: [String: Any] = [WatchMessage.clipSaved: true,
+                                       WatchMessage.clipSavedCount: clipSavedCounter]
+        sendMessage(payload)
+        mergeIntoContext([WatchMessage.clipSavedCount: clipSavedCounter])
+    }
+
+    /// Merge a few keys into the sticky application context without wiping game state.
+    private func mergeIntoContext(_ keys: [String: Any]) {
+        guard let session = session else { return }
+        var ctx = session.applicationContext
+        for (k, v) in keys { ctx[k] = v }
+        try? session.updateApplicationContext(ctx)
     }
 
     /// Push Sahil's saved team names so the watch quick-game screen can offer a picker.
@@ -195,6 +219,7 @@ class WatchConnectivityService: NSObject, ObservableObject {
             WatchMessage.period:         period,
             WatchMessage.periodIndex:    periodIndex,
             WatchMessage.clipStatus:     clipArmed,
+            WatchMessage.clipSavedCount: clipSavedCounter,
             WatchMessage.warmup:         warmup
         ]
 
@@ -465,6 +490,11 @@ extension WatchConnectivityService: WCSessionDelegate {
         // stats-only whenever the clip ring is armed).
         if message[WatchMessage.clip] != nil {
             Task { @MainActor in RecordingManager.shared.triggerClip() }
+        }
+
+        // Stop-and-save from the wrist → cut the forward window short and finalize now.
+        if message[WatchMessage.clipStop] != nil {
+            Task { @MainActor in RecordingManager.shared.stopClip() }
         }
 
         // End game from watch

@@ -29,8 +29,10 @@ struct WatchMessage {
     static let upcomingGames = "upcomingGames"
     static let requestState = "requestState"
     static let clip = "clip"  // Clip-from-wrist → phone triggers a clip
+    static let clipStop = "clipStop"      // watch → phone: cut the forward window short, save now
     static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed
     static let clipSaved = "clipSaved"    // phone → watch: a clip just saved
+    static let clipSavedCount = "clipSavedCount"  // phone → watch: monotonic saved counter
     static let teams = "teams"            // phone → watch: Sahil's saved team names
     static let warmup = "warmup"          // phone → watch: camera warming up, clock not yet started
 
@@ -153,6 +155,9 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     // tick that bumps each time the phone confirms a clip saved (drives "Clipped ✓").
     @Published var phoneClipArmed: Bool = false
     @Published var clipSavedTick: Int = 0
+    // Highest saved-counter seen from the phone. Baselined (no tick) on the first snapshot
+    // of a game so a stale count in the sticky context can't fire a phantom "Clipped ✓".
+    private var lastClipSavedCount: Int = -1
 
     // Phone is in warmup: video game loaded, camera calibrating, clock not started yet.
     // Drives the "Ready · tap clock to start" indicator so a paused 18:00 isn't mistaken
@@ -407,6 +412,14 @@ class WatchConnectivityClient: NSObject, ObservableObject {
         WKInterfaceDevice.current().play(.click)
     }
 
+    /// Stop-and-save from the wrist — cut the forward window short and finalize the clip.
+    /// transferUserInfo backs up the immediate message so the stop isn't lost mid-game.
+    func sendClipStop() {
+        sendMessage([WatchMessage.clipStop: true])
+        sendUserInfo([WatchMessage.clipStop: true])
+        WKInterfaceDevice.current().play(.click)
+    }
+
     /// End game — use sendMessage (immediate) so spinner shows quickly,
     /// but also sendUserInfo as a backup in case sendMessage fails.
     func endGame() {
@@ -526,8 +539,18 @@ extension WatchConnectivityClient: WCSessionDelegate {
         // Clip-from-wrist sync: armed state (rides in the snapshot + pushed on change)
         // and the save confirmation.
         if let armed = message[WatchMessage.clipStatus] as? Bool { phoneClipArmed = armed }
-        if message[WatchMessage.clipSaved] != nil { clipSavedTick += 1 }
         if let teams = message[WatchMessage.teams] as? [String], !teams.isEmpty { myTeams = teams }
+
+        // Clip-saved confirmation via monotonic counter (reliable across both channels).
+        // First value of a game baselines silently; only a genuine increase drives "Clipped ✓".
+        if let count = message[WatchMessage.clipSavedCount] as? Int {
+            if lastClipSavedCount < 0 {
+                lastClipSavedCount = count
+            } else if count > lastClipSavedCount {
+                lastClipSavedCount = count
+                clipSavedTick += 1
+            }
+        }
 
         // Warmup indicator: honor the phone's flag, but a running clock always wins
         // (belt-and-suspenders in case a stale warmup:true arrives out of order).
@@ -555,6 +578,7 @@ extension WatchConnectivityClient: WCSessionDelegate {
             phoneClipArmed = false
             isWarmup = false
             isEnding = false
+            lastClipSavedCount = -1  // re-baseline for the next game
         }
 
         // Period update from phone

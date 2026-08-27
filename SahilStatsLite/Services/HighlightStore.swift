@@ -192,16 +192,39 @@ final class HighlightStore: ObservableObject {
         if fromPhotos {
             let assetIds = targets.compactMap { $0.photoAssetId }
             if !assetIds.isEmpty {
-                let assets = PHAsset.fetchAssets(withLocalIdentifiers: assetIds, options: nil)
-                if assets.count > 0 {
-                    PHPhotoLibrary.shared().performChanges {
-                        PHAssetChangeRequest.deleteAssets(assets)
-                    } completionHandler: { _, _ in }
-                }
+                deleteFromPhotos(assetIds)
+            } else {
+                debugPrint("🗑️ No Photos asset ids on the selected clips — nothing to delete from Photos (saved before asset tracking).")
             }
         }
 
         highlights.removeAll { ids.contains($0.id) }
         persist()
+    }
+
+    /// Delete tracked Photos copies. Requires **read-write** authorization: clips are saved
+    /// with `.addOnly` access, which can add but can neither read nor delete — so without
+    /// this upgrade the fetch returns empty and the video is left behind in Photos.
+    private func deleteFromPhotos(_ assetIds: [String]) {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            guard status == .authorized || status == .limited else {
+                debugPrint("🗑️ Photos delete skipped — read-write access not granted (status \(status.rawValue)). Clip removed from app only.")
+                return
+            }
+            let assets = PHAsset.fetchAssets(withLocalIdentifiers: assetIds, options: nil)
+            guard assets.count > 0 else {
+                debugPrint("🗑️ Photos delete: none of \(assetIds.count) asset id(s) resolved (already removed, or not visible under limited access).")
+                return
+            }
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.deleteAssets(assets)
+            } completionHandler: { success, error in
+                if let error = error {
+                    debugPrint("❌ Photos delete failed: \(error)")
+                } else {
+                    debugPrint("🗑️ Photos delete \(success ? "succeeded" : "was cancelled") for \(assets.count) asset(s).")
+                }
+            }
+        }
     }
 }

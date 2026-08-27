@@ -151,14 +151,23 @@ struct WatchScoringView: View {
 
     private var watchClipButton: some View {
         Button {
-            guard canClip, !clipInFlight else { return }
-            connectivity.sendClip()
-            clipInFlight = true
+            if clipInFlight {
+                // Second press while capturing → cut the forward window short and save now.
+                connectivity.sendClipStop()
+            } else if canClip {
+                connectivity.sendClip()
+                clipInFlight = true
+                // Failsafe: never let the button hang if a save confirmation is lost.
+                // (Forward window defaults to 20s; 35s leaves comfortable margin.)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 35) {
+                    if clipInFlight && !clipSent { clipInFlight = false }
+                }
+            }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: clipSent ? "checkmark" : (clipInFlight ? "hourglass" : "scissors"))
+                Image(systemName: clipSent ? "checkmark" : (clipInFlight ? "stop.fill" : "scissors"))
                     .font(.system(size: 11, weight: .bold))
-                Text(clipSent ? "Clipped" : (clipInFlight ? "Clipping…" : (canClip ? "Clip" : "Not recording")))
+                Text(clipSent ? "Clipped" : (clipInFlight ? "Stop & Save" : (canClip ? "Clip" : "Not recording")))
                     .font(.system(size: 13, weight: .bold))
             }
             .foregroundColor((canClip || clipInFlight || clipSent) ? WChalk.board : WChalk.chalk.opacity(0.6))
