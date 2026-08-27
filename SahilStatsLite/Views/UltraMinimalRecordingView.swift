@@ -434,6 +434,8 @@ struct UltraMinimalRecordingView: View {
         .onDisappear {
             // Let the screen sleep normally again once we leave the game view.
             UIApplication.shared.isIdleTimerDisabled = false
+            // Stop responding to watch resync requests — the game is over.
+            teardownWatchCallbacks()
             if !appState.isStatsOnly {
                 stopRecording()
                 stopAutoZoom()
@@ -538,7 +540,23 @@ struct UltraMinimalRecordingView: View {
         }
     }
 
+    /// Clear the watch callbacks when leaving the game. Otherwise onRequestState /
+    /// onStartGame linger and, on the next watch reactivation, re-push hasActiveGame:true —
+    /// yanking the watch back into a game we just ended/discarded.
+    private func teardownWatchCallbacks() {
+        watchService.onScoreUpdate = nil
+        watchService.onClockToggle = nil
+        watchService.onPeriodAdvance = nil
+        watchService.onStatUpdate = nil
+        watchService.onEndGame = nil
+        watchService.onStartGame = nil
+        watchService.onRequestState = nil
+    }
+
     private func sendGameStateToWatch() {
+        // Don't re-assert an active game while we're tearing one down — otherwise a
+        // stale watch resync request would flip the watch back into the ended game.
+        guard !isFinishingRecording else { return }
         let periodNames = ["1st Half", "2nd Half", "OT", "OT2", "OT3"]
         let periodIdx = periodNames.firstIndex(of: period) ?? 0
         watchService.sendGameState(

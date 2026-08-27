@@ -575,6 +575,8 @@ extension WatchConnectivityClient: WCSessionDelegate {
         // End game from phone
         if message[WatchMessage.endGame] != nil {
             hasActiveGame = false
+            isClockRunning = false   // stops the watch's independent local timer
+            clockStartedAt = 0
             phoneClipArmed = false
             isWarmup = false
             isEnding = false
