@@ -175,6 +175,19 @@ class AppState: ObservableObject {
         currentGame = game
         currentScreen = .recording
 
+        // Confirm acceptance to the wrist immediately — don't wait for the record view to
+        // spin up the camera. The watch entered the game optimistically; this snapshot makes
+        // the phone the source of truth right away (team/clock/warmup) so there's no "did it
+        // take?" gap, and it seeds the sticky context in case the watch relaunches.
+        WatchConnectivityService.shared.sendGameState(
+            teamName: game.teamName, opponent: game.opponent,
+            myScore: 0, oppScore: 0,
+            remainingSeconds: game.halfLength * 60, isClockRunning: false,
+            period: "1st Half", periodIndex: 0,
+            clockStartedAt: 0, secondsAtClockStart: 0,
+            warmup: true
+        )
+
         debugPrint("[AppState] 📱 Started game from Watch: \(game.teamName) vs \(game.opponent), \(game.halfLength) min halves")
     }
 

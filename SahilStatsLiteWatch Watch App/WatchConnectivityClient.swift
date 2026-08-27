@@ -33,6 +33,13 @@ struct WatchMessage {
     static let clipStatus = "clipStatus"  // phone → watch: is the clip ring armed
     static let clipSaved = "clipSaved"    // phone → watch: a clip just saved
     static let clipSavedCount = "clipSavedCount"  // phone → watch: monotonic saved counter
+
+    // Team fouls + timeouts tally (bidirectional; absolute values)
+    static let teamTally = "teamTally"
+    static let homeFouls = "homeFouls"
+    static let awayFouls = "awayFouls"
+    static let homeTimeouts = "homeTimeouts"
+    static let awayTimeouts = "awayTimeouts"
     static let teams = "teams"            // phone → watch: Sahil's saved team names
     static let warmup = "warmup"          // phone → watch: camera warming up, clock not yet started
 
@@ -136,6 +143,12 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     @Published var periodIndex: Int = 0
     @Published var halfLength: Int = 18
     @Published var isEnding: Bool = false
+
+    // Team fouls + timeouts tally (synced both ways with the phone scoreboard).
+    @Published var homeFouls: Int = 0
+    @Published var awayFouls: Int = 0
+    @Published var homeTimeouts: Int = 0
+    @Published var awayTimeouts: Int = 0
 
     // Player stats (received from phone)
     @Published var fg2Made: Int = 0
@@ -311,6 +324,7 @@ class WatchConnectivityClient: NSObject, ObservableObject {
         fg2Made = 0; fg2Att = 0; fg3Made = 0; fg3Att = 0
         ftMade = 0; ftAtt = 0; assists = 0; rebounds = 0
         steals = 0; blocks = 0; turnovers = 0; fouls = 0
+        homeFouls = 0; awayFouls = 0; homeTimeouts = 0; awayTimeouts = 0
 
         let message: [String: Any] = [
             WatchMessage.startGame: true,
@@ -418,6 +432,28 @@ class WatchConnectivityClient: NSObject, ObservableObject {
         sendMessage([WatchMessage.clipStop: true])
         sendUserInfo([WatchMessage.clipStop: true])
         WKInterfaceDevice.current().play(.click)
+    }
+
+    /// Adjust a team fouls/timeouts tally from the wrist and push absolute values to the
+    /// phone. `key` is one of homeFouls/awayFouls/homeTimeouts/awayTimeouts.
+    func updateTeamTally(_ key: String, delta: Int) {
+        switch key {
+        case WatchMessage.homeFouls:    homeFouls    = max(0, homeFouls + delta)
+        case WatchMessage.awayFouls:    awayFouls    = max(0, awayFouls + delta)
+        case WatchMessage.homeTimeouts: homeTimeouts = max(0, homeTimeouts + delta)
+        case WatchMessage.awayTimeouts: awayTimeouts = max(0, awayTimeouts + delta)
+        default: return
+        }
+        WKInterfaceDevice.current().play(delta > 0 ? .click : .directionDown)
+        let payload: [String: Any] = [
+            WatchMessage.teamTally:    true,
+            WatchMessage.homeFouls:    homeFouls,
+            WatchMessage.awayFouls:    awayFouls,
+            WatchMessage.homeTimeouts: homeTimeouts,
+            WatchMessage.awayTimeouts: awayTimeouts
+        ]
+        sendMessage(payload)
+        sendUserInfo(payload)   // guaranteed backup so a tap isn't lost mid-game
     }
 
     /// End game — use sendMessage (immediate) so spinner shows quickly,
@@ -541,6 +577,14 @@ extension WatchConnectivityClient: WCSessionDelegate {
         if let armed = message[WatchMessage.clipStatus] as? Bool { phoneClipArmed = armed }
         if let teams = message[WatchMessage.teams] as? [String], !teams.isEmpty { myTeams = teams }
 
+        // Team fouls/timeouts tally from the phone (absolute values).
+        if message[WatchMessage.teamTally] != nil {
+            if let v = message[WatchMessage.homeFouls] as? Int    { homeFouls = v }
+            if let v = message[WatchMessage.awayFouls] as? Int    { awayFouls = v }
+            if let v = message[WatchMessage.homeTimeouts] as? Int { homeTimeouts = v }
+            if let v = message[WatchMessage.awayTimeouts] as? Int { awayTimeouts = v }
+        }
+
         // Clip-saved confirmation via monotonic counter (reliable across both channels).
         // First value of a game baselines silently; only a genuine increase drives "Clipped ✓".
         if let count = message[WatchMessage.clipSavedCount] as? Int {
@@ -581,6 +625,7 @@ extension WatchConnectivityClient: WCSessionDelegate {
             isWarmup = false
             isEnding = false
             lastClipSavedCount = -1  // re-baseline for the next game
+            homeFouls = 0; awayFouls = 0; homeTimeouts = 0; awayTimeouts = 0
         }
 
         // Period update from phone

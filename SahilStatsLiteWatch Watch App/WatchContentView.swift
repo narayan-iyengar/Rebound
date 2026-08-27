@@ -39,6 +39,10 @@ struct WatchContentView: View {
                     WatchOtherStatsView()
                         .environmentObject(connectivity)
                         .tag(2)
+
+                    WatchTeamStatsView()
+                        .environmentObject(connectivity)
+                        .tag(3)
                 }
                 .tabViewStyle(.verticalPage)
             } else {

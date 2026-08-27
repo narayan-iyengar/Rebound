@@ -455,6 +455,13 @@ struct UltraMinimalRecordingView: View {
         }
         .animation(.spring(response: 0.3), value: showSahilStats)
         .animation(Self.clipCaptureSpring, value: isStatsOnlyClipping)
+        // Mirror team fouls/timeouts to the watch whenever they change (either device).
+        // The absolute-value push is idempotent, so a watch-origin change echoing back is
+        // harmless (the watch already holds the value and won't re-send).
+        .onChange(of: homeFouls) { _, _ in pushTeamTally() }
+        .onChange(of: awayFouls) { _, _ in pushTeamTally() }
+        .onChange(of: homeTimeouts) { _, _ in pushTeamTally() }
+        .onChange(of: awayTimeouts) { _, _ in pushTeamTally() }
     }
 
     // MARK: - Initialize Game State
@@ -466,6 +473,7 @@ struct UltraMinimalRecordingView: View {
         recordingManager.currentClipGameId = appState.currentGame?.id
         setupWatchCallbacks()
         sendGameStateToWatch()
+        pushTeamTally()   // baseline the watch's tally page (starts at 0)
     }
 
     // MARK: - Watch Connectivity
@@ -537,7 +545,19 @@ struct UltraMinimalRecordingView: View {
         watchService.onRequestState = { [self] in
             debugPrint("📱 Received state request from Watch. Sending active game state.")
             sendGameStateToWatch()
+            pushTeamTally()   // include the current fouls/timeouts tally in the resync
         }
+
+        // Team fouls/timeouts changed on the watch → mirror onto the phone scoreboard.
+        watchService.onTeamTallyUpdate = { [self] hf, af, ht, at in
+            homeFouls = hf; awayFouls = af; homeTimeouts = ht; awayTimeouts = at
+        }
+    }
+
+    /// Push the current team fouls/timeouts tally to the watch.
+    private func pushTeamTally() {
+        watchService.sendTeamTally(homeFouls: homeFouls, awayFouls: awayFouls,
+                                   homeTimeouts: homeTimeouts, awayTimeouts: awayTimeouts)
     }
 
     /// Clear the watch callbacks when leaving the game. Otherwise onRequestState /
@@ -551,6 +571,7 @@ struct UltraMinimalRecordingView: View {
         watchService.onEndGame = nil
         watchService.onStartGame = nil
         watchService.onRequestState = nil
+        watchService.onTeamTallyUpdate = nil
     }
 
     private func sendGameStateToWatch() {
@@ -566,9 +587,10 @@ struct UltraMinimalRecordingView: View {
             remainingSeconds: remainingSeconds, isClockRunning: isClockRunning,
             period: period, periodIndex: periodIdx,
             clockStartedAt: clockStartedAt, secondsAtClockStart: secondsAtClockStart,
-            // Warmup = video game loaded, camera learning, clock never started.
-            // Tells the watch to show "Ready · tap clock to start" vs a live/paused game.
-            warmup: hasCameraStarted && !hasGameStarted && !appState.isStatsOnly
+            // Warmup = video game loaded, clock never started. (Not gated on camera
+            // startup, which races the view appearing — "clock hasn't started" is the
+            // signal the watch needs.) Tells the watch "Ready · tap clock to start".
+            warmup: !hasGameStarted && !appState.isStatsOnly
         )
     }
 

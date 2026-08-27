@@ -35,6 +35,13 @@ struct WatchMessage {
     static let clipSavedCount = "clipSavedCount"  // phone → watch: monotonic saved counter (reliable delivery)
     static let teams = "teams"            // phone → watch: Sahil's saved team names (for the picker)
 
+    // Team fouls + timeouts tally (bidirectional; absolute values, not deltas)
+    static let teamTally = "teamTally"    // marker key
+    static let homeFouls = "homeFouls"
+    static let awayFouls = "awayFouls"
+    static let homeTimeouts = "homeTimeouts"
+    static let awayTimeouts = "awayTimeouts"
+
     // Score update keys
     static let myScore = "myScore"
     static let oppScore = "oppScore"
@@ -120,6 +127,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
     var onEndGame: (() -> Void)?
     var onStartGame: ((_ game: WatchGame) -> Void)?
     var onRequestState: (() -> Void)?
+    // Team fouls/timeouts changed from the watch (absolute values for all four).
+    var onTeamTallyUpdate: ((_ homeFouls: Int, _ awayFouls: Int, _ homeTimeouts: Int, _ awayTimeouts: Int) -> Void)?
 
     private var session: WCSession?
 
@@ -176,6 +185,21 @@ class WatchConnectivityService: NSObject, ObservableObject {
                                        WatchMessage.clipSavedCount: clipSavedCounter]
         sendMessage(payload)
         mergeIntoContext([WatchMessage.clipSavedCount: clipSavedCounter])
+    }
+
+    /// Push the team fouls/timeouts tally to the watch (absolute values). Delivered on both
+    /// channels + merged into the sticky context so a freshly-opened watch reads the current
+    /// tally without waiting for a change.
+    func sendTeamTally(homeFouls: Int, awayFouls: Int, homeTimeouts: Int, awayTimeouts: Int) {
+        let payload: [String: Any] = [
+            WatchMessage.teamTally:     true,
+            WatchMessage.homeFouls:     homeFouls,
+            WatchMessage.awayFouls:     awayFouls,
+            WatchMessage.homeTimeouts:  homeTimeouts,
+            WatchMessage.awayTimeouts:  awayTimeouts
+        ]
+        sendMessage(payload)
+        mergeIntoContext(payload)
     }
 
     /// Merge a few keys into the sticky application context without wiping game state.
@@ -495,6 +519,15 @@ extension WatchConnectivityService: WCSessionDelegate {
         // Stop-and-save from the wrist → cut the forward window short and finalize now.
         if message[WatchMessage.clipStop] != nil {
             Task { @MainActor in RecordingManager.shared.stopClip() }
+        }
+
+        // Team fouls/timeouts tally changed on the watch → apply to the phone scoreboard.
+        if message[WatchMessage.teamTally] != nil {
+            let hf = message[WatchMessage.homeFouls] as? Int ?? 0
+            let af = message[WatchMessage.awayFouls] as? Int ?? 0
+            let ht = message[WatchMessage.homeTimeouts] as? Int ?? 0
+            let at = message[WatchMessage.awayTimeouts] as? Int ?? 0
+            onTeamTallyUpdate?(hf, af, ht, at)
         }
 
         // End game from watch

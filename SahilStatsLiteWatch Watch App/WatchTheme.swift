@@ -38,3 +38,48 @@ extension View {
     /// OLED-dark green chalkboard ground for a Watch screen.
     func watchBoard() -> some View { modifier(WatchBoard()) }
 }
+
+// MARK: - Tally Marks (compact, mirrors the phone's TallyMarks)
+
+/// Chalk tally marks: groups of 5, the fifth struck diagonally. Sized for the small screen.
+struct WatchTallyMarks: View {
+    let count: Int
+    var color: Color = WChalk.chalk
+    var barHeight: CGFloat = 16
+
+    private var groups: Int { max(1, (count + 4) / 5) }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if count == 0 {
+                Rectangle().fill(color.opacity(0.25))
+                    .frame(width: barHeight * 0.9, height: 2)
+            } else {
+                ForEach(0..<groups, id: \.self) { g in
+                    WatchTallyGroup(n: min(5, count - g * 5), color: color, barHeight: barHeight)
+                }
+            }
+        }
+    }
+}
+
+private struct WatchTallyGroup: View {
+    let n: Int
+    var color: Color
+    var barHeight: CGFloat
+    private var bw: CGFloat { max(2, barHeight * 0.13) }
+    var body: some View {
+        ZStack {
+            HStack(spacing: bw + 1.5) {
+                ForEach(0..<min(n, 4), id: \.self) { _ in
+                    Capsule().fill(color).frame(width: bw, height: barHeight)
+                }
+            }
+            if n >= 5 {
+                Capsule().fill(color)
+                    .frame(width: bw, height: barHeight * 1.35)
+                    .rotationEffect(.degrees(62))
+            }
+        }
+    }
+}
