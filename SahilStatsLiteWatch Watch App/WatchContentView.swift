@@ -107,18 +107,37 @@ struct WatchContentView: View {
     // Single-card swipe deck + trailing New Game card — mirrors the phone home.
     private var gameDeck: some View {
         let games = deckGames
-        return TabView(selection: $deckSelection) {
-            ForEach(Array(games.enumerated()), id: \.element.id) { i, game in
-                WatchGameCard(game: game, onHide: { gameToHide = game })
-                    .environmentObject(connectivity)
-                    .tag(i)
+        return VStack(spacing: 2) {
+            HStack {
+                Spacer()
+                connectionGlyph
             }
-            WatchNewGameCard { showQuickGameConfirmation = true }
-                .tag(games.count)
+            .padding(.horizontal, 12)
+            .padding(.top, 2)
+
+            TabView(selection: $deckSelection) {
+                ForEach(Array(games.enumerated()), id: \.element.id) { i, game in
+                    WatchGameCard(game: game, onHide: { gameToHide = game })
+                        .environmentObject(connectivity)
+                        .tag(i)
+                }
+                WatchNewGameCard { showQuickGameConfirmation = true }
+                    .tag(games.count)
+            }
+            .tabViewStyle(.page)
+            .onAppear { deckSelection = defaultDeckIndex(games) }
+            .onChange(of: games.count) { _, _ in deckSelection = defaultDeckIndex(games) }
         }
-        .tabViewStyle(.page)
-        .onAppear { deckSelection = defaultDeckIndex(games) }
-        .onChange(of: games.count) { _, _ in deckSelection = defaultDeckIndex(games) }
+    }
+
+    // Quiet phone-link indicator. Green phone = the phone app is reachable (a game will
+    // record video); muted phone-slash = not reachable right now (stats-only / phone app
+    // not foregrounded). Kept quiet on purpose — reachability drops whenever the phone app
+    // isn't in front, so this is a status glance, not an alarm.
+    private var connectionGlyph: some View {
+        Image(systemName: connectivity.isPhoneReachable ? "iphone" : "iphone.slash")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundColor(connectivity.isPhoneReachable ? WChalk.green : WChalk.dust)
     }
 
     private var accessCard: some View {

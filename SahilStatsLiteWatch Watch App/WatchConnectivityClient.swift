@@ -336,6 +336,10 @@ class WatchConnectivityClient: NSObject, ObservableObject {
             WatchMessage.startTime: game.startTime.timeIntervalSince1970
         ]
         sendMessage(message)
+        // Guaranteed backup: if the phone app is closed, the immediate message is dropped,
+        // which would orphan the queued stat updates (they use transferUserInfo too). Queue
+        // the game-start so the phone can attach those stats when it next launches.
+        sendUserInfo(message)
     }
 
     /// Start a quick game with just opponent name (fallback)
