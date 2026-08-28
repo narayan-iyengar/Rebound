@@ -24,6 +24,10 @@ struct WatchScoringView: View {
     @State private var colonVisible: Bool = true
     @State private var clipSent: Bool = false
     @State private var clipInFlight: Bool = false
+    @State private var clipStart: Date? = nil   // drives the tick-ring countdown
+    // Matches the phone's default forward window; the ring is a visual countdown, the
+    // actual save is still confirmed by the phone (clipSavedTick).
+    private let clipForward: Double = 15
 
     private let layout: WatchLayout
 
@@ -149,41 +153,81 @@ struct WatchScoringView: View {
     // watch-only test when the phone isn't recording.
     private var canClip: Bool { connectivity.isPhoneReachable && connectivity.phoneClipArmed }
 
+    // Circular iOS-timelapse-style record button, mirroring the phone: red circle at rest,
+    // red rounded square while clipping with a tick-ring countdown; tap again to stop & save.
     private var watchClipButton: some View {
-        Button {
+        let d: CGFloat = 46
+        let inner = d - 14
+        return Button {
             if clipInFlight {
-                // Second press while capturing → cut the forward window short and save now.
-                connectivity.sendClipStop()
+                connectivity.sendClipStop()          // second press → cut short & save now
             } else if canClip {
                 connectivity.sendClip()
                 clipInFlight = true
-                // Failsafe: never let the button hang if a save confirmation is lost.
-                // (Forward window defaults to 20s; 35s leaves comfortable margin.)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 35) {
-                    if clipInFlight && !clipSent { clipInFlight = false }
+                clipStart = Date()
+                // Failsafe: never hang if a save confirmation is lost.
+                DispatchQueue.main.asyncAfter(deadline: .now() + clipForward + 20) {
+                    if clipInFlight && !clipSent { clipInFlight = false; clipStart = nil }
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: clipSent ? "checkmark" : (clipInFlight ? "stop.fill" : "scissors"))
-                    .font(.system(size: 11, weight: .bold))
-                Text(clipSent ? "Clipped" : (clipInFlight ? "Stop & Save" : (canClip ? "Clip" : "Not recording")))
-                    .font(.system(size: 13, weight: .bold))
+            ZStack {
+                watchTickRing(d: d, active: clipInFlight)
+                if clipSent {
+                    Circle().fill(WChalk.green).frame(width: inner, height: inner)
+                        .overlay(Image(systemName: "checkmark")
+                            .font(.system(size: inner * 0.42, weight: .heavy)).foregroundColor(WChalk.board))
+                } else if !canClip {
+                    Image(systemName: "video.slash.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(WChalk.chalk.opacity(0.4))
+                } else if clipInFlight {
+                    RoundedRectangle(cornerRadius: inner * 0.5 * 0.32, style: .continuous)
+                        .fill(WChalk.coral).frame(width: inner * 0.5, height: inner * 0.5)
+                } else {
+                    Circle().fill(WChalk.coral).frame(width: inner, height: inner)
+                }
             }
-            .foregroundColor((canClip || clipInFlight || clipSent) ? WChalk.board : WChalk.chalk.opacity(0.6))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(
-                clipSent ? WChalk.green : ((canClip || clipInFlight) ? WChalk.coral : WChalk.chalk.opacity(0.14))
-            ))
+            .frame(width: d + 6, height: d + 6)
+            .opacity((canClip || clipInFlight || clipSent) ? 1 : 0.55)
+            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: clipInFlight)
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .disabled(!canClip && !clipInFlight)
         .onChange(of: connectivity.clipSavedTick) { _, _ in
             clipInFlight = false
+            clipStart = nil
             clipSent = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { clipSent = false }
         }
+    }
+
+    // Tick ring that empties as the clip's forward window counts down (mirrors the phone).
+    private func watchTickRing(d: CGFloat, active: Bool) -> some View {
+        let count = 44
+        return TimelineView(.animation(paused: !active)) { timeline in
+            Canvas { ctx, size in
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let outer = size.width / 2 - 1
+                let len: CGFloat = 4
+                var progress: CGFloat = 0
+                if active, let s = clipStart, clipForward > 0 {
+                    let remaining = max(0, clipForward - timeline.date.timeIntervalSince(s))
+                    progress = CGFloat(remaining / clipForward)
+                }
+                let lit = active ? Int((progress * CGFloat(count)).rounded()) : 0
+                for i in 0..<count {
+                    let a = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2
+                    let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
+                    let p2 = CGPoint(x: c.x + (outer - len) * cos(a), y: c.y + (outer - len) * sin(a))
+                    var path = Path(); path.move(to: p1); path.addLine(to: p2)
+                    let op: Double = active ? (i < lit ? 0.95 : 0.18) : 0.3
+                    ctx.stroke(path, with: .color(WChalk.chalk.opacity(op)), lineWidth: 1.0)
+                }
+            }
+        }
+        .frame(width: d, height: d)
     }
 
     // MARK: - Compact Header (Series 8 / smaller - live + period on one line)
