@@ -116,30 +116,50 @@ struct HomeView: View {
         }
     }
 
-    /// Persistent icons-only page bar (a slim chalk tab bar). Always visible so every
-    /// page is one tap away; the active page's icon is lit in a yellow capsule.
+    /// Short label for the active page (shown only on the lit pill).
+    static func pageName(_ index: Int) -> String {
+        switch index {
+        case 0: return "Home"
+        case 1: return "Stats"
+        case 2: return "Log"
+        case 3: return "Store"
+        default: return "Settings"
+        }
+    }
+
+    /// Persistent chalk tab bar with active-emphasis: the current page expands into a lit
+    /// icon+label pill, the others recede to subtle icon hints. Every page stays one tap away.
     private var pageBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(0..<5, id: \.self) { i in
                 let active = (i == page)
                 Button {
-                    withAnimation(.easeInOut(duration: 0.28)) { page = i }
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) { page = i }
                 } label: {
-                    Image(systemName: Self.pageIcon(i))
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(active ? Chalk.board : Chalk.chalk.opacity(0.55))
-                        .frame(width: 46, height: 34)
-                        .background(active ? Chalk.yellow : Color.clear, in: Capsule())
+                    HStack(spacing: 6) {
+                        Image(systemName: Self.pageIcon(i))
+                            .font(.system(size: active ? 16 : 15, weight: .semibold))
+                        if active {
+                            Text(Self.pageName(i))
+                                .font(.system(size: 14, weight: .bold))
+                                .fixedSize()
+                        }
+                    }
+                    .foregroundColor(active ? Chalk.board : Chalk.chalk.opacity(0.4))
+                    .padding(.horizontal, active ? 14 : 9)
+                    .frame(height: 36)
+                    .background(active ? Chalk.yellow : Color.clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .padding(.vertical, 6)
         .background(Chalk.board2.opacity(0.96), in: Capsule())
         .overlay(Capsule().stroke(Chalk.chalk.opacity(0.14), lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
         .padding(.bottom, 6)
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: page)
     }
 
     /// Page 0 — the "home": wordmark, upcoming games, and the start-a-game actions.
