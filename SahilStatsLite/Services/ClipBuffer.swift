@@ -44,7 +44,7 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
 
     // MARK: - Tunables
 
-    private let backSeconds: Double = 30.0          // retroactive window
+    private let backSeconds: Double = 5.0           // retroactive (pre-roll) window before the tap
     private let clipBitRate: Int = 8_000_000        // 1080p highlight — plenty for sharing
     private let targetLongEdge: CGFloat = 1920      // downscale for the ring (clips don't need 4K)
     private let keyframeIntervalSeconds: Double = 1 // 1s GOP → clean pruning at keyframe boundaries

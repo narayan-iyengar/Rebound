@@ -25,7 +25,13 @@ struct PracticeView: View {
     @State private var pinchBaseZoom: CGFloat = 1.0
     @State private var showWheel = false          // radial dial visible only while interacting
     @State private var hideWork: DispatchWorkItem?
+    @State private var dragStartNorm: CGFloat?    // captured at the start of a wheel drag
     private let maxZoom: CGFloat = 6.0
+
+    // Optional freeform tag saved onto this session's clips (e.g. gym / drill name).
+    @State private var location: String = ""
+    @State private var showLocationEditor = false
+    @State private var locationDraft: String = ""
 
     var body: some View {
         ZStack {
@@ -54,34 +60,43 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            VStack {
+            VStack(spacing: 8) {
                 practiceLabel
                     .padding(.top, 12)
+                locationChip
                 Spacer()
             }
 
-            // Bottom bar: zoom control (compact badge → radial dial on interaction) over a
-            // centered Clip button. Thumb-reachable in both orientations.
+            // Bottom bar: zoom control (badge at rest → radial dial while interacting) over
+            // a centered Clip button. Drag directly on this area to zoom — no tap first.
             VStack(spacing: 6) {
                 Spacer()
                 ZStack {
                     if showWheel {
-                        RadialZoomDial(zoom: zoom, maxZoom: maxZoom, presets: zoomPresets) { z in
-                            applyZoom(z)
-                            pinchBaseZoom = zoom
-                            revealWheel()
-                        }
-                        .transition(.opacity)
+                        RadialZoomDial(zoom: zoom, maxZoom: maxZoom, presets: zoomPresets)
+                            .transition(.opacity)
                     } else {
                         zoomBadge
                     }
                 }
                 .frame(height: 132)
                 .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .gesture(zoomDrag)
 
-                ClipButton(idleHint: "Camera warming up…")
-                    .padding(.bottom, 18)
+                ClipButton(idleHint: "Camera warming up…", circle: true)
+                    .padding(.bottom, 22)
             }
+        }
+        .alert("Practice tag", isPresented: $showLocationEditor) {
+            TextField("e.g. Rec Center · shooting", text: $locationDraft)
+            Button("Save") {
+                location = locationDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                recordingManager.clipLabel = location.isEmpty ? nil : location
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Tag this session's clips with a place or drill (optional).")
         }
         .statusBar(hidden: true)
         .persistentSystemOverlays(.hidden)
@@ -91,6 +106,7 @@ struct PracticeView: View {
             recordingManager.isPracticeSession = true
             recordingManager.compositeClipOverlay = false
             recordingManager.currentClipGameId = sessionId
+            recordingManager.clipLabel = location.isEmpty ? nil : location
             UIApplication.shared.isIdleTimerDisabled = true
             await recordingManager.requestPermissionsAndSetup()
             if recordingManager.isSessionReady && !recordingManager.isSimulator {
@@ -102,6 +118,7 @@ struct PracticeView: View {
             recordingManager.stopSession()
             recordingManager.isPracticeSession = false
             recordingManager.compositeClipOverlay = true
+            recordingManager.clipLabel = nil
             UIApplication.shared.isIdleTimerDisabled = false
         }
     }
@@ -148,21 +165,67 @@ struct PracticeView: View {
 
     private let zoomPresets: [CGFloat] = [1, 2, 3, 5]
 
-    // Compact resting state: a small "1.0×" badge. Tap it (or pinch) to reveal the dial.
+    // Compact resting state: a small "1.0×" badge at the bottom of the slot. Drag directly
+    // on the slot (this area) to zoom — no tap-to-open first.
     private var zoomBadge: some View {
         VStack {
             Spacer()
-            Button { revealWheel() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.left.and.right")
+                    .font(.system(size: 10, weight: .bold))
                 Text(String(format: "%.1f×", zoom))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundColor(Chalk.yellow)
-                    .frame(minWidth: 54)
-                    .padding(.vertical, 9)
-                    .background(Color(white: 0.06, opacity: 0.5), in: Capsule())
-                    .overlay(Capsule().stroke(Chalk.chalk.opacity(0.22), lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .foregroundColor(Chalk.yellow)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(white: 0.06, opacity: 0.5), in: Capsule())
+            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.22), lineWidth: 1))
         }
+    }
+
+    // Optional session tag under the Practice chip.
+    private var locationChip: some View {
+        Button {
+            locationDraft = location
+            showLocationEditor = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: location.isEmpty ? "mappin.and.ellipse" : "mappin.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(location.isEmpty ? "Add tag" : location)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundColor(location.isEmpty ? Chalk.chalk.opacity(0.6) : Chalk.yellow)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color(white: 0.08, opacity: 0.45), in: Capsule())
+            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Drag anywhere on the zoom slot to zoom (reveals the dial, then rotates it).
+    private var zoomDrag: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                revealWheel()
+                let start = dragStartNorm ?? normFor(zoom)
+                if dragStartNorm == nil { dragStartNorm = normFor(zoom) }
+                // Drag left → rotate wheel → higher values to center (zoom in). ~260pt = full range.
+                let newNorm = max(0, min(1, start - value.translation.width / 260))
+                applyZoom(snap(zoomForNorm(newNorm)))
+            }
+            .onEnded { _ in dragStartNorm = nil }
+    }
+
+    private func normFor(_ z: CGFloat) -> CGFloat { log(z) / log(maxZoom) }
+    private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, t) }
+    private func snap(_ z: CGFloat) -> CGFloat {
+        let t = normFor(z)
+        for p in zoomPresets where abs(normFor(p) - t) < 0.02 { return p }
+        return z
     }
 
     private func applyZoom(_ factor: CGFloat) {
@@ -200,27 +263,18 @@ struct PracticeView: View {
 // MARK: - Radial Zoom Dial (iOS-style rotating wheel)
 
 /// The wheel rotates under a fixed top caret so the current zoom sits at the top.
-/// Drag horizontally to rotate; soft-snaps to lens presets. Log-scaled 1×–maxZoom.
+/// Presentational only — the parent drives zoom via a drag on the whole slot.
+/// Log-scaled 1×–maxZoom.
 private struct RadialZoomDial: View {
     let zoom: CGFloat
     let maxZoom: CGFloat
     let presets: [CGFloat]
-    let onZoom: (CGFloat) -> Void
-
-    @State private var dragStartNorm: CGFloat?
 
     // Radians of arc per one unit of normalized zoom [0,1]. Full range spans ±(ANG/2).
     private let angPerUnit: CGFloat = 1.15
     private let visibleHalfAngle: CGFloat = 0.72   // ticks beyond this are off the visible arc
 
     private func norm(_ z: CGFloat) -> CGFloat { log(z) / log(maxZoom) }
-    private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, t) }
-
-    private func snapped(_ z: CGFloat) -> CGFloat {
-        let t = norm(z)
-        for p in presets where abs(norm(p) - t) < 0.02 { return p }
-        return z
-    }
 
     var body: some View {
         GeometryReader { geo in
@@ -279,18 +333,6 @@ private struct RadialZoomDial: View {
                 .position(x: cx, y: 14)
             }
             .frame(width: w, height: h)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let start = dragStartNorm ?? curT
-                        if dragStartNorm == nil { dragStartNorm = curT }
-                        // Drag left → rotate wheel → higher values come to center (zoom in).
-                        let newNorm = max(0, min(1, start - value.translation.width / (w * 0.9)))
-                        onZoom(snapped(zoomForNorm(newNorm)))
-                    }
-                    .onEnded { _ in dragStartNorm = nil }
-            )
         }
     }
 }

@@ -186,7 +186,8 @@ struct UltraMinimalRecordingView: View {
             // Top bar: Clip (left) · [clock chip is a separate centered overlay] · Sahil-stats (right)
             VStack {
                 HStack {
-                    ClipButton(idleHint: appState.isStatsOnly ? "Camera warming up…" : "Start game to clip")
+                    ClipButton(idleHint: appState.isStatsOnly ? "Camera warming up…" : "Start game to clip",
+                               scale: appState.isStatsOnly ? 1.3 : 1.0)
                         .padding(.leading, 16)
 
                     // Streaming indicator (only while live to YouTube)

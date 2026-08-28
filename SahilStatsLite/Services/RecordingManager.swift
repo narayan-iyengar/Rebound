@@ -97,6 +97,7 @@ class RecordingManager: NSObject, ObservableObject {
     /// Practice mode: clips are tagged "Practice" (no score/opponent) and grouped
     /// separately in the Store.
     nonisolated(unsafe) var isPracticeSession = false
+    nonisolated(unsafe) var clipLabel: String? = nil   // freeform tag for practice clips (location/drill)
 
     /// Whether the clip ring should burn the scoreboard overlay in. True for stats-only
     /// games; false for practice (no score to show).
@@ -139,7 +140,7 @@ class RecordingManager: NSObject, ObservableObject {
             debugPrint("🎬 triggerClip ignored — clip buffer not armed")
             return
         }
-        let forward = UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 20
+        let forward = UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 15
         clipBuffer.startClip(forwardSeconds: Double(forward))
     }
 
@@ -171,6 +172,7 @@ class RecordingManager: NSObject, ObservableObject {
         let s = overlayRenderer.state
         let gameId = currentClipGameId
         let practice = isPracticeSession
+        let label = clipLabel
         let clipId = UUID()  // shared id so we can attach the Photos asset id below
 
         Task { @MainActor in
@@ -179,7 +181,8 @@ class RecordingManager: NSObject, ObservableObject {
                     id: clipId, fileURL: url, gameId: gameId,
                     homeTeam: "Practice", awayTeam: "",
                     homeScore: 0, awayScore: 0,
-                    period: "", clockTime: "", isPractice: true
+                    period: "", clockTime: "", isPractice: true,
+                    label: label
                 )
             } else {
                 HighlightStore.shared.add(

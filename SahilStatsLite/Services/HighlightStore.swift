@@ -29,6 +29,7 @@ struct Highlight: Codable, Identifiable, Sendable {
     let clockTime: String
     var isPractice: Bool = false
     var photoAssetId: String? = nil   // PHAsset localIdentifier, so delete can also clear Photos
+    var label: String? = nil          // freeform tag (e.g. practice location / drill)
 
     var url: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -45,7 +46,7 @@ struct Highlight: Codable, Identifiable, Sendable {
 // Store. Fields added after v1 (gameId, isPractice) are decoded with decodeIfPresent.
 extension Highlight {
     private enum CodingKeys: String, CodingKey {
-        case id, fileName, createdAt, gameId, homeTeam, awayTeam, homeScore, awayScore, period, clockTime, isPractice, photoAssetId
+        case id, fileName, createdAt, gameId, homeTeam, awayTeam, homeScore, awayScore, period, clockTime, isPractice, photoAssetId, label
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -61,6 +62,7 @@ extension Highlight {
         clockTime = try c.decode(String.self, forKey: .clockTime)
         isPractice = try c.decodeIfPresent(Bool.self, forKey: .isPractice) ?? false
         photoAssetId = try c.decodeIfPresent(String.self, forKey: .photoAssetId)
+        label = try c.decodeIfPresent(String.self, forKey: .label)
     }
 }
 
@@ -71,10 +73,11 @@ struct HighlightGroup: Identifiable, Sendable {
     let awayTeam: String      // opponent
     let date: Date            // earliest clip in the session
     let isPractice: Bool
+    let label: String?        // freeform session tag (practice location / drill)
     let clips: [Highlight]    // newest first
 
     var matchup: String {
-        if isPractice { return "Practice" }
+        if isPractice { return label?.isEmpty == false ? "Practice · \(label!)" : "Practice" }
         return awayTeam.isEmpty ? homeTeam : "\(homeTeam) vs \(awayTeam)"
     }
 }
@@ -96,6 +99,7 @@ final class HighlightStore: ObservableObject {
                 homeTeam: anchor.homeTeam, awayTeam: anchor.awayTeam,
                 date: clips.map(\.createdAt).min() ?? anchor.createdAt,
                 isPractice: anchor.isPractice,
+                label: sorted.compactMap { $0.label }.first,
                 clips: sorted
             )
         }
@@ -150,11 +154,12 @@ final class HighlightStore: ObservableObject {
     nonisolated func add(id: UUID = UUID(), fileURL: URL, gameId: String?,
                          homeTeam: String, awayTeam: String,
                          homeScore: Int, awayScore: Int, period: String, clockTime: String,
-                         isPractice: Bool = false) -> UUID {
+                         isPractice: Bool = false, label: String? = nil) -> UUID {
         let h = Highlight(id: id, fileName: fileURL.lastPathComponent, createdAt: Date(),
                           gameId: gameId, homeTeam: homeTeam, awayTeam: awayTeam,
                           homeScore: homeScore, awayScore: awayScore,
-                          period: period, clockTime: clockTime, isPractice: isPractice)
+                          period: period, clockTime: clockTime, isPractice: isPractice,
+                          label: label)
         Task { @MainActor in
             self.highlights.insert(h, at: 0)
             self.persist()
