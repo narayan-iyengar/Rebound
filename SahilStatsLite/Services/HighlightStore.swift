@@ -77,7 +77,7 @@ struct HighlightGroup: Identifiable, Sendable {
     let clips: [Highlight]    // newest first
 
     var matchup: String {
-        if isPractice { return label?.isEmpty == false ? "Practice · \(label!)" : "Practice" }
+        if isPractice { return "Practice" }
         return awayTeam.isEmpty ? homeTeam : "\(homeTeam) vs \(awayTeam)"
     }
 }
@@ -165,6 +165,16 @@ final class HighlightStore: ObservableObject {
             self.persist()
         }
         return id
+    }
+
+    /// Set (or clear) the freeform tag on every clip in a session group.
+    func setLabel(_ label: String?, forGroupId groupId: String) {
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = (trimmed?.isEmpty == false) ? trimmed : nil
+        for idx in highlights.indices where (highlights[idx].gameId ?? highlights[idx].id.uuidString) == groupId {
+            highlights[idx].label = value
+        }
+        persist()
     }
 
     /// Record the Photos localIdentifier for a clip so a later delete can also clear Photos.

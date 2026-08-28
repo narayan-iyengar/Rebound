@@ -450,29 +450,30 @@ class RecordingManager: NSObject, ObservableObject {
         let deviceOrientation = UIDevice.current.orientation
         let rotationAngle: CGFloat
 
-        // Determine rotation based on how device is held
-        // Swapped values to fix upside-down video
+        // Determine rotation based on how device is held so the clip keeps the orientation
+        // it was shot in (portrait practice clips stay portrait, not forced to landscape).
+        // Swapped landscape values fix upside-down video on this mount.
         switch deviceOrientation {
         case .landscapeLeft:
-            // Device held with volume buttons down, home button on left
             rotationAngle = 0
         case .landscapeRight:
-            // Device held with volume buttons up, home button on right
             rotationAngle = 180
+        case .portrait:
+            rotationAngle = 90
+        case .portraitUpsideDown:
+            rotationAngle = 270
         default:
-            // Use interface orientation as fallback for landscape detection
+            // Flat / unknown — fall back to the interface orientation.
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                let interfaceOrientation = windowScene.effectiveGeometry.interfaceOrientation
-                switch interfaceOrientation {
-                case .landscapeLeft:
-                    rotationAngle = 180
-                case .landscapeRight:
-                    rotationAngle = 0
-                default:
-                    rotationAngle = 180  // Default
+                switch windowScene.effectiveGeometry.interfaceOrientation {
+                case .landscapeLeft:       rotationAngle = 180
+                case .landscapeRight:      rotationAngle = 0
+                case .portrait:            rotationAngle = 90
+                case .portraitUpsideDown:  rotationAngle = 270
+                default:                   rotationAngle = 90
                 }
             } else {
-                rotationAngle = 180
+                rotationAngle = 90
             }
         }
 

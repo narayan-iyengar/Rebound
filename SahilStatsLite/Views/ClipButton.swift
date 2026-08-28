@@ -47,37 +47,43 @@ struct ClipButton: View {
             .opacity(recordingManager.clipState == .idle ? 0.45 : 1)
     }
 
-    // Big circular record-style button. A faint track ring is always drawn; while clipping a
-    // coral arc spins around it and the center shows the seconds remaining (tap to stop early).
+    // Big circular record button with an iOS-timelapse-style tick ring around the edge.
+    // The ticks rotate while clipping; the center shows the seconds remaining (tap to stop).
     private var circleBody: some View {
         let d = 78 * scale
-        let clipping = isClipping
         return ZStack {
-            // Track ring (always).
-            Circle().stroke(Chalk.chalk.opacity(0.22), lineWidth: 5)
-                .frame(width: d, height: d)
-
-            // Spinning progress arc while clipping.
-            if clipping {
-                Circle().trim(from: 0, to: 0.3)
-                    .stroke(Chalk.coral, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .frame(width: d, height: d)
-                    .rotationEffect(.degrees(spin ? 360 : 0))
-                    .onAppear { spin = true }
-                    .onDisappear { spin = false }
-                    .animation(.linear(duration: 1.05).repeatForever(autoreverses: false), value: spin)
-            } else {
-                // Clean full ring at rest (record look).
-                Circle().stroke(ringColor, lineWidth: 5)
-                    .frame(width: d, height: d)
-            }
-
+            tickRing(d: d, color: tickColor)
+                .rotationEffect(.degrees(spin ? 360 : 0))
+                .animation(spin ? .linear(duration: 6).repeatForever(autoreverses: false) : .default,
+                           value: spin)
             circleCenter(d: d)
         }
         .frame(width: d + 10, height: d + 10)
         .shadow(color: Chalk.coral.opacity(pulse ? 0.7 : 0.25), radius: pulse ? 14 : 6, y: 2)
         .scaleEffect(pulse ? 1.06 : 1)
         .opacity(recordingManager.clipState == .idle ? 0.55 : 1)
+        .onChange(of: isClipping) { _, clipping in spin = clipping }
+        .onAppear { spin = isClipping }
+    }
+
+    // Radial ticks around the perimeter, every 4th one longer/bolder (clock-face look).
+    private func tickRing(d: CGFloat, color: Color) -> some View {
+        Canvas { ctx, size in
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let outer = size.width / 2 - 1
+            let count = 48
+            for i in 0..<count {
+                let major = i % 4 == 0
+                let len: CGFloat = major ? 9 : 5
+                let a = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2
+                let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
+                let p2 = CGPoint(x: c.x + (outer - len) * cos(a), y: c.y + (outer - len) * sin(a))
+                var path = Path(); path.move(to: p1); path.addLine(to: p2)
+                ctx.stroke(path, with: .color(color.opacity(major ? 1 : 0.5)),
+                           lineWidth: major ? 2.5 : 1.5)
+            }
+        }
+        .frame(width: d, height: d)
     }
 
     private var isClipping: Bool {
@@ -86,8 +92,13 @@ struct ClipButton: View {
         return false
     }
 
-    private var ringColor: Color {
-        recordingManager.clipState == .saved ? Chalk.green : Chalk.chalk.opacity(0.9)
+    private var tickColor: Color {
+        switch recordingManager.clipState {
+        case .saved: return Chalk.green
+        case .clipping, .saving: return Chalk.coral
+        case .buffering: return Chalk.chalk.opacity(0.85)
+        case .idle: return Chalk.chalk.opacity(0.6)
+        }
     }
 
     @ViewBuilder

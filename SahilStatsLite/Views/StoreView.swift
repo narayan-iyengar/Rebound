@@ -26,6 +26,11 @@ struct StoreView: View {
     @State private var selected = Set<UUID>()
     @State private var showDeleteConfirm = false
 
+    // Tag editing
+    @State private var editingGroupId: String?
+    @State private var labelDraft = ""
+    @State private var showTagEditor = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
@@ -50,6 +55,15 @@ struct StoreView: View {
         }
         .fullScreenCover(item: $playing) { clip in
             VideoPlayerSheet(url: clip.url, caption: clip.isPractice ? "Practice" : clip.scoreLine)
+        }
+        .alert("Tag", isPresented: $showTagEditor) {
+            TextField("e.g. Rec Center · shooting", text: $labelDraft)
+            Button("Save") {
+                if let gid = editingGroupId { store.setLabel(labelDraft, forGroupId: gid) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Label this session's clips.")
         }
         .confirmationDialog("Delete \(selected.count) clip\(selected.count == 1 ? "" : "s")?",
                             isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -142,6 +156,8 @@ struct StoreView: View {
             .buttonStyle(.plain)
             .disabled(!selecting)
 
+            if !selecting { tagChip(group) }
+
             ForEach(group.clips) { clip in
                 ClipCard(clip: clip, selecting: selecting, isSelected: selected.contains(clip.id))
                     .contentShape(Rectangle())
@@ -167,6 +183,28 @@ struct StoreView: View {
                     }
             }
         }
+    }
+
+    // Editable tag chip for a session (any group — practice or game).
+    private func tagChip(_ group: HighlightGroup) -> some View {
+        Button {
+            editingGroupId = group.id
+            labelDraft = group.label ?? ""
+            showTagEditor = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: (group.label?.isEmpty == false) ? "tag.fill" : "tag")
+                    .font(.system(size: 11, weight: .semibold))
+                Text((group.label?.isEmpty == false) ? group.label! : "Add tag")
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundColor((group.label?.isEmpty == false) ? Chalk.yellow : Chalk.dust)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Color.white.opacity(0.04), in: Capsule())
+            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Selection bar
