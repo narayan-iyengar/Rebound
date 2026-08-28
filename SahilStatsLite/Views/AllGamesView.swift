@@ -164,7 +164,11 @@ struct AllGamesView: View {
 
                                 Button(role: .destructive) {
                                     gameToDelete = game
-                                    showDeleteConfirmation = true
+                                    // Defer so the context menu finishes dismissing first —
+                                    // otherwise the alert is swallowed on the first tap.
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        showDeleteConfirmation = true
+                                    }
                                 } label: {
                                     Label("Delete Game", systemImage: "trash")
                                 }

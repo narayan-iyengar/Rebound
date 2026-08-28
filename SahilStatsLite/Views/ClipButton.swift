@@ -26,6 +26,8 @@ struct ClipButton: View {
     @State private var pulse = false       // brief bump on a successful tap
     @State private var recPulse = false    // steady dot pulse while clipping
     @State private var flash = false       // idle-tap "not ready" hint
+    @State private var clipStart: Date?    // when the current clip's forward window began
+    @State private var clipTotal: Double?  // total forward seconds (for the countdown ring)
 
     var body: some View {
         Button(action: handleTap) {
@@ -72,10 +74,21 @@ struct ClipButton: View {
         .scaleEffect(pulse ? 1.06 : 1)
         .opacity(recordingManager.clipState == .idle ? 0.6 : 1)
         .animation(.spring(response: 0.28, dampingFraction: 0.72), value: recording)
+        .onChange(of: recordingManager.clipState) { _, st in trackClipTiming(st) }
     }
 
-    // Full ring of fine ticks. Static (uniform) at rest; while recording a bright wedge
-    // grows and shrinks (fills/unfills) around the ring.
+    // Capture the forward-window start + total when a clip begins, so the tick ring can act
+    // as a smooth countdown. Cleared once the clip is no longer in flight.
+    private func trackClipTiming(_ st: ClipState) {
+        if case .clipping(let remaining) = st {
+            if clipStart == nil { clipStart = Date(); clipTotal = Double(remaining) }
+        } else if st != .saving {
+            clipStart = nil; clipTotal = nil
+        }
+    }
+
+    // Full ring of fine ticks. Subtle/uniform at rest; while clipping the ticks act as a
+    // countdown — a full ring of bright ticks that empties as the seconds run out.
     private func tickRing(d: CGFloat, animate: Bool) -> some View {
         let count = 64
         return TimelineView(.animation(paused: !animate)) { timeline in
@@ -83,18 +96,20 @@ struct ClipButton: View {
                 let c = CGPoint(x: size.width / 2, y: size.height / 2)
                 let outer = size.width / 2 - 1
                 let len: CGFloat = 4.5
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let period = 2.4
-                // Sawtooth: fill all the way around, then clear and start over.
-                let frac = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
-                let bright = animate ? Int(frac * CGFloat(count)) : 0
+                // Fraction of the forward window still remaining (1 → 0).
+                var progress: CGFloat = 0
+                if animate, let s = clipStart, let tot = clipTotal, tot > 0 {
+                    let remaining = max(0, tot - timeline.date.timeIntervalSince(s))
+                    progress = CGFloat(remaining / tot)
+                }
+                let litCount = animate ? Int((progress * CGFloat(count)).rounded()) : 0
                 for i in 0..<count {
                     let a = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2
                     let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
                     let p2 = CGPoint(x: c.x + (outer - len) * cos(a), y: c.y + (outer - len) * sin(a))
                     var path = Path(); path.move(to: p1); path.addLine(to: p2)
-                    // Subtle at rest (matches iOS timelapse); the sweep brightens while clipping.
-                    let op: Double = animate ? (i < bright ? 0.95 : 0.22) : 0.32
+                    // Bright ticks = time left; they empty clockwise as the countdown runs.
+                    let op: Double = animate ? (i < litCount ? 0.95 : 0.18) : 0.32
                     ctx.stroke(path, with: .color(Chalk.chalk.opacity(op)), lineWidth: 1.0)
                 }
             }

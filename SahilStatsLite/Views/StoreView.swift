@@ -177,7 +177,11 @@ struct StoreView: View {
                                 Label("Select", systemImage: "checkmark.circle")
                             }
                             Button(role: .destructive) {
-                                selected = [clip.id]; showDeleteConfirm = true
+                                selected = [clip.id]
+                                // Defer so the context menu dismisses before the dialog shows.
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    showDeleteConfirm = true
+                                }
                             } label: { Label("Delete", systemImage: "trash") }
                         }
                     }
