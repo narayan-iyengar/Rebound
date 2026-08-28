@@ -93,7 +93,7 @@ struct PracticeView: View {
             VStack(spacing: 18) {
                 Spacer()
                 zoomPills
-                ClipButton(idleHint: "Camera warming up…", circle: true)
+                ClipButton(idleHint: "Camera warming up…", scale: 1.4, circle: true)
                     .padding(.bottom, 26)
             }
         }
