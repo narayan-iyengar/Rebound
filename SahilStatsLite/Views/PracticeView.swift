@@ -23,6 +23,9 @@ struct PracticeView: View {
     // Manual zoom for practice (game mode auto-zooms via Skynet; practice has no tracking).
     @State private var zoom: CGFloat = 1.0
     @State private var pinchBaseZoom: CGFloat = 1.0
+    @State private var slideStartNorm: CGFloat?      // captured at the start of a slide
+    @State private var showZoomHUD = false           // transient "2.4×" readout while zooming
+    @State private var hudWork: DispatchWorkItem?
     private let maxZoom: CGFloat = 6.0
 
     // Optional freeform tag saved onto this session's clips (e.g. gym / drill name).
@@ -33,10 +36,25 @@ struct PracticeView: View {
     var body: some View {
         ZStack {
             camera
-                // Pinch anywhere on the preview to zoom (1×–maxZoom).
-                .gesture(
+                // Slide a thumb anywhere on the preview to zoom — up/right zooms in,
+                // down/left zooms out (whichever axis you move more).
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { value in
+                            let start = slideStartNorm ?? normFor(zoom)
+                            if slideStartNorm == nil { slideStartNorm = normFor(zoom) }
+                            let t = value.translation
+                            let delta = abs(t.height) >= abs(t.width) ? -t.height : t.width
+                            let newNorm = max(0, min(1, start + delta / 300))
+                            applyZoom(zoomForNorm(newNorm))
+                            flashZoomHUD()
+                        }
+                        .onEnded { _ in slideStartNorm = nil; pinchBaseZoom = zoom }
+                )
+                // Pinch still works for those who reach for it.
+                .simultaneousGesture(
                     MagnificationGesture()
-                        .onChanged { scale in applyZoom(pinchBaseZoom * scale) }
+                        .onChanged { scale in applyZoom(pinchBaseZoom * scale); flashZoomHUD() }
                         .onEnded { _ in pinchBaseZoom = zoom }
                 )
 
@@ -59,12 +77,22 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            // Bottom bar: simple lens pills + the circular Clip button.
-            VStack(spacing: 16) {
+            // Transient zoom readout, shown only while sliding/pinching.
+            if showZoomHUD {
+                Text(String(format: "%.1f×", zoom))
+                    .font(.system(size: 34, weight: .heavy, design: .rounded))
+                    .foregroundColor(Chalk.chalk)
+                    .padding(.horizontal, 22).padding(.vertical, 12)
+                    .background(Color(white: 0.05, opacity: 0.55), in: Capsule())
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+
+            // Bottom bar: just the circular Clip button (zoom is a thumb-slide on the preview).
+            VStack {
                 Spacer()
-                zoomPills
                 ClipButton(idleHint: "Camera warming up…", circle: true)
-                    .padding(.bottom, 22)
+                    .padding(.bottom, 26)
             }
         }
         .alert("Practice tag", isPresented: $showLocationEditor) {
@@ -142,31 +170,17 @@ struct PracticeView: View {
         }
     }
 
-    private let zoomPresets: [CGFloat] = [1, 2, 3, 5]
+    // Zoom is a thumb-slide on the preview — log-scaled 1×–maxZoom.
+    private func normFor(_ z: CGFloat) -> CGFloat { log(z) / log(maxZoom) }
+    private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, t) }
 
-    private func isActiveZoom(_ p: CGFloat) -> Bool { abs(zoom - p) < 0.15 }
-
-    // Minimal zoom: stock-camera-style lens pills. Tap to jump; pinch for in-between.
-    private var zoomPills: some View {
-        HStack(spacing: 8) {
-            ForEach(zoomPresets, id: \.self) { p in
-                Button {
-                    applyZoom(p)
-                    pinchBaseZoom = p
-                } label: {
-                    Text(isActiveZoom(p) ? String(format: "%.1f×", zoom) : "\(Int(p))")
-                        .font(.system(size: isActiveZoom(p) ? 14 : 13, weight: .bold, design: .rounded))
-                        .foregroundColor(isActiveZoom(p) ? Chalk.board : Chalk.chalk)
-                        .frame(width: isActiveZoom(p) ? 52 : 38, height: 38)
-                        .background(Circle().fill(isActiveZoom(p) ? Chalk.yellow : Color(white: 0.1, opacity: 0.55)))
-                        .overlay(Circle().stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(white: 0.04, opacity: 0.4), in: Capsule())
+    // Briefly show the zoom readout, hiding shortly after the last movement.
+    private func flashZoomHUD() {
+        if !showZoomHUD { withAnimation(.easeOut(duration: 0.15)) { showZoomHUD = true } }
+        hudWork?.cancel()
+        let work = DispatchWorkItem { withAnimation(.easeIn(duration: 0.3)) { showZoomHUD = false } }
+        hudWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
     }
 
     // Optional session tag under the Practice chip.

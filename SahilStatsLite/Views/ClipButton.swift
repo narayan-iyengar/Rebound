@@ -26,6 +26,7 @@ struct ClipButton: View {
     @State private var pulse = false       // brief bump on a successful tap
     @State private var recPulse = false    // steady dot pulse while clipping
     @State private var flash = false       // idle-tap "not ready" hint
+    @State private var spin = false        // rotating progress arc while clipping (circle style)
 
     var body: some View {
         Button(action: handleTap) {
@@ -46,46 +47,65 @@ struct ClipButton: View {
             .opacity(recordingManager.clipState == .idle ? 0.45 : 1)
     }
 
-    // Big circular record-style button. Outer chalk ring + coral center; while clipping the
-    // center shows the seconds remaining, tap to stop early.
+    // Big circular record-style button. A faint track ring is always drawn; while clipping a
+    // coral arc spins around it and the center shows the seconds remaining (tap to stop early).
     private var circleBody: some View {
         let d = 78 * scale
-        let inner = d - 16
+        let clipping = isClipping
         return ZStack {
-            Circle().stroke(Chalk.chalk.opacity(0.9), lineWidth: 4)
+            // Track ring (always).
+            Circle().stroke(Chalk.chalk.opacity(0.22), lineWidth: 5)
                 .frame(width: d, height: d)
-            circleCenter(inner: inner)
+
+            // Spinning progress arc while clipping.
+            if clipping {
+                Circle().trim(from: 0, to: 0.3)
+                    .stroke(Chalk.coral, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .frame(width: d, height: d)
+                    .rotationEffect(.degrees(spin ? 360 : 0))
+                    .onAppear { spin = true }
+                    .onDisappear { spin = false }
+                    .animation(.linear(duration: 1.05).repeatForever(autoreverses: false), value: spin)
+            } else {
+                // Clean full ring at rest (record look).
+                Circle().stroke(ringColor, lineWidth: 5)
+                    .frame(width: d, height: d)
+            }
+
+            circleCenter(d: d)
         }
-        .frame(width: d + 8, height: d + 8)
-        .shadow(color: Chalk.coral.opacity(pulse ? 0.7 : 0.3), radius: pulse ? 14 : 7, y: 2)
-        .scaleEffect(pulse ? 1.07 : 1)
-        .opacity(recordingManager.clipState == .idle ? 0.5 : 1)
+        .frame(width: d + 10, height: d + 10)
+        .shadow(color: Chalk.coral.opacity(pulse ? 0.7 : 0.25), radius: pulse ? 14 : 6, y: 2)
+        .scaleEffect(pulse ? 1.06 : 1)
+        .opacity(recordingManager.clipState == .idle ? 0.55 : 1)
+    }
+
+    private var isClipping: Bool {
+        if case .clipping = recordingManager.clipState { return true }
+        if recordingManager.clipState == .saving { return true }
+        return false
+    }
+
+    private var ringColor: Color {
+        recordingManager.clipState == .saved ? Chalk.green : Chalk.chalk.opacity(0.9)
     }
 
     @ViewBuilder
-    private func circleCenter(inner: CGFloat) -> some View {
+    private func circleCenter(d: CGFloat) -> some View {
         switch recordingManager.clipState {
         case .clipping(let remaining):
-            Circle().fill(Chalk.coral).frame(width: inner, height: inner)
-                .overlay(
-                    Text("\(remaining)")
-                        .font(.system(size: inner * 0.42, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundColor(Chalk.board)
-                )
-                .opacity(recPulse ? 0.82 : 1)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: recPulse)
-                .onAppear { recPulse = true }
-                .onDisappear { recPulse = false }
+            Text("\(remaining)")
+                .font(.system(size: d * 0.34, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(Chalk.chalk)
         case .saving:
-            Circle().fill(Chalk.coral).frame(width: inner, height: inner)
-                .overlay(ProgressView().tint(Chalk.board))
+            ProgressView().tint(Chalk.coral)
         case .saved:
-            Circle().fill(Chalk.green).frame(width: inner, height: inner)
-                .overlay(Image(systemName: "checkmark")
-                    .font(.system(size: inner * 0.4, weight: .heavy)).foregroundColor(Chalk.board))
+            Image(systemName: "checkmark")
+                .font(.system(size: d * 0.32, weight: .heavy)).foregroundColor(Chalk.green)
         case .idle, .buffering:
-            Circle().fill(Chalk.coral).frame(width: inner, height: inner)
+            // The classic red "record" dot.
+            Circle().fill(Chalk.coral).frame(width: d - 20, height: d - 20)
         }
     }
 

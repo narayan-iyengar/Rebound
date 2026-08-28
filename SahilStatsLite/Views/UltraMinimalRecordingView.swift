@@ -187,7 +187,7 @@ struct UltraMinimalRecordingView: View {
             VStack {
                 HStack {
                     ClipButton(idleHint: appState.isStatsOnly ? "Camera warming up…" : "Start game to clip",
-                               scale: appState.isStatsOnly ? 1.3 : 1.0)
+                               scale: appState.isStatsOnly ? 0.8 : 0.5, circle: true)
                         .padding(.leading, 16)
 
                     // Streaming indicator (only while live to YouTube)
