@@ -88,9 +88,11 @@ struct PracticeView: View {
                     .allowsHitTesting(false)
             }
 
-            // Bottom bar: just the circular Clip button (zoom is a thumb-slide on the preview).
-            VStack {
+            // Bottom bar: iOS-timelapse-style lens pills + the circular Clip button.
+            // (Slide/pinch on the preview also zoom, for fine control.)
+            VStack(spacing: 18) {
                 Spacer()
+                zoomPills
                 ClipButton(idleHint: "Camera warming up…", circle: true)
                     .padding(.bottom, 26)
             }
@@ -173,6 +175,27 @@ struct PracticeView: View {
     // Zoom is a thumb-slide on the preview — log-scaled 1×–maxZoom.
     private func normFor(_ z: CGFloat) -> CGFloat { log(z) / log(maxZoom) }
     private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, t) }
+
+    private let zoomPresets: [CGFloat] = [1, 2, 3, 5]
+    private func isActiveZoom(_ p: CGFloat) -> Bool { abs(zoom - p) < 0.15 }
+
+    // iOS-timelapse-style lens pills: tap to jump, active one shows the exact level.
+    private var zoomPills: some View {
+        HStack(spacing: 14) {
+            ForEach(zoomPresets, id: \.self) { p in
+                Button {
+                    applyZoom(p); pinchBaseZoom = p
+                } label: {
+                    Text(isActiveZoom(p) ? String(format: "%.1f×", zoom) : "\(Int(p))")
+                        .font(.system(size: isActiveZoom(p) ? 15 : 13, weight: .bold, design: .rounded))
+                        .foregroundColor(isActiveZoom(p) ? Chalk.yellow : Chalk.chalk.opacity(0.9))
+                        .frame(minWidth: isActiveZoom(p) ? 46 : 26, minHeight: isActiveZoom(p) ? 46 : 26)
+                        .background(Circle().fill(Color.black.opacity(isActiveZoom(p) ? 0.4 : 0)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
 
     // Briefly show the zoom readout, hiding shortly after the last movement.
     private func flashZoomHUD() {

@@ -26,7 +26,6 @@ struct ClipButton: View {
     @State private var pulse = false       // brief bump on a successful tap
     @State private var recPulse = false    // steady dot pulse while clipping
     @State private var flash = false       // idle-tap "not ready" hint
-    @State private var spin = false        // rotating progress arc while clipping (circle style)
 
     var body: some View {
         Button(action: handleTap) {
@@ -47,40 +46,56 @@ struct ClipButton: View {
             .opacity(recordingManager.clipState == .idle ? 0.45 : 1)
     }
 
-    // Big circular record button with an iOS-timelapse-style tick ring around the edge.
-    // The ticks rotate while clipping; the center shows the seconds remaining (tap to stop).
+    // iOS-timelapse-style record button: a full ring of fine ticks with a red center that
+    // morphs circle → rounded square while clipping; the ticks fill/unfill (sweep) meanwhile.
     private var circleBody: some View {
         let d = 78 * scale
+        let recording = isClipping
+        let base = d - 16
+        let side = recording ? base * 0.5 : base
+        let corner = recording ? side * 0.30 : side / 2
         return ZStack {
-            tickRing(d: d, color: tickColor)
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .animation(spin ? .linear(duration: 6).repeatForever(autoreverses: false) : .default,
-                           value: spin)
-            circleCenter(d: d)
+            tickRing(d: d, animate: recording)
+
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(centerColor)
+                .frame(width: side, height: side)
+
+            if recordingManager.clipState == .saved {
+                Image(systemName: "checkmark")
+                    .font(.system(size: base * 0.34, weight: .heavy))
+                    .foregroundColor(Chalk.board)
+            }
         }
-        .frame(width: d + 10, height: d + 10)
-        .shadow(color: Chalk.coral.opacity(pulse ? 0.7 : 0.25), radius: pulse ? 14 : 6, y: 2)
+        .frame(width: d + 12, height: d + 12)
+        .shadow(color: Chalk.coral.opacity(pulse ? 0.6 : 0.2), radius: pulse ? 14 : 6, y: 2)
         .scaleEffect(pulse ? 1.06 : 1)
-        .opacity(recordingManager.clipState == .idle ? 0.55 : 1)
-        .onChange(of: isClipping) { _, clipping in spin = clipping }
-        .onAppear { spin = isClipping }
+        .opacity(recordingManager.clipState == .idle ? 0.6 : 1)
+        .animation(.spring(response: 0.28, dampingFraction: 0.72), value: recording)
     }
 
-    // Radial ticks around the perimeter, every 4th one longer/bolder (clock-face look).
-    private func tickRing(d: CGFloat, color: Color) -> some View {
-        Canvas { ctx, size in
-            let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            let outer = size.width / 2 - 1
-            let count = 48
-            for i in 0..<count {
-                let major = i % 4 == 0
-                let len: CGFloat = major ? 9 : 5
-                let a = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2
-                let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
-                let p2 = CGPoint(x: c.x + (outer - len) * cos(a), y: c.y + (outer - len) * sin(a))
-                var path = Path(); path.move(to: p1); path.addLine(to: p2)
-                ctx.stroke(path, with: .color(color.opacity(major ? 1 : 0.5)),
-                           lineWidth: major ? 2.5 : 1.5)
+    // Full ring of fine ticks. Static (uniform) at rest; while recording a bright wedge
+    // grows and shrinks (fills/unfills) around the ring.
+    private func tickRing(d: CGFloat, animate: Bool) -> some View {
+        let count = 60
+        return TimelineView(.animation(paused: !animate)) { timeline in
+            Canvas { ctx, size in
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let outer = size.width / 2 - 1
+                let len: CGFloat = 6
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let period = 2.4
+                let frac = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
+                let tri = 1 - abs(2 * frac - 1)                 // 0→1→0 triangle
+                let bright = animate ? Int(tri * CGFloat(count)) : 0
+                for i in 0..<count {
+                    let a = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2
+                    let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
+                    let p2 = CGPoint(x: c.x + (outer - len) * cos(a), y: c.y + (outer - len) * sin(a))
+                    var path = Path(); path.move(to: p1); path.addLine(to: p2)
+                    let op: Double = animate ? (i < bright ? 1.0 : 0.25) : 0.5
+                    ctx.stroke(path, with: .color(Chalk.chalk.opacity(op)), lineWidth: 1.6)
+                }
             }
         }
         .frame(width: d, height: d)
@@ -92,32 +107,8 @@ struct ClipButton: View {
         return false
     }
 
-    private var tickColor: Color {
-        switch recordingManager.clipState {
-        case .saved: return Chalk.green
-        case .clipping, .saving: return Chalk.coral
-        case .buffering: return Chalk.chalk.opacity(0.85)
-        case .idle: return Chalk.chalk.opacity(0.6)
-        }
-    }
-
-    @ViewBuilder
-    private func circleCenter(d: CGFloat) -> some View {
-        switch recordingManager.clipState {
-        case .clipping(let remaining):
-            Text("\(remaining)")
-                .font(.system(size: d * 0.34, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .foregroundColor(Chalk.chalk)
-        case .saving:
-            ProgressView().tint(Chalk.coral)
-        case .saved:
-            Image(systemName: "checkmark")
-                .font(.system(size: d * 0.32, weight: .heavy)).foregroundColor(Chalk.green)
-        case .idle, .buffering:
-            // The classic red "record" dot.
-            Circle().fill(Chalk.coral).frame(width: d - 20, height: d - 20)
-        }
+    private var centerColor: Color {
+        recordingManager.clipState == .saved ? Chalk.green : Chalk.coral
     }
 
     private func handleTap() {
