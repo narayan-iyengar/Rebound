@@ -853,7 +853,7 @@ struct UltraMinimalRecordingView: View {
                         Image(systemName: isClockRunning ? "pause.fill" : "play.fill")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(isClockRunning ? Chalk.coral : Chalk.green)
-                        Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Start")
+                        Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Tip Off")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(Chalk.yellow)
                     }
