@@ -57,19 +57,15 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            // Bottom bar: zoom pill + Clip button, thumb-reachable, portrait & landscape.
-            VStack {
+            // Bottom bar: iOS-style zoom ruler over a centered Clip button. Thumb-reachable
+            // in both orientations.
+            VStack(spacing: 12) {
                 Spacer()
-                HStack(alignment: .center) {
-                    zoomPill
-                    Spacer()
-                    ClipButton(idleHint: "Camera warming up…")
-                    Spacer()
-                    // Invisible spacer matching the zoom pill keeps the Clip button centered.
-                    zoomPill.opacity(0).disabled(true)
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 18)
+                zoomRuler
+                    .frame(height: 44)
+                    .padding(.horizontal, 24)
+                ClipButton(idleHint: "Camera warming up…")
+                    .padding(.bottom, 18)
             }
         }
         .statusBar(hidden: true)
@@ -135,26 +131,84 @@ struct PracticeView: View {
         }
     }
 
-    // Thumb-friendly zoom control: shows the current level, tap to cycle 1× → 2× → 3×.
-    // (Pinch on the preview handles fine-grained zoom.)
-    private var zoomPill: some View {
-        Button(action: cycleZoomPreset) {
-            Text(String(format: "%.1f×", zoom))
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundColor(Chalk.chalk)
-                .frame(minWidth: 52)
-                .padding(.vertical, 10)
-                .background(Color(white: 0.08, opacity: 0.55), in: Capsule())
-                .overlay(Capsule().stroke(Chalk.chalk.opacity(0.25), lineWidth: 1))
+    // iOS-style zoom ruler: a tick track with lens labels; drag to zoom, snaps softly to
+    // presets. Pinch on the preview still works for fine control.
+    private let zoomPresets: [CGFloat] = [1, 2, 3, 5]
+
+    private func normFor(_ z: CGFloat) -> CGFloat { log(z) / log(maxZoom) }   // [1,max] → [0,1]
+    private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, t) }
+
+    private var zoomRuler: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let midY = geo.size.height / 2
+            ZStack(alignment: .leading) {
+                // Track background
+                Capsule()
+                    .fill(Color(white: 0.06, opacity: 0.5))
+                    .overlay(Capsule().stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
+
+                // Ticks
+                Canvas { ctx, size in
+                    let minorColor = GraphicsContext.Shading.color(Chalk.chalk.opacity(0.35))
+                    var t: CGFloat = 0
+                    while t <= 1.0001 {
+                        let x = t * size.width
+                        var p = Path()
+                        p.move(to: CGPoint(x: x, y: midY - 4))
+                        p.addLine(to: CGPoint(x: x, y: midY + 4))
+                        ctx.stroke(p, with: minorColor, lineWidth: 1)
+                        t += 0.05
+                    }
+                    // Major ticks at presets
+                    for preset in zoomPresets {
+                        let x = normFor(preset) * size.width
+                        var p = Path()
+                        p.move(to: CGPoint(x: x, y: midY - 9))
+                        p.addLine(to: CGPoint(x: x, y: midY + 9))
+                        ctx.stroke(p, with: .color(Chalk.chalk.opacity(0.6)), lineWidth: 1.5)
+                    }
+                }
+
+                // Preset labels
+                ForEach(zoomPresets, id: \.self) { preset in
+                    Text("\(Int(preset))×")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Chalk.chalk.opacity(0.55))
+                        .position(x: normFor(preset) * w, y: midY + 16)
+                }
+
+                // Current-zoom needle + readout
+                let x = normFor(zoom) * w
+                Capsule()
+                    .fill(Chalk.yellow)
+                    .frame(width: 3, height: 26)
+                    .position(x: x, y: midY)
+                Text(String(format: "%.1f×", zoom))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(Chalk.yellow)
+                    .fixedSize()
+                    .position(x: min(max(x, 20), w - 20), y: midY - 16)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let t = max(0, min(1, value.location.x / w))
+                        applyZoom(snap(zoomForNorm(t)))
+                        pinchBaseZoom = zoom
+                    }
+            )
         }
-        .buttonStyle(.plain)
     }
 
-    private func cycleZoomPreset() {
-        // 1× → 2× → 3× → back to 1×
-        let next: CGFloat = zoom < 1.75 ? 2.0 : (zoom < 2.75 ? 3.0 : 1.0)
-        applyZoom(next)
-        pinchBaseZoom = zoom
+    // Soft-snap to a preset when within a small distance (in normalized ruler space).
+    private func snap(_ z: CGFloat) -> CGFloat {
+        let t = normFor(z)
+        for preset in zoomPresets where abs(normFor(preset) - t) < 0.028 {
+            return preset
+        }
+        return z
     }
 
     private func applyZoom(_ factor: CGFloat) {
