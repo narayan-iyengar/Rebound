@@ -51,7 +51,7 @@ struct ClipButton: View {
     private var circleBody: some View {
         let d = 78 * scale
         let recording = isClipping
-        let base = d - 16
+        let base = d - 20
         let side = recording ? base * 0.5 : base
         let corner = recording ? side * 0.30 : side / 2
         return ZStack {
@@ -77,12 +77,12 @@ struct ClipButton: View {
     // Full ring of fine ticks. Static (uniform) at rest; while recording a bright wedge
     // grows and shrinks (fills/unfills) around the ring.
     private func tickRing(d: CGFloat, animate: Bool) -> some View {
-        let count = 60
+        let count = 64
         return TimelineView(.animation(paused: !animate)) { timeline in
             Canvas { ctx, size in
                 let c = CGPoint(x: size.width / 2, y: size.height / 2)
                 let outer = size.width / 2 - 1
-                let len: CGFloat = 6
+                let len: CGFloat = 4.5
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 let period = 2.4
                 let frac = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
@@ -93,8 +93,9 @@ struct ClipButton: View {
                     let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
                     let p2 = CGPoint(x: c.x + (outer - len) * cos(a), y: c.y + (outer - len) * sin(a))
                     var path = Path(); path.move(to: p1); path.addLine(to: p2)
-                    let op: Double = animate ? (i < bright ? 1.0 : 0.25) : 0.5
-                    ctx.stroke(path, with: .color(Chalk.chalk.opacity(op)), lineWidth: 1.6)
+                    // Subtle at rest (matches iOS timelapse); the sweep brightens while clipping.
+                    let op: Double = animate ? (i < bright ? 0.95 : 0.22) : 0.32
+                    ctx.stroke(path, with: .color(Chalk.chalk.opacity(op)), lineWidth: 1.0)
                 }
             }
         }
