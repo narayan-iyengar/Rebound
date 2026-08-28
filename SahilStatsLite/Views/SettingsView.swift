@@ -233,11 +233,23 @@ struct SettingsView: View {
                     // My Teams Section (for smart opponent detection)
                     Section {
                         ForEach(calendarManager.knownTeamNames, id: \.self) { team in
-                            Text(team)
-                                .font(.system(size: 15))
-                                .foregroundColor(Chalk.chalk)
-                                .listRowBackground(Chalk.board2)
+                            HStack {
+                                Text(team)
+                                    .font(.system(size: 15))
+                                    .foregroundColor(Chalk.chalk)
+                                Spacer()
+                                Button {
+                                    calendarManager.removeKnownTeamName(team)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(Chalk.coral)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .listRowBackground(Chalk.board2)
                         }
+                        // Swipe-to-delete kept as a fallback (the paged nav can eat the swipe).
                         .onDelete { indexSet in
                             for index in indexSet {
                                 let team = calendarManager.knownTeamNames[index]
