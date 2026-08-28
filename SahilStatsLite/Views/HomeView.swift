@@ -145,7 +145,7 @@ struct HomeView: View {
                                 .fixedSize()
                         }
                     }
-                    .foregroundColor(active ? Chalk.board : Chalk.chalk.opacity(0.4))
+                    .foregroundColor(active ? Chalk.board : Chalk.chalk.opacity(0.28))
                     .padding(.horizontal, active ? 14 : 9)
                     .frame(height: 36)
                     .background(active ? Chalk.yellow : Color.clear, in: Capsule())
