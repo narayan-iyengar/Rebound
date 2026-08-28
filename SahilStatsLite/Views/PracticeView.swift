@@ -24,8 +24,6 @@ struct PracticeView: View {
     @State private var zoom: CGFloat = 1.0
     @State private var pinchBaseZoom: CGFloat = 1.0
     @State private var slideStartNorm: CGFloat?      // captured at the start of a slide
-    @State private var showZoomHUD = false           // transient "2.4×" readout while zooming
-    @State private var hudWork: DispatchWorkItem?
     private let maxZoom: CGFloat = 6.0
 
     // Optional freeform tag saved onto this session's clips (e.g. gym / drill name).
@@ -47,14 +45,13 @@ struct PracticeView: View {
                             let delta = abs(t.height) >= abs(t.width) ? -t.height : t.width
                             let newNorm = max(0, min(1, start + delta / 300))
                             applyZoom(zoomForNorm(newNorm))
-                            flashZoomHUD()
                         }
                         .onEnded { _ in slideStartNorm = nil; pinchBaseZoom = zoom }
                 )
                 // Pinch still works for those who reach for it.
                 .simultaneousGesture(
                     MagnificationGesture()
-                        .onChanged { scale in applyZoom(pinchBaseZoom * scale); flashZoomHUD() }
+                        .onChanged { scale in applyZoom(pinchBaseZoom * scale) }
                         .onEnded { _ in pinchBaseZoom = zoom }
                 )
 
@@ -77,23 +74,12 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            // Transient zoom readout, shown only while sliding/pinching.
-            if showZoomHUD {
-                Text(String(format: "%.1f×", zoom))
-                    .font(.system(size: 34, weight: .heavy, design: .rounded))
-                    .foregroundColor(Chalk.chalk)
-                    .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(Color(white: 0.05, opacity: 0.55), in: Capsule())
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
-
             // Bottom bar: iOS-timelapse-style lens pills + the circular Clip button.
             // (Slide/pinch on the preview also zoom, for fine control.)
             VStack(spacing: 18) {
                 Spacer()
                 zoomPills
-                ClipButton(idleHint: "Camera warming up…", scale: 1.4, circle: true)
+                ClipButton(idleHint: "Camera warming up…", scale: 1.2, circle: true)
                     .padding(.bottom, 26)
             }
         }
@@ -195,15 +181,6 @@ struct PracticeView: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-
-    // Briefly show the zoom readout, hiding shortly after the last movement.
-    private func flashZoomHUD() {
-        if !showZoomHUD { withAnimation(.easeOut(duration: 0.15)) { showZoomHUD = true } }
-        hudWork?.cancel()
-        let work = DispatchWorkItem { withAnimation(.easeIn(duration: 0.3)) { showZoomHUD = false } }
-        hudWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
     }
 
     // Optional session tag under the Practice chip.

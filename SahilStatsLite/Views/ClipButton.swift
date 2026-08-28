@@ -85,9 +85,9 @@ struct ClipButton: View {
                 let len: CGFloat = 4.5
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 let period = 2.4
+                // Sawtooth: fill all the way around, then clear and start over.
                 let frac = CGFloat((t / period).truncatingRemainder(dividingBy: 1))
-                let tri = 1 - abs(2 * frac - 1)                 // 0→1→0 triangle
-                let bright = animate ? Int(tri * CGFloat(count)) : 0
+                let bright = animate ? Int(frac * CGFloat(count)) : 0
                 for i in 0..<count {
                     let a = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2
                     let p1 = CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a))
