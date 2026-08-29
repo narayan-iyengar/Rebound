@@ -28,12 +28,19 @@ struct GameSummaryView: View {
         case failed(String)
     }
 
+    @State private var showHighlights = false
+
     var game: Game? {
         appState.currentGame
     }
 
     var videoURL: URL? {
         recordingManager.getRecordingURL()
+    }
+
+    var gameClipCount: Int {
+        guard let game else { return 0 }
+        return HighlightStore.shared.clips(forGameId: game.id).count
     }
 
     var body: some View {
@@ -50,6 +57,13 @@ struct GameSummaryView: View {
                     playerStatsSection(stats: game.playerStats)
                 }
 
+                // Review this game's saved clips
+                if gameClipCount > 0 {
+                    ChalkButton(title: "Review Highlights", icon: "film.stack", color: Chalk.sky) {
+                        showHighlights = true
+                    }
+                }
+
                 // Save status (minimal)
                 saveStatusView
 
@@ -62,6 +76,9 @@ struct GameSummaryView: View {
         }
         .chalkBoard()
         .navigationBarHidden(true)
+        .sheet(isPresented: $showHighlights) {
+            GameHighlightsSheet(gameId: game?.id ?? "")
+        }
         .task {
             // Auto-save video to Photos when view appears
             await autoSaveVideo()
@@ -210,6 +227,9 @@ struct GameSummaryView: View {
                     statBox(value: "\(stats.assists)", label: "AST", color: Chalk.green)
                     statBox(value: "\(stats.steals)", label: "STL", color: Chalk.chalkDim)
                     statBox(value: "\(stats.blocks)", label: "BLK", color: Chalk.coral)
+                    if gameClipCount > 0 {
+                        statBox(value: "\(gameClipCount)", label: "CLIPS", color: Chalk.coral)
+                    }
                 }
 
                 Divider().overlay(Chalk.chalk.opacity(0.15))

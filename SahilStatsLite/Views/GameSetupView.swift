@@ -249,7 +249,7 @@ struct GameSetupView: View {
 
             // Start Button
             ChalkButton(
-                title: appState.isLogOnly ? "Enter Stats" : (recordVideo ? "Start Recording" : "Start Live Stats"),
+                title: appState.isLogOnly ? "Enter Stats" : "Tip Off",
                 icon: appState.isLogOnly ? "pencil.line" : (recordVideo ? "video.fill" : "sportscourt.fill"),
                 color: opponent.isEmpty ? Chalk.dust : Chalk.yellow
             ) {

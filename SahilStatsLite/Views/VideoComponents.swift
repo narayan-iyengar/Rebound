@@ -105,3 +105,53 @@ struct VideoPlayerSheet: View {
         .onDisappear { player?.pause() }
     }
 }
+
+/// A grid of one game's saved clips (highlights). Tap a thumbnail to play.
+struct GameHighlightsSheet: View {
+    let gameId: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var playing: Highlight?
+
+    private var clips: [Highlight] { HighlightStore.shared.clips(forGameId: gameId) }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                if clips.isEmpty {
+                    Text("No clips for this game")
+                        .font(.system(size: 15))
+                        .foregroundColor(Chalk.dust)
+                        .padding(.vertical, 50)
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12),
+                                        GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(clips) { clip in
+                            Button { playing = clip } label: {
+                                ClipThumbnail(url: clip.url)
+                                    .frame(height: 96)
+                                    .frame(maxWidth: .infinity)
+                                    .clipped()
+                                    .cornerRadius(10)
+                                    .overlay(RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .chalkBoard()
+            .navigationTitle("Highlights")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }.foregroundColor(Chalk.yellow)
+                }
+            }
+            .fullScreenCover(item: $playing) { clip in
+                VideoPlayerSheet(url: clip.url, caption: clip.isPractice ? "Practice" : clip.scoreLine)
+            }
+        }
+    }
+}

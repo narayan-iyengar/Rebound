@@ -139,7 +139,7 @@ struct WatchGameConfirmationView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: connectivity.isPhoneReachable ? "record.circle" : "pencil.line")
                                     .font(.system(size: 14, weight: .semibold))
-                                Text(connectivity.isPhoneReachable ? "Start Recording" : "Start · Stats Only")
+                                Text(connectivity.isPhoneReachable ? "Tip Off" : "Tip Off · Stats")
                                     .font(.system(size: 13, weight: .bold))
                             }
                             .foregroundColor(WChalk.board)
@@ -304,7 +304,7 @@ struct WatchQuickGameConfirmationView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: connectivity.isPhoneReachable ? "record.circle" : "pencil.line")
                                     .font(.system(size: 14, weight: .semibold))
-                                Text(connectivity.isPhoneReachable ? "Start Recording" : "Start · Stats Only")
+                                Text(connectivity.isPhoneReachable ? "Tip Off" : "Tip Off · Stats")
                                     .font(.system(size: 13, weight: .bold))
                             }
                             .foregroundColor(WChalk.board)
