@@ -509,10 +509,19 @@ struct UltraMinimalRecordingView: View {
             toggleClock()
         }
 
-        // Handle period advance from watch
-        watchService.onPeriodAdvance = { [self] in
-            advancePeriod()
+        // Period change from the watch: the watch is the source of truth for this advance —
+        // adopt its exact period + remaining rather than recomputing (which would diverge,
+        // e.g. a different OT length). onPeriodSync fires with the values before this.
+        watchService.onPeriodSync = { [self] per, remaining in
+            period = per
+            remainingSeconds = remaining
+            remainingTenths = 0
+            isClockRunning = false
+            stopTimer()
+            updateOverlayState()
         }
+        // No-op: the actual state is applied via onPeriodSync above (don't recompute here).
+        watchService.onPeriodAdvance = { }
 
         // Handle stat updates from watch
         // NOTE: Stats are tracked separately from game score
@@ -572,6 +581,7 @@ struct UltraMinimalRecordingView: View {
         watchService.onScoreUpdate = nil
         watchService.onClockToggle = nil
         watchService.onPeriodAdvance = nil
+        watchService.onPeriodSync = nil
         watchService.onStatUpdate = nil
         watchService.onEndGame = nil
         watchService.onStartGame = nil
@@ -1917,9 +1927,9 @@ struct UltraMinimalRecordingView: View {
                 isClockRunning = false
                 stopTimer()
             } else {
-                // After the final regulation period → overtime.
+                // After the final regulation period → overtime (4 min, matches the watch).
                 period = "OT"
-                remainingSeconds = 60  // 1 minute OT
+                remainingSeconds = 4 * 60
                 remainingTenths = 0
                 isClockRunning = false
                 stopTimer()
