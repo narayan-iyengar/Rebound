@@ -426,9 +426,6 @@ struct GameCard: View {
                         .foregroundColor(accent)
                 }
                 Spacer()
-                Button { onHide(game.id) } label: {
-                    Image(systemName: "eye.slash").font(.footnote).foregroundColor(Chalk.dust.opacity(0.7))
-                }
             }
             .padding(.horizontal, 20).padding(.top, 16)
 
@@ -458,10 +455,22 @@ struct GameCard: View {
 
             Spacer(minLength: 6)
 
-            ChalkButton(title: "Record Game", icon: "video.fill", color: Chalk.yellow) {
-                appState.pendingCalendarGame = (opponent: game.opponent, location: game.location, team: game.detectedTeam)
-                appState.isLogOnly = false
-                appState.currentScreen = .setup
+            HStack(spacing: 10) {
+                ChalkButton(title: "Record Game", icon: "video.fill", color: Chalk.yellow) {
+                    appState.pendingCalendarGame = (opponent: game.opponent, location: game.location, team: game.detectedTeam)
+                    appState.isLogOnly = false
+                    appState.currentScreen = .setup
+                }
+                Button { onHide(game.id) } label: {
+                    Text("Hide")
+                        .font(.chalkHand(17))
+                        .foregroundColor(Chalk.chalk)
+                        .padding(.vertical, 11).padding(.horizontal, 18)
+                        .overlay(RoundedRectangle(cornerRadius: 11)
+                            .strokeBorder(Chalk.chalk.opacity(0.4), lineWidth: 2))
+                }
+                .buttonStyle(.plain)
+                .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, 20).padding(.bottom, 18)
         }
