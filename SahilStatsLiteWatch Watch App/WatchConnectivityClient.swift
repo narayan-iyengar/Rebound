@@ -398,8 +398,8 @@ class WatchConnectivityClient: NSObject, ObservableObject {
         if periodIndex < labels.count - 1 {
             periodIndex += 1
             period = labels[periodIndex]
-            // OT (index past the regulation periods) is a short 4-minute period.
-            remainingSeconds = periodIndex >= regularPeriods.count ? 4 * 60 : halfLength * 60
+            // OT (index past the regulation periods) is a short 1-minute period.
+            remainingSeconds = periodIndex >= regularPeriods.count ? 60 : halfLength * 60
             isClockRunning = false
             clockStartedAt = 0
         }

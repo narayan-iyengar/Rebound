@@ -1927,9 +1927,9 @@ struct UltraMinimalRecordingView: View {
                 isClockRunning = false
                 stopTimer()
             } else {
-                // After the final regulation period → overtime (4 min, matches the watch).
+                // After the final regulation period → overtime (1 min).
                 period = "OT"
-                remainingSeconds = 4 * 60
+                remainingSeconds = 60
                 remainingTenths = 0
                 isClockRunning = false
                 stopTimer()
