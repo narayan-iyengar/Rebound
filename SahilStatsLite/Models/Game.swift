@@ -14,6 +14,22 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Game Format
+
+/// Halves (2 periods) or quarters (4 periods). AAU is usually halves; some leagues use quarters.
+enum GameFormat: String, Codable, CaseIterable, Sendable {
+    case halves
+    case quarters
+
+    var periodCount: Int { self == .quarters ? 4 : 2 }
+    var noun: String { self == .quarters ? "Quarter" : "Half" }
+    var regularPeriods: [String] {
+        self == .quarters ? ["1st Q", "2nd Q", "3rd Q", "4th Q"] : ["1st Half", "2nd Half"]
+    }
+    /// Full period sequence for indexing (regulation + a few overtimes).
+    var allPeriods: [String] { regularPeriods + ["OT", "OT2", "OT3"] }
+}
+
 // MARK: - Game Model
 
 struct Game: Identifiable, Codable {
@@ -48,10 +64,19 @@ struct Game: Identifiable, Codable {
     var myScore: Int = 0
     var opponentScore: Int = 0
 
-    // Game structure - AAU uses halves (18 or 20 minutes)
-    var halfLength: Int = 18 // minutes (AAU: 18 or 20)
+    // Game structure — halves (2) or quarters (4). halfLength is the per-period minutes.
+    var halfLength: Int = 18 // minutes per period
     var currentHalf: Int = 1
     var totalHalves: Int = 2
+    // Optional so older saved games (no key) still decode; nil means halves.
+    var format: GameFormat? = nil
+
+    /// Resolved format (defaults to halves for legacy games).
+    var gameFormat: GameFormat { format ?? .halves }
+    /// Regulation period names for this game, e.g. ["1st Half","2nd Half"] or the four quarters.
+    var regularPeriods: [String] { gameFormat.regularPeriods }
+    /// "Half" or "Quarter".
+    var periodNoun: String { gameFormat.noun }
 
     // Legacy support (for compatibility)
     var quarterLength: Int { halfLength }

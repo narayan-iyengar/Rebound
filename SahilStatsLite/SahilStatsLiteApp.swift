@@ -171,6 +171,9 @@ class AppState: ObservableObject {
             location: watchGame.location.isEmpty ? nil : watchGame.location
         )
         game.halfLength = watchGame.halfLength
+        let format: GameFormat = watchGame.format == "quarters" ? .quarters : .halves
+        game.format = format
+        game.totalHalves = format.periodCount
 
         currentGame = game
         currentScreen = .recording
@@ -183,9 +186,9 @@ class AppState: ObservableObject {
             teamName: game.teamName, opponent: game.opponent,
             myScore: 0, oppScore: 0,
             remainingSeconds: game.halfLength * 60, isClockRunning: false,
-            period: "1st Half", periodIndex: 0,
+            period: format.regularPeriods.first ?? "1st Half", periodIndex: 0,
             clockStartedAt: 0, secondsAtClockStart: 0,
-            warmup: true
+            warmup: true, format: format.rawValue
         )
 
         debugPrint("[AppState] 📱 Started game from Watch: \(game.teamName) vs \(game.opponent), \(game.halfLength) min halves")

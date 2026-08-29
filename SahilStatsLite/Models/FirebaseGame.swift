@@ -209,8 +209,8 @@ struct FirebaseGame: Codable {
             self.outcome = "T"
         }
 
-        // Game format (Lite uses halves)
-        self.gameFormat = "halves"
+        // Game format — halves or quarters, with the per-period length and count.
+        self.gameFormat = game.gameFormat.rawValue
         self.quarterLength = game.halfLength
         self.numQuarter = game.totalHalves
         self.status = "final"
@@ -243,7 +243,7 @@ struct FirebaseGame: Codable {
     // MARK: - Conversion to Lite Game
 
     func toGame() -> Game {
-        return Game(
+        var game = Game(
             id: id ?? UUID().uuidString,
             opponent: opponent,
             teamName: teamName,
@@ -272,6 +272,8 @@ struct FirebaseGame: Codable {
             youtubeStatus: YouTubeStatus(rawValue: youtubeStatus ?? "local") ?? .local,
             youtubeVideoId: youtubeVideoId
         )
+        game.format = (gameFormat == "quarters") ? .quarters : .halves
+        return game
     }
 
     // MARK: - Convert to Firestore Data (for writes)

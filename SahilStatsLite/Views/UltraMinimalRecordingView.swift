@@ -102,6 +102,9 @@ struct UltraMinimalRecordingView: View {
     private var halfLength: Int {
         appState.currentGame?.halfLength ?? 18
     }
+    private var gameFormat: GameFormat {
+        appState.currentGame?.gameFormat ?? .halves
+    }
 
     private var clockTime: String {
         if remainingSeconds < 60 {
@@ -470,6 +473,7 @@ struct UltraMinimalRecordingView: View {
     private func initializeGameState() {
         remainingSeconds = halfLength * 60
         remainingTenths = 0
+        period = gameFormat.regularPeriods.first ?? "1st Half"
         // Stamp the current game id so saved clips group together in the Store.
         recordingManager.currentClipGameId = appState.currentGame?.id
         setupWatchCallbacks()
@@ -579,7 +583,7 @@ struct UltraMinimalRecordingView: View {
         // Don't re-assert an active game while we're tearing one down — otherwise a
         // stale watch resync request would flip the watch back into the ended game.
         guard !isFinishingRecording else { return }
-        let periodNames = ["1st Half", "2nd Half", "OT", "OT2", "OT3"]
+        let periodNames = gameFormat.allPeriods
         let periodIdx = periodNames.firstIndex(of: period) ?? 0
         watchService.sendGameState(
             teamName: appState.currentGame?.teamName ?? "Home",
@@ -591,7 +595,8 @@ struct UltraMinimalRecordingView: View {
             // Warmup = video game loaded, clock never started. (Not gated on camera
             // startup, which races the view appearing — "clock hasn't started" is the
             // signal the watch needs.) Tells the watch "Ready · tap clock to start".
-            warmup: !hasGameStarted && !appState.isStatsOnly
+            warmup: !hasGameStarted && !appState.isStatsOnly,
+            format: gameFormat.rawValue
         )
     }
 
@@ -608,7 +613,7 @@ struct UltraMinimalRecordingView: View {
     }
 
     private func sendPeriodToWatch() {
-        let periodNames = ["1st Half", "2nd Half", "OT", "OT2", "OT3"]
+        let periodNames = gameFormat.allPeriods
         let periodIdx = periodNames.firstIndex(of: period) ?? 0
         watchService.sendPeriodUpdate(
             period: period, periodIndex: periodIdx,
@@ -1893,40 +1898,36 @@ struct UltraMinimalRecordingView: View {
     }
 
     private var nextPeriodLabel: String {
-        switch period {
-        case "1st Half": return "2nd Half"
-        case "2nd Half": return "Overtime"
-        default:
-            // In OT - tapping adds more time
-            if period.hasPrefix("OT") {
-                return "+1:00 OT"
-            }
-            return "Next"
+        let regs = gameFormat.regularPeriods
+        if let i = regs.firstIndex(of: period) {
+            return i + 1 < regs.count ? regs[i + 1] : "Overtime"
         }
+        if period.hasPrefix("OT") { return "+1:00 OT" }
+        return "Next"
     }
 
     private func advancePeriod() {
-        switch period {
-        case "1st Half":
-            period = "2nd Half"
-            remainingSeconds = halfLength * 60
-            remainingTenths = 0
-            isClockRunning = false
-            stopTimer()
-        case "2nd Half":
-            // Go to OT
-            period = "OT"
-            remainingSeconds = 60  // 1 minute OT
-            remainingTenths = 0
-            isClockRunning = false
-            stopTimer()
-        default:
-            // Already in OT - add another minute
-            if period.hasPrefix("OT") {
-                remainingSeconds += 60
+        let regs = gameFormat.regularPeriods
+        if let i = regs.firstIndex(of: period) {
+            if i + 1 < regs.count {
+                // Next regulation period (2nd Half, or 2nd/3rd/4th Q).
+                period = regs[i + 1]
+                remainingSeconds = halfLength * 60
                 remainingTenths = 0
-                // Don't change period name, just add time
+                isClockRunning = false
+                stopTimer()
+            } else {
+                // After the final regulation period → overtime.
+                period = "OT"
+                remainingSeconds = 60  // 1 minute OT
+                remainingTenths = 0
+                isClockRunning = false
+                stopTimer()
             }
+        } else if period.hasPrefix("OT") {
+            // Already in OT — tapping adds another minute (keeps the OT label).
+            remainingSeconds += 60
+            remainingTenths = 0
         }
         updateOverlayState()
         sendPeriodToWatch()

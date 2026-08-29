@@ -42,6 +42,7 @@ struct WatchMessage {
     static let awayTimeouts = "awayTimeouts"
     static let teams = "teams"            // phone → watch: Sahil's saved team names
     static let warmup = "warmup"          // phone → watch: camera warming up, clock not yet started
+    static let format = "format"          // phone → watch: "halves" or "quarters"
 
     // Score update keys
     static let myScore = "myScore"
@@ -81,6 +82,7 @@ struct WatchGame: Codable, Identifiable {
     let location: String
     let startTime: Date
     let halfLength: Int
+    var format: String? = nil   // "halves" / "quarters"; nil = halves (calendar games don't know)
 
     var timeString: String {
         let formatter = DateFormatter()
@@ -143,6 +145,13 @@ class WatchConnectivityClient: NSObject, ObservableObject {
     @Published var periodIndex: Int = 0
     @Published var halfLength: Int = 18
     @Published var isEnding: Bool = false
+    @Published var gameFormat: String = "halves"   // "halves" or "quarters"
+
+    // Regulation period names for the current format, and the full indexable sequence.
+    var regularPeriods: [String] {
+        gameFormat == "quarters" ? ["1st Q", "2nd Q", "3rd Q", "4th Q"] : ["1st Half", "2nd Half"]
+    }
+    var periodLabelsForFormat: [String] { regularPeriods + ["OT", "OT2", "OT3"] }
 
     // Team fouls + timeouts tally (synced both ways with the phone scoreboard).
     @Published var homeFouls: Int = 0
@@ -316,7 +325,8 @@ class WatchConnectivityClient: NSObject, ObservableObject {
         isClockRunning = false
         clockStartedAt = 0
         secondsAtClockStart = 0
-        period = "1st Half"
+        gameFormat = game.format ?? "halves"
+        period = regularPeriods.first ?? "1st Half"
         periodIndex = 0
         self.opponent = game.opponent
         self.teamName = game.teamName
@@ -333,7 +343,8 @@ class WatchConnectivityClient: NSObject, ObservableObject {
             WatchMessage.teamName: game.teamName,
             WatchMessage.location: game.location,
             WatchMessage.halfLength: game.halfLength,
-            WatchMessage.startTime: game.startTime.timeIntervalSince1970
+            WatchMessage.startTime: game.startTime.timeIntervalSince1970,
+            WatchMessage.format: game.format ?? "halves"
         ]
         sendMessage(message)
         // Guaranteed backup: if the phone app is closed, the immediate message is dropped,
@@ -380,15 +391,15 @@ class WatchConnectivityClient: NSObject, ObservableObject {
         ])
     }
 
-    private let periodLabels = ["1st Half", "2nd Half", "OT1", "OT2", "OT3"]
-
-    /// Advance period — works standalone, syncs to phone when available
+    /// Advance period — works standalone, syncs to phone when available.
+    /// Sequence follows the game format (2 halves or 4 quarters) + overtimes.
     func advancePeriod() {
-        if periodIndex < periodLabels.count - 1 {
+        let labels = periodLabelsForFormat
+        if periodIndex < labels.count - 1 {
             periodIndex += 1
-            period = periodLabels[periodIndex]
-            // Reset clock for new period
-            remainingSeconds = periodIndex >= 2 ? 4 * 60 : halfLength * 60  // OT = 4 min
+            period = labels[periodIndex]
+            // OT (index past the regulation periods) is a short 4-minute period.
+            remainingSeconds = periodIndex >= regularPeriods.count ? 4 * 60 : halfLength * 60
             isClockRunning = false
             clockStartedAt = 0
         }
@@ -570,6 +581,7 @@ extension WatchConnectivityClient: WCSessionDelegate {
             if let opp  = message[WatchMessage.opponent] as? String,  !opp.isEmpty  { opponent = opp }
             if let my   = message[WatchMessage.myScore] as? Int  { myScore = my }
             if let opp  = message[WatchMessage.oppScore] as? Int { oppScore = opp }
+            if let fmt  = message[WatchMessage.format] as? String    { gameFormat = fmt }
             if let per  = message[WatchMessage.period] as? String    { period = per }
             if let idx  = message[WatchMessage.periodIndex] as? Int  { periodIndex = idx }
             applyClockState(from: message)

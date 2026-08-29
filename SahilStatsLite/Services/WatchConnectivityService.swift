@@ -53,6 +53,7 @@ struct WatchMessage {
     static let isRunning = "isRunning"
     static let remainingSeconds = "remainingSeconds"
     static let warmup = "warmup"  // phone → watch: video game loaded, camera warming up, clock not yet started
+    static let format = "format"  // phone → watch: "halves" or "quarters"
 
     // Period keys
     static let period = "period"
@@ -81,6 +82,7 @@ struct WatchGame: Codable, Identifiable, Equatable {
     let location: String
     let startTime: Date
     let halfLength: Int
+    var format: String? = nil   // "halves" / "quarters"; nil = halves
 
     var timeString: String {
         let formatter = DateFormatter()
@@ -228,7 +230,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
         isClockRunning: Bool,
         period: String,
         periodIndex: Int,
-        warmup: Bool = false
+        warmup: Bool = false,
+        format: String = "halves"
     ) {
         let snapshot: [String: Any] = [
             "hasActiveGame":      hasActiveGame,
@@ -244,7 +247,8 @@ class WatchConnectivityService: NSObject, ObservableObject {
             WatchMessage.periodIndex:    periodIndex,
             WatchMessage.clipStatus:     clipArmed,
             WatchMessage.clipSavedCount: clipSavedCounter,
-            WatchMessage.warmup:         warmup
+            WatchMessage.warmup:         warmup,
+            WatchMessage.format:         format
         ]
 
         // sendMessage: immediate delivery when Watch is in foreground
@@ -266,12 +270,12 @@ class WatchConnectivityService: NSObject, ObservableObject {
     func sendGameState(teamName: String, opponent: String, myScore: Int, oppScore: Int,
                        remainingSeconds: Int, isClockRunning: Bool, period: String, periodIndex: Int,
                        clockStartedAt: TimeInterval = 0, secondsAtClockStart: Int = 0,
-                       warmup: Bool = false) {
+                       warmup: Bool = false, format: String = "halves") {
         sendFullSnapshot(hasActiveGame: true, teamName: teamName, opponent: opponent,
                          myScore: myScore, oppScore: oppScore,
                          clockStartedAt: clockStartedAt, secondsAtClockStart: secondsAtClockStart,
                          remainingSeconds: remainingSeconds, isClockRunning: isClockRunning,
-                         period: period, periodIndex: periodIndex, warmup: warmup)
+                         period: period, periodIndex: periodIndex, warmup: warmup, format: format)
     }
 
     func sendScoreUpdate(myScore: Int, oppScore: Int,
@@ -555,6 +559,7 @@ extension WatchConnectivityService: WCSessionDelegate {
             let location = message[WatchMessage.location] as? String ?? ""
             let halfLength = message[WatchMessage.halfLength] as? Int ?? 18
             let startTimeInterval = message[WatchMessage.startTime] as? TimeInterval ?? Date().timeIntervalSince1970
+            let format = message[WatchMessage.format] as? String
 
             let game = WatchGame(
                 id: gameId,
@@ -562,7 +567,8 @@ extension WatchConnectivityService: WCSessionDelegate {
                 teamName: teamName,
                 location: location,
                 startTime: Date(timeIntervalSince1970: startTimeInterval),
-                halfLength: halfLength
+                halfLength: halfLength,
+                format: format
             )
 
             debugPrint("[WatchConnectivity] 📱 Received START GAME from Watch: \(teamName) vs \(opponent)")

@@ -20,6 +20,7 @@ struct WatchGameConfirmationView: View {
 
     @State private var isStarting = false
     @State private var selectedHalfLength: Int = 18
+    @State private var selectedFormat: String = "halves"   // "halves" or "quarters"
     @State private var editedOpponent: String = ""
     @State private var editedTeam: String = ""
 
@@ -101,7 +102,7 @@ struct WatchGameConfirmationView: View {
                             Image(systemName: "timer")
                                 .font(.system(size: 10))
                                 .foregroundColor(WChalk.yellow)
-                            Text("\(selectedHalfLength) min halves")
+                            Text("\(selectedHalfLength) min \(selectedFormat == "quarters" ? "quarters" : "halves")")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(WChalk.yellow)
                             Image(systemName: "chevron.up.chevron.down")
@@ -114,6 +115,21 @@ struct WatchGameConfirmationView: View {
                         .cornerRadius(8)
                     }
                     .buttonStyle(.plain)
+
+                    // Format toggle: halves ↔ quarters
+                    Button(action: {
+                        selectedFormat = selectedFormat == "quarters" ? "halves" : "quarters"
+                        WKInterfaceDevice.current().play(.click)
+                    }) {
+                        Text(selectedFormat == "quarters" ? "4 Quarters" : "2 Halves")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(WChalk.sky)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(WChalk.sky.opacity(0.15))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
                 .padding(12)
                 .background(WChalk.chalk.opacity(0.08))
@@ -186,7 +202,8 @@ struct WatchGameConfirmationView: View {
             teamName: editedTeam.isEmpty ? "Home" : editedTeam,
             location: game.location,
             startTime: game.startTime,
-            halfLength: selectedHalfLength
+            halfLength: selectedHalfLength,
+            format: selectedFormat
         )
 
         // Send to phone - this will trigger recording mode
@@ -209,6 +226,7 @@ struct WatchQuickGameConfirmationView: View {
     @State private var teamName: String = ""      // picked from synced teams, or typed
     @State private var addingTeam = false
     @State private var halfLength: Int = 18
+    @State private var quickFormat: String = "halves"
     @State private var isStarting = false
 
     var body: some View {
@@ -287,6 +305,20 @@ struct WatchQuickGameConfirmationView: View {
                     .frame(height: 50)
                 }
 
+                // Format toggle
+                Button(action: {
+                    quickFormat = quickFormat == "quarters" ? "halves" : "quarters"
+                    WKInterfaceDevice.current().play(.click)
+                }) {
+                    Text(quickFormat == "quarters" ? "4 Quarters" : "2 Halves")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(WChalk.sky)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(WChalk.sky.opacity(0.15), in: Capsule())
+                }
+                .buttonStyle(.plain)
+
                 Spacer(minLength: 8)
 
                 // Buttons
@@ -345,7 +377,8 @@ struct WatchQuickGameConfirmationView: View {
             teamName: teamName.trimmingCharacters(in: .whitespaces).isEmpty ? "My Team" : teamName,
             location: "",
             startTime: Date(),
-            halfLength: halfLength
+            halfLength: halfLength,
+            format: quickFormat
         )
 
         connectivity.startGame(game)

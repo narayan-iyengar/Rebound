@@ -27,7 +27,8 @@ struct GameSetupView: View {
 
     @State private var opponent: String = ""
     @State private var location: String = ""
-    @State private var halfLength: Int = 18  // AAU: 18 or 20 minute halves
+    @State private var halfLength: Int = 18  // minutes per period
+    @State private var periodCount: Int = 2  // 2 = halves, 4 = quarters
     @State private var recordVideo: Bool = true
     @State private var streamLive: Bool = false  // default OFF — enable per-game when signal is good
     @State private var isCreatingBroadcast: Bool = false
@@ -129,15 +130,33 @@ struct GameSetupView: View {
                                 .strokeBorder(Chalk.chalk.opacity(0.25), lineWidth: 1.5))
                     }
 
-                    // Half Length (AAU games use halves)
+                    // Format: halves or quarters
                     VStack(alignment: .leading, spacing: 8) {
-                        fieldLabel("half length")
-
+                        fieldLabel("format")
                         ChalkSegmentedPicker(
-                            options: [(label: "18 min", value: 18), (label: "20 min", value: 20)],
-                            selection: $halfLength,
+                            options: [(label: "2 Halves", value: 2), (label: "4 Quarters", value: 4)],
+                            selection: $periodCount,
                             useChalkFont: false
                         )
+                    }
+
+                    // Period length — stepper (± 1 min), min 4.
+                    VStack(alignment: .leading, spacing: 8) {
+                        fieldLabel(periodCount == 4 ? "quarter length" : "half length")
+                        HStack(spacing: 12) {
+                            stepperButton(system: "minus") { halfLength = max(4, halfLength - 1) }
+                            Text("\(halfLength):00")
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundColor(Chalk.chalk)
+                                .frame(maxWidth: .infinity)
+                            stepperButton(system: "plus") { halfLength = min(40, halfLength + 1) }
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(Chalk.chalk.opacity(0.15), lineWidth: 1))
                     }
 
                     // Record Video Toggle (only show when not in log-only mode)
@@ -270,6 +289,11 @@ struct GameSetupView: View {
             if savedHalfLength > 0 {
                 halfLength = savedHalfLength
             }
+            // Load default format (2 halves or 4 quarters)
+            let savedPeriods = UserDefaults.standard.integer(forKey: "defaultPeriodCount")
+            if savedPeriods == 2 || savedPeriods == 4 {
+                periodCount = savedPeriods
+            }
 
             // Clear stale broadcast from previous game — each game gets a fresh URL
             StreamingService.shared.liveStreamURL = ""
@@ -335,6 +359,17 @@ struct GameSetupView: View {
         Text(text)
             .font(.system(size: 13, weight: .medium))
             .foregroundColor(Chalk.dust)
+    }
+
+    private func stepperButton(system: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(Chalk.board)
+                .frame(width: 44, height: 40)
+                .background(Chalk.yellow, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
     }
 
     /// Dimmed placeholder that reads on the dark board.
@@ -415,13 +450,16 @@ struct GameSetupView: View {
     private func startGame() {
         // Save preferences
         UserDefaults.standard.set(halfLength, forKey: "defaultHalfLength")
-        
+        UserDefaults.standard.set(periodCount, forKey: "defaultPeriodCount")
+
         var game = Game(
             opponent: opponent,
             teamName: selectedTeam,
             location: location.isEmpty ? nil : location
         )
         game.halfLength = halfLength
+        game.format = periodCount == 4 ? .quarters : .halves
+        game.totalHalves = periodCount
         appState.currentGame = game
 
         // Navigate based on mode
