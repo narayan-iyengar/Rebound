@@ -158,7 +158,10 @@ class RecordingManager: NSObject, ObservableObject {
         // stats-only / practice encode at the sensor's default rotation and come out
         // inverted (recording-mode clips are fine because startRecording() does this).
         configureVideoRotationForRecording()
-        clipBuffer.arm()
+        // Practice keeps a short pre-roll (you're already filming); stats-only uses none —
+        // the phone is usually pointed away until you point up and tap, so pre-roll would
+        // just capture the floor/your feet.
+        clipBuffer.arm(preRoll: isPracticeSession ? 5.0 : 0.0)
     }
 
     /// Stop stats-only clip buffering (leaving the view).

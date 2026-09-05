@@ -206,18 +206,21 @@ struct UltraMinimalRecordingView: View {
 
                     Spacer()
 
-                    // Sahil stats (top-right)
-                    Button(action: { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats.toggle() } }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "person.fill").font(.system(size: 14, weight: .bold))
-                            Text("\(sahilPoints)").font(.system(size: 15, weight: .heavy)).monospacedDigit()
+                    // Sahil stats (top-right). In stats-only the pad is pinned open, so the
+                    // expand/collapse pill isn't needed.
+                    if !appState.isStatsOnly {
+                        Button(action: { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats.toggle() } }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.fill").font(.system(size: 14, weight: .bold))
+                                Text("\(sahilPoints)").font(.system(size: 15, weight: .heavy)).monospacedDigit()
+                            }
+                            .foregroundColor(showSahilStats ? Chalk.board : Chalk.chalk)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Capsule().fill(showSahilStats ? Chalk.yellow : Color(white: 0.08, opacity: 0.55)))
+                            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
                         }
-                        .foregroundColor(showSahilStats ? Chalk.board : Chalk.chalk)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Capsule().fill(showSahilStats ? Chalk.yellow : Color(white: 0.08, opacity: 0.55)))
-                        .overlay(Capsule().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
+                        .padding(.trailing, 16)
                     }
-                    .padding(.trailing, 16)
                 }
                 .padding(.top, 12)
                 Spacer()
@@ -353,14 +356,16 @@ struct UltraMinimalRecordingView: View {
 
             // Streamlined stat entry — a docked, non-dimming pad. Minimized state is just
             // the top-right person+points pill; tapping it (or the pad's minimize bar) collapses.
-            if showSahilStats {
+            if showSahilStats || appState.isStatsOnly {
                 ZStack(alignment: .bottom) {
                     // Transparent (non-dimming) catcher: absorbs taps OUTSIDE the pad so they
-                    // never fall through to the scoring zones; tapping outside collapses the pad.
+                    // never fall through to the scoring zones. Tapping outside collapses the pad —
+                    // except in stats-only, where the pad is pinned open.
                     Color.black.opacity(0.001)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                         .onTapGesture {
+                            guard !appState.isStatsOnly else { return }
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
                         }
                     statPad
@@ -1778,7 +1783,10 @@ struct UltraMinimalRecordingView: View {
         VStack(spacing: 10) {
             Capsule().fill(Chalk.chalk.opacity(0.3)).frame(width: 40, height: 4)
                 .padding(.top, 3)
-                .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false } }
+                .onTapGesture {
+                    guard !appState.isStatsOnly else { return }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
+                }
 
             // Live line + undo + collapse
             HStack(spacing: 8) {
@@ -1796,9 +1804,11 @@ struct UltraMinimalRecordingView: View {
                     .overlay(Capsule().stroke((statUndo.isEmpty ? Chalk.dust : Chalk.sky).opacity(0.4), lineWidth: 1))
                 }
                 .buttonStyle(.plain).disabled(statUndo.isEmpty)
-                Button { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false } } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 14, weight: .bold)).foregroundColor(Chalk.dust).padding(4)
-                }.buttonStyle(.plain)
+                if !appState.isStatsOnly {
+                    Button { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false } } label: {
+                        Image(systemName: "chevron.down").font(.system(size: 14, weight: .bold)).foregroundColor(Chalk.dust).padding(4)
+                    }.buttonStyle(.plain)
+                }
             }
 
             // Shooting — one tap Make (make+attempt+points) or a small Miss (attempt only)
@@ -1926,6 +1936,7 @@ struct UltraMinimalRecordingView: View {
                 remainingTenths = 0
                 isClockRunning = false
                 stopTimer()
+                resetTeamFoulsForNewPeriod()
             } else {
                 // After the final regulation period → overtime (1 min).
                 period = "OT"
@@ -1933,6 +1944,7 @@ struct UltraMinimalRecordingView: View {
                 remainingTenths = 0
                 isClockRunning = false
                 stopTimer()
+                resetTeamFoulsForNewPeriod()
             }
         } else if period.hasPrefix("OT") {
             // Already in OT — tapping adds another minute (keeps the OT label).
@@ -1941,6 +1953,13 @@ struct UltraMinimalRecordingView: View {
         }
         updateOverlayState()
         sendPeriodToWatch()
+    }
+
+    /// Team fouls are per-period (bonus resets each half/quarter). Clear them and sync.
+    private func resetTeamFoulsForNewPeriod() {
+        homeFouls = 0
+        awayFouls = 0
+        // Timeouts intentionally persist (they're per-game in most youth leagues).
     }
 
     private func addOvertime() {

@@ -44,7 +44,7 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
 
     // MARK: - Tunables
 
-    private let backSeconds: Double = 5.0           // retroactive (pre-roll) window before the tap
+    private var backSeconds: Double = 5.0           // retroactive (pre-roll) window before the tap (0 = none)
     private let clipBitRate: Int = 8_000_000        // 1080p highlight — plenty for sharing
     private let targetLongEdge: CGFloat = 1920      // downscale for the ring (clips don't need 4K)
     private let keyframeIntervalSeconds: Double = 1 // 1s GOP → clean pruning at keyframe boundaries
@@ -86,6 +86,7 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
     // MARK: - Export state
 
     private var exporting = false
+    private var exportGeneration = 0   // bumped per clip so a stale wall-clock timer can't stop a newer clip
     private var writer: AVAssetWriter?
     private var writerVideoInput: AVAssetWriterInput?
     private var writerAudioInput: AVAssetWriterInput?
@@ -98,12 +99,15 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
     // MARK: - Lifecycle
 
     /// Begin buffering (call when a live recording starts). Idempotent.
-    func arm() {
+    /// `preRoll` = seconds of pre-tap footage to keep (0 = capture only after the tap;
+    /// stats-only uses 0 since the phone is often pointed away until the moment you clip).
+    func arm(preRoll: Double = 5.0) {
         clipQueue.async {
+            self.backSeconds = max(0, preRoll)
             guard !self.armed else { return }
             self.armed = true
             self.state = .buffering
-            debugPrint("🎬 ClipBuffer armed")
+            debugPrint("🎬 ClipBuffer armed (pre-roll \(self.backSeconds)s)")
         }
     }
 
@@ -158,12 +162,21 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
 
     // MARK: - Trigger
 
-    /// Save a clip: the buffered ~30s + `forward` seconds of what happens next.
+    /// Save a clip: the buffered pre-roll + `forward` seconds of what happens next.
     func startClip(forwardSeconds forward: Double) {
         clipQueue.async {
             guard self.armed, !self.exporting else { return }
             self.forwardSeconds = max(3, forward)
+            self.exportGeneration += 1
+            let gen = self.exportGeneration
             self.beginExportLocked()
+            // Wall-clock safety stop: guarantees the clip is ~forward seconds long even if
+            // the PTS-based deadline misbehaves (a runaway 1:20 clip should be impossible).
+            self.clipQueue.asyncAfter(deadline: .now() + self.forwardSeconds + 1.0) { [weak self] in
+                guard let self = self, self.exporting, self.exportGeneration == gen else { return }
+                debugPrint("🎬 ClipBuffer: wall-clock stop fired")
+                self.finishExportLocked(deleteFile: false)
+            }
         }
     }
 
@@ -224,9 +237,14 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
     // MARK: - Encode (clipQueue)
 
     private func encodeLocked(_ pixelBuffer: CVPixelBuffer, pts: CMTime) {
-        if session == nil {
-            createSessionLocked(width: CVPixelBufferGetWidth(pixelBuffer),
-                                 height: CVPixelBufferGetHeight(pixelBuffer))
+        let w = CVPixelBufferGetWidth(pixelBuffer)
+        let h = CVPixelBufferGetHeight(pixelBuffer)
+        // (Re)create the encoder if absent or if the frame dimensions changed — e.g. the
+        // phone was rotated portrait↔landscape, which otherwise stretches the clip because
+        // the session keeps its original dimensions. Never recreate mid-export.
+        if session == nil || ((w != sessionWidth || h != sessionHeight) && !exporting) {
+            teardownSessionLocked()
+            createSessionLocked(width: w, height: h)
         }
         guard let session = session else { return }
 

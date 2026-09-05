@@ -402,6 +402,13 @@ class WatchConnectivityClient: NSObject, ObservableObject {
             remainingSeconds = periodIndex >= regularPeriods.count ? 60 : halfLength * 60
             isClockRunning = false
             clockStartedAt = 0
+            // Team fouls are per-period — clear them and sync the reset to the phone.
+            homeFouls = 0; awayFouls = 0
+            sendUserInfo([
+                WatchMessage.teamTally: true,
+                WatchMessage.homeFouls: 0, WatchMessage.awayFouls: 0,
+                WatchMessage.homeTimeouts: homeTimeouts, WatchMessage.awayTimeouts: awayTimeouts
+            ])
         }
         sendUserInfo([
             WatchMessage.periodUpdate: true,
