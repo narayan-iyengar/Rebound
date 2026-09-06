@@ -358,16 +358,18 @@ struct UltraMinimalRecordingView: View {
             // the top-right person+points pill; tapping it (or the pad's minimize bar) collapses.
             if showSahilStats || appState.isStatsOnly {
                 ZStack(alignment: .bottom) {
-                    // Transparent (non-dimming) catcher: absorbs taps OUTSIDE the pad so they
-                    // never fall through to the scoring zones. Tapping outside collapses the pad —
-                    // except in stats-only, where the pad is pinned open.
-                    Color.black.opacity(0.001)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard !appState.isStatsOnly else { return }
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
-                        }
+                    // Collapse-catcher only in game mode: absorbs taps OUTSIDE the expanded pad
+                    // so they don't fall through to the scoring zones, and collapses on tap.
+                    // In stats-only the pad is pinned open, so there is NO full-screen catcher —
+                    // otherwise it would swallow taps meant for scoring / fouls / the Clip button.
+                    if !appState.isStatsOnly {
+                        Color.black.opacity(0.001)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
+                            }
+                    }
                     statPad
                         .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
                 }
