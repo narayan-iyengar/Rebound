@@ -328,12 +328,6 @@ private struct ClipCard: View {
                 }
             }
             Spacer()
-            if !selecting {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Chalk.dust)
-                    .rotationEffect(.degrees(90))
-            }
         }
         .padding(10)
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
