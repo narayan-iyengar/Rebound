@@ -67,10 +67,10 @@ private struct WatchTallyGroup: View {
     let n: Int
     var color: Color
     var barHeight: CGFloat
-    private var bw: CGFloat { max(2, barHeight * 0.13) }
+    private var bw: CGFloat { max(3, barHeight * 0.17) }
     var body: some View {
         ZStack {
-            HStack(spacing: bw + 1.5) {
+            HStack(spacing: bw + 3) {
                 ForEach(0..<min(n, 4), id: \.self) { _ in
                     Capsule().fill(color).frame(width: bw, height: barHeight)
                 }

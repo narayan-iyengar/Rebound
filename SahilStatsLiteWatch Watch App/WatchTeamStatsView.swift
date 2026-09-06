@@ -57,8 +57,8 @@ struct WatchTeamStatsView: View {
             }
 
             HStack(spacing: 6) {
-                tallyCell(label: "FOULS", count: fouls, color: WChalk.coral, key: foulsKey)
-                tallyCell(label: "T.O.",  count: timeouts, color: accent,    key: timeoutsKey)
+                tallyCell(label: "FOULS", count: fouls, color: accent, key: foulsKey)
+                tallyCell(label: "T.O.",  count: timeouts, color: accent, key: timeoutsKey)
             }
         }
         .padding(.horizontal, 8)

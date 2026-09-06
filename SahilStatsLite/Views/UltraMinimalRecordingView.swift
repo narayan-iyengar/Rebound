@@ -1079,7 +1079,7 @@ struct UltraMinimalRecordingView: View {
     // long-press to −1. Consumes its own taps so it never triggers a score.
     private func tallyBox(fouls: Binding<Int>, timeouts: Binding<Int>, accent: Color) -> some View {
         HStack(spacing: 0) {
-            ftItemBig(label: "FOULS", count: fouls, color: Chalk.coral)
+            ftItemBig(label: "FOULS", count: fouls, color: accent)
             Rectangle().fill(Chalk.chalk.opacity(0.2)).frame(width: 1, height: 34)
             ftItemBig(label: "T.O.", count: timeouts, color: accent)
         }
@@ -1127,7 +1127,7 @@ struct UltraMinimalRecordingView: View {
 
     private func teamFT(fouls: Binding<Int>, timeouts: Binding<Int>, accent: Color) -> some View {
         HStack(spacing: 9) {
-            ftItem(label: "FOULS", count: fouls, color: Chalk.coral)
+            ftItem(label: "FOULS", count: fouls, color: accent)
             ftItem(label: "T.O.", count: timeouts, color: accent)
         }
     }

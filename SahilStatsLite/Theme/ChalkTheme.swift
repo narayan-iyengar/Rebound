@@ -368,10 +368,10 @@ private struct TallyGroup: View {
     let n: Int
     var color: Color
     var barHeight: CGFloat
-    private var bw: CGFloat { max(2, barHeight * 0.13) }
+    private var bw: CGFloat { max(3, barHeight * 0.17) }   // thicker bars — easier to count at a glance
     var body: some View {
         ZStack {
-            HStack(spacing: bw + 1.5) {
+            HStack(spacing: bw + 3) {                        // wider gaps so 1 vs 3 reads instantly
                 ForEach(0..<min(n, 4), id: \.self) { _ in
                     Capsule().fill(color).frame(width: bw, height: barHeight)
                 }
