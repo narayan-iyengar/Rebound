@@ -19,8 +19,8 @@ struct GameRow: View {
 
     var body: some View {
         HStack {
-            // Result badge — Win = sky outline, Loss = dust outline (per mock)
-            let badgeColor = game.isWin ? Chalk.sky : Chalk.dust
+            // Result badge — matches the W/L totals up top: Win = green, Loss = coral.
+            let badgeColor = game.isWin ? Chalk.green : Chalk.coral
             Text(game.resultString)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundColor(badgeColor)
