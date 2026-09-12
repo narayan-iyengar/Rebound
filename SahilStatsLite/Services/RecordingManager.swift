@@ -247,8 +247,10 @@ class RecordingManager: NSObject, ObservableObject {
         pendingOutputURL = nil
         clipBuffer.disarm()
 
-        // Ensure screen auto-lock is re-enabled
-        UIApplication.shared.isIdleTimerDisabled = false
+        // NOTE: do NOT touch isIdleTimerDisabled here. reset() is called from the recording
+        // view's .task AFTER it disables auto-lock for the session — flipping it back on here
+        // let the screen sleep mid-game (stats-only especially, and video warmup). The view
+        // owns the idle timer: .task disables it, .onDisappear / stopRecording re-enable it.
     }
 
     /// Stop the capture session (call when leaving recording)
