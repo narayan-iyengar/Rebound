@@ -1044,23 +1044,27 @@ struct UltraMinimalRecordingView: View {
     // The fouls/timeout tallies + clock live in the BOTTOM band, outside the scoring
     // zones (which are padded away from the bottom), so tapping a tally never scores.
     private var fullScreenStatsLayout: some View {
-        VStack(spacing: 26) {
+        VStack(spacing: 0) {
             // Big clock centerpiece, high on the board — fills the open space below the top
             // control chip (which stays a pure Pause/Tip Off control). This is the scoreboard's
             // hero readout in stats-only; display-only so taps fall through to the scoring zones.
             statsOnlyClockCenterpiece
-                .padding(.top, 92)
+                .padding(.top, 88)
+
+            // A deliberate gap under the clock, then the scores ride up into the upper-middle
+            // so the tally boxes stay clear of the pinned stat pad at the bottom.
+            Spacer().frame(height: 56)
 
             // Two columns: team name + big score (display, taps pass through to scoring)
             // + a framed tally box (interactive — consumes taps so it never scores), with a
-            // center divider line between the teams.
+            // fixed-height center divider line between the teams (fixed so it can't stretch
+            // the row vertically).
             HStack(spacing: 0) {
                 statColumn(name: appState.currentGame?.teamName ?? "HOME",
                            score: myScore, accent: Chalk.yellow,
                            fouls: $homeFouls, timeouts: $homeTimeouts)
                 Rectangle().fill(Chalk.chalk.opacity(0.15))
-                    .frame(width: 1.5)
-                    .padding(.vertical, 6)
+                    .frame(width: 1.5, height: 168)
                     .allowsHitTesting(false)
                 statColumn(name: appState.currentGame?.opponent ?? "AWAY",
                            score: opponentScore, accent: Chalk.sky,
@@ -1069,6 +1073,7 @@ struct UltraMinimalRecordingView: View {
 
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func statColumn(name: String, score: Int, accent: Color,
