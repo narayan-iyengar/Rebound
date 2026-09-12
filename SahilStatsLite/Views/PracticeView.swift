@@ -60,14 +60,10 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            // Left-edge zoom strip — drag up/down to zoom, keeping the center clear.
-            // (Left edge because the phone is typically held in the left hand while filming.)
+            // Zoom overlay — drag either edge up/down to zoom; the readout shows on the edge
+            // opposite your thumb. Center stays clear.
             if !recordingManager.isSimulator {
-                HStack {
-                    EdgeZoomStrip(zoom: $zoom, maxZoom: maxZoom) { applyZoom($0); return zoom }
-                        .padding(.leading, 6)
-                    Spacer()
-                }
+                EdgeZoomStrip(zoom: $zoom, maxZoom: maxZoom) { applyZoom($0); return zoom }
             }
 
             // Bottom bar: the circular Clip button.

@@ -191,10 +191,10 @@ struct ClipButton: View {
     }
 }
 
-// A slim vertical zoom control anchored to the screen's right edge. Drag up to zoom in,
-// down to zoom out (log-scaled 1×–maxZoom). Sized for a thumb on the bezel so it never
-// competes with center taps (scoring) or the Clip button. This is the "practice + clips"
-// manual zoom — used in Practice and during a stats-only clip.
+// A full-width zoom overlay with an invisible drag zone on BOTH edges. Drag up to zoom in,
+// down to zoom out (log-scaled 1×–maxZoom). Nothing shows at rest; while dragging, the line
+// + level readout appear on the edge OPPOSITE your thumb, so your hand never covers them.
+// The center is pass-through, so scoring taps still work. Used in Practice and stats-only clips.
 struct EdgeZoomStrip: View {
     @Binding var zoom: CGFloat
     var maxZoom: CGFloat = 6.0
@@ -202,48 +202,66 @@ struct EdgeZoomStrip: View {
     let apply: (CGFloat) -> CGFloat
 
     @State private var dragStartNorm: CGFloat?
-    @State private var dragging = false
+    @State private var activeEdge: HorizontalEdge?   // which side the thumb is dragging on
     private let trackHeight: CGFloat = 200
+    private let zoneWidth: CGFloat = 46
 
     private func normFor(_ z: CGFloat) -> CGFloat { max(0, min(1, log(z) / log(maxZoom))) }
     private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, max(0, min(1, t))) }
 
-    var body: some View {
-        let norm = normFor(zoom)
-        let fillH = min(max(0, trackHeight * norm), trackHeight)
+    private func dragGesture(_ edge: HorizontalEdge) -> some Gesture {
+        // minimumDistance > 0 so a quick tap on the edge still falls through to scoring.
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                if dragStartNorm == nil { dragStartNorm = normFor(zoom); activeEdge = edge }
+                let start = dragStartNorm ?? normFor(zoom)
+                let delta = -value.translation.height / trackHeight   // up = zoom in
+                zoom = apply(zoomForNorm(start + delta))
+            }
+            .onEnded { _ in dragStartNorm = nil; activeEdge = nil }
+    }
 
+    // Line + fill + number, shown on the edge opposite the thumb.
+    private var indicator: some View {
+        let fillH = min(max(0, trackHeight * normFor(zoom)), trackHeight)
         return ZStack(alignment: .bottom) {
-            // Nothing at rest — the left edge is just an invisible drag zone. The control
-            // only appears while you're dragging: a faint full track for context, a yellow
-            // fill to the current level (its top edge is the indicator; no knob), and the
-            // level readout beside it.
-            if dragging {
-                Capsule()
-                    .fill(Chalk.chalk.opacity(0.25))
-                    .frame(width: 2.5, height: trackHeight)
-                Capsule()
-                    .fill(Chalk.yellow.opacity(0.9))
-                    .frame(width: 2.5, height: fillH)
-                Text(String(format: "%.1f×", zoom))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundColor(Chalk.yellow)
-                    .fixedSize()
-                    .offset(x: 24, y: -(min(max(10, fillH), trackHeight - 10)))
+            Capsule().fill(Chalk.chalk.opacity(0.25)).frame(width: 2.5, height: trackHeight)
+            Capsule().fill(Chalk.yellow.opacity(0.9)).frame(width: 2.5, height: fillH)
+        }
+        .overlay(alignment: .top) {
+            Text(String(format: "%.1f×", zoom))
+                .font(.system(size: 15, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(Chalk.yellow)
+                .shadow(color: .black.opacity(0.5), radius: 3)
+                .fixedSize()
+                .offset(y: -26)
+        }
+        .frame(width: zoneWidth)
+        .allowsHitTesting(false)
+    }
+
+    var body: some View {
+        ZStack {
+            // Invisible drag zones, one per edge; center left empty so taps pass through.
+            HStack(spacing: 0) {
+                Color.clear.frame(width: zoneWidth).contentShape(Rectangle())
+                    .gesture(dragGesture(.leading))
+                Spacer(minLength: 0)
+                Color.clear.frame(width: zoneWidth).contentShape(Rectangle())
+                    .gesture(dragGesture(.trailing))
+            }
+
+            // While dragging, the indicator rides the edge OPPOSITE the thumb.
+            if let edge = activeEdge {
+                HStack(spacing: 0) {
+                    if edge == .trailing { indicator; Spacer(minLength: 0) }
+                    else { Spacer(minLength: 0); indicator }
+                }
+                .allowsHitTesting(false)
             }
         }
-        .frame(width: 44, height: trackHeight)     // wide, easy-to-grab hit area
-        .contentShape(Rectangle())
-        .animation(.easeOut(duration: 0.15), value: dragging)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    if dragStartNorm == nil { dragStartNorm = normFor(zoom); dragging = true }
-                    let start = dragStartNorm ?? normFor(zoom)
-                    let delta = -value.translation.height / trackHeight   // up = zoom in
-                    zoom = apply(zoomForNorm(start + delta))
-                }
-                .onEnded { _ in dragStartNorm = nil; dragging = false }
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.15), value: activeEdge)
     }
 }
