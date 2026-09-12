@@ -370,17 +370,8 @@ struct UltraMinimalRecordingView: View {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
                             }
                     }
-                    VStack(spacing: 8) {
-                        // Stats-only: a prominent standalone clock readout sitting just above the
-                        // pinned pad. Mirrors recording view — the clock is a separate scoreboard
-                        // readout and the top chip stays a pure control — so switching modes is no
-                        // mental shift. Display only; taps fall through to the scoring zones.
-                        if appState.isStatsOnly {
-                            statsOnlyClockReadout
-                        }
-                        statPad
-                            .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
-                    }
+                    statPad
+                        .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -869,18 +860,21 @@ struct UltraMinimalRecordingView: View {
     // (no modal, no navigation — stays on the recording canvas). Auto-collapses when idle.
     // Lives top-center because the bottom corners are the thumb-grip zone in landscape,
     // where the old always-visible bar caused accidental taps (including "End").
-    // Stats-only: prominent clock + period, shown just above the pinned stat pad.
-    // Display only — the play/pause control stays in the top chip (same as recording
-    // view), so this is purely a readout and taps fall through to the scoring zones.
-    private var statsOnlyClockReadout: some View {
-        HStack(spacing: 8) {
-            Text(period)
+    // Stats-only: the scoreboard's hero clock — period label above a big time, centered
+    // high on the board. Display only; the play/pause control stays in the top chip (same
+    // as recording view), so this is purely a readout and taps fall through to the scoring
+    // zones behind it.
+    private var statsOnlyClockCenterpiece: some View {
+        VStack(spacing: 2) {
+            Text(period.uppercased())
                 .font(.system(size: 13, weight: .semibold))
+                .tracking(1)
                 .foregroundColor(Chalk.dust)
-            Text("·").foregroundColor(Chalk.dust)
             Text(clockTime)
-                .font(.system(size: 26, weight: .bold)).monospacedDigit()
+                .font(.system(size: 52, weight: .heavy)).monospacedDigit()
                 .foregroundColor(isClockRunning ? Chalk.yellow : Chalk.chalkDim)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
         }
         .allowsHitTesting(false)
     }
@@ -1050,26 +1044,30 @@ struct UltraMinimalRecordingView: View {
     // The fouls/timeout tallies + clock live in the BOTTOM band, outside the scoring
     // zones (which are padded away from the bottom), so tapping a tally never scores.
     private var fullScreenStatsLayout: some View {
-        ZStack {
+        VStack(spacing: 26) {
+            // Big clock centerpiece, high on the board — fills the open space below the top
+            // control chip (which stays a pure Pause/Tip Off control). This is the scoreboard's
+            // hero readout in stats-only; display-only so taps fall through to the scoring zones.
+            statsOnlyClockCenterpiece
+                .padding(.top, 92)
+
             // Two columns: team name + big score (display, taps pass through to scoring)
-            // + a framed tally box (interactive — consumes taps so it never scores).
+            // + a framed tally box (interactive — consumes taps so it never scores), with a
+            // center divider line between the teams.
             HStack(spacing: 0) {
                 statColumn(name: appState.currentGame?.teamName ?? "HOME",
                            score: myScore, accent: Chalk.yellow,
                            fouls: $homeFouls, timeouts: $homeTimeouts)
                 Rectangle().fill(Chalk.chalk.opacity(0.15))
                     .frame(width: 1.5)
-                    .padding(.vertical, 80)
+                    .padding(.vertical, 6)
                     .allowsHitTesting(false)
                 statColumn(name: appState.currentGame?.opponent ?? "AWAY",
                            score: opponentScore, accent: Chalk.sky,
                            fouls: $awayFouls, timeouts: $awayTimeouts)
             }
-            .padding(.top, 50)
-            .padding(.bottom, 54)
 
-            // Clock + period now live in the standalone statsOnlyClockReadout above the
-            // pinned pad (this bottom-center spot was covered by that pad anyway).
+            Spacer(minLength: 0)
         }
     }
 
@@ -1096,23 +1094,23 @@ struct UltraMinimalRecordingView: View {
     private func tallyBox(fouls: Binding<Int>, timeouts: Binding<Int>, accent: Color) -> some View {
         HStack(spacing: 0) {
             ftItemBig(label: "FOULS", count: fouls, color: accent)
-            Rectangle().fill(Chalk.chalk.opacity(0.2)).frame(width: 1, height: 34)
+            Rectangle().fill(Chalk.chalk.opacity(0.2)).frame(width: 1, height: 46)
             ftItemBig(label: "T.O.", count: timeouts, color: accent)
         }
-        .background(Color(white: 0.08, opacity: 0.72), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.2), lineWidth: 1))
+        .background(Color(white: 0.08, opacity: 0.72), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.2), lineWidth: 1))
     }
 
     private func ftItemBig(label: String, count: Binding<Int>, color: Color) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 5) {
             Text(label)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundColor(Chalk.dust)
-            TallyMarks(count: count.wrappedValue, color: color, barHeight: 22)
-                .frame(minWidth: 44, minHeight: 24, alignment: .center)
+            TallyMarks(count: count.wrappedValue, color: color, barHeight: 30)
+                .frame(minWidth: 58, minHeight: 32, alignment: .center)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 13)
         .contentShape(Rectangle())
         .onTapGesture {
             count.wrappedValue += 1
