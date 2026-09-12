@@ -435,14 +435,14 @@ struct GameCard: View {
                 Text(whenLabel)
                     .font(.system(size: 14, weight: .semibold)).monospacedDigit()
                     .foregroundColor(Chalk.dust)
-                // Sahil's team first, then opponent — "Lava vs One on One Gold".
-                HStack(spacing: 6) {
-                    if let team = game.detectedTeam {
-                        Text(team).foregroundColor(Chalk.yellow)
-                    }
-                    Text("vs").foregroundColor(Chalk.dust)
+                // Balanced matchup marquee — team and opponent same size, "vs" on its own line.
+                if let team = game.detectedTeam {
+                    Text(team)
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundColor(Chalk.yellow)
+                        .multilineTextAlignment(.center).lineLimit(1).minimumScaleFactor(0.6)
                 }
-                .font(.chalkScript(20))
+                Text("vs").font(.chalkScript(18)).foregroundColor(Chalk.dust)
                 Text(game.opponent)
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(Chalk.sky)
