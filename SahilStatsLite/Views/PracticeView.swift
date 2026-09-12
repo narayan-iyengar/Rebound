@@ -23,7 +23,6 @@ struct PracticeView: View {
     // Manual zoom for practice (game mode auto-zooms via Skynet; practice has no tracking).
     @State private var zoom: CGFloat = 1.0
     @State private var pinchBaseZoom: CGFloat = 1.0
-    @State private var slideStartNorm: CGFloat?      // captured at the start of a slide
     private let maxZoom: CGFloat = 6.0
 
     // Optional freeform tag saved onto this session's clips (e.g. gym / drill name).
@@ -34,21 +33,8 @@ struct PracticeView: View {
     var body: some View {
         ZStack {
             camera
-                // Slide a thumb anywhere on the preview to zoom — up/right zooms in,
-                // down/left zooms out (whichever axis you move more).
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 8)
-                        .onChanged { value in
-                            let start = slideStartNorm ?? normFor(zoom)
-                            if slideStartNorm == nil { slideStartNorm = normFor(zoom) }
-                            let t = value.translation
-                            let delta = abs(t.height) >= abs(t.width) ? -t.height : t.width
-                            let newNorm = max(0, min(1, start + delta / 300))
-                            applyZoom(zoomForNorm(newNorm))
-                        }
-                        .onEnded { _ in slideStartNorm = nil; pinchBaseZoom = zoom }
-                )
-                // Pinch still works for those who reach for it.
+                // Primary zoom is the right-edge strip (added below). Pinch stays available
+                // as a quiet secondary for those who reach for it.
                 .simultaneousGesture(
                     MagnificationGesture()
                         .onChanged { scale in applyZoom(pinchBaseZoom * scale) }
@@ -74,11 +60,18 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            // Bottom bar: iOS-timelapse-style lens pills + the circular Clip button.
-            // (Slide/pinch on the preview also zoom, for fine control.)
+            // Right-edge zoom strip — drag up/down to zoom, keeping the center clear.
+            if !recordingManager.isSimulator {
+                HStack {
+                    Spacer()
+                    EdgeZoomStrip(zoom: $zoom, maxZoom: maxZoom) { applyZoom($0); return zoom }
+                        .padding(.trailing, 6)
+                }
+            }
+
+            // Bottom bar: the circular Clip button.
             VStack(spacing: 18) {
                 Spacer()
-                zoomPills
                 ClipButton(idleHint: "Camera warming up…", scale: 1.2, circle: true)
                     .padding(.bottom, 26)
             }
@@ -155,31 +148,6 @@ struct PracticeView: View {
                 .frame(width: 40, height: 40)
                 .background(Circle().fill(Color(white: 0.08, opacity: 0.55)))
                 .overlay(Circle().stroke(Chalk.chalk.opacity(0.3), lineWidth: 1.5))
-        }
-    }
-
-    // Zoom is a thumb-slide on the preview — log-scaled 1×–maxZoom.
-    private func normFor(_ z: CGFloat) -> CGFloat { log(z) / log(maxZoom) }
-    private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, t) }
-
-    private let zoomPresets: [CGFloat] = [1, 2, 3, 5]
-    private func isActiveZoom(_ p: CGFloat) -> Bool { abs(zoom - p) < 0.15 }
-
-    // iOS-timelapse-style lens pills: tap to jump, active one shows the exact level.
-    private var zoomPills: some View {
-        HStack(spacing: 14) {
-            ForEach(zoomPresets, id: \.self) { p in
-                Button {
-                    applyZoom(p); pinchBaseZoom = p
-                } label: {
-                    Text(isActiveZoom(p) ? String(format: "%.1f×", zoom) : "\(Int(p))")
-                        .font(.system(size: isActiveZoom(p) ? 15 : 13, weight: .bold, design: .rounded))
-                        .foregroundColor(isActiveZoom(p) ? Chalk.yellow : Chalk.chalk.opacity(0.9))
-                        .frame(minWidth: isActiveZoom(p) ? 46 : 26, minHeight: isActiveZoom(p) ? 46 : 26)
-                        .background(Circle().fill(Color.black.opacity(isActiveZoom(p) ? 0.4 : 0)))
-                }
-                .buttonStyle(.plain)
-            }
         }
     }
 

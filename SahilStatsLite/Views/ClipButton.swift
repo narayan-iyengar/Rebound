@@ -190,3 +190,64 @@ struct ClipButton: View {
         recordingManager.clipState == .saved ? Chalk.green : Chalk.coral
     }
 }
+
+// A slim vertical zoom control anchored to the screen's right edge. Drag up to zoom in,
+// down to zoom out (log-scaled 1×–maxZoom). Sized for a thumb on the bezel so it never
+// competes with center taps (scoring) or the Clip button. This is the "practice + clips"
+// manual zoom — used in Practice and during a stats-only clip.
+struct EdgeZoomStrip: View {
+    @Binding var zoom: CGFloat
+    var maxZoom: CGFloat = 6.0
+    /// Clamp + apply to the camera; return the value actually applied (device-clamped).
+    let apply: (CGFloat) -> CGFloat
+
+    @State private var dragStartNorm: CGFloat?
+    private let trackHeight: CGFloat = 240
+    private let thumb: CGFloat = 20
+
+    private func normFor(_ z: CGFloat) -> CGFloat { max(0, min(1, log(z) / log(maxZoom))) }
+    private func zoomForNorm(_ t: CGFloat) -> CGFloat { pow(maxZoom, max(0, min(1, t))) }
+
+    var body: some View {
+        let norm = normFor(zoom)
+        let fillH = max(thumb, trackHeight * norm)
+        let thumbCenter = min(max(thumb / 2, trackHeight * norm), trackHeight - thumb / 2)
+
+        return ZStack(alignment: .bottom) {
+            Capsule()
+                .fill(Color.black.opacity(0.35))
+                .frame(width: 6, height: trackHeight)
+                .overlay(Capsule().stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
+            Capsule()
+                .fill(Chalk.yellow.opacity(0.85))
+                .frame(width: 6, height: fillH)
+            Circle()
+                .fill(Chalk.crisp)
+                .frame(width: thumb, height: thumb)
+                .overlay(Circle().stroke(Chalk.yellow, lineWidth: 2))
+                .shadow(color: .black.opacity(0.4), radius: 3)
+                .offset(y: -(thumbCenter - thumb / 2))
+        }
+        .frame(width: 44, height: trackHeight)     // wide, easy-to-grab hit area
+        .overlay(alignment: .top) {
+            Text(String(format: "%.1f×", zoom))
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(Chalk.yellow)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color.black.opacity(0.4), in: Capsule())
+                .offset(y: -30)
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if dragStartNorm == nil { dragStartNorm = normFor(zoom) }
+                    let start = dragStartNorm ?? normFor(zoom)
+                    let delta = -value.translation.height / trackHeight   // up = zoom in
+                    zoom = apply(zoomForNorm(start + delta))
+                }
+                .onEnded { _ in dragStartNorm = nil }
+        )
+    }
+}

@@ -265,20 +265,10 @@ struct UltraMinimalRecordingView: View {
                 }
                 .padding(.top, 60)      // Leave room for top bar
                 .padding(.bottom, 100)  // Leave room for scoreboard
-                // Pinch to zoom (works across both halves, 0.5x to 3.0x)
-                .simultaneousGesture(
-                    MagnificationGesture()
-                        .onChanged { scale in
-                            let baseZoom = autoZoomManager.mode == .auto ? autoZoomManager.currentZoom : currentZoom
-                            let newZoom = baseZoom * scale
-                            let clampedZoom = min(max(newZoom, 0.5), 3.0)
-                            _ = recordingManager.setZoom(factor: clampedZoom)
-                            autoZoomManager.manualZoomOverride(clampedZoom)
-                        }
-                        .onEnded { _ in
-                            currentZoom = recordingManager.getCurrentZoom()
-                        }
-                )
+                // Manual zoom is intentionally NOT wired to the tap zones: full-game framing
+                // is Skynet auto-zoom, and a stray pinch here fought it (and did nothing in
+                // stats-only). Manual zoom lives only where you frame a shot by hand — Practice
+                // and the stats-only clip window (the right-edge EdgeZoomStrip below).
             }
 
             // Scoreboard: full-screen big layout in stats-only mode (no video); the small
@@ -383,6 +373,23 @@ struct UltraMinimalRecordingView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // Right-edge zoom strip — appears only during a stats-only clip, when the camera
+            // preview is revealed to frame the shot (the pad has slid away). Drag up/down to
+            // zoom; the center stays free for scoring taps. Manual zoom is confined to this
+            // window and Practice — full-game framing is auto-zoom.
+            if isStatsOnlyClipping {
+                HStack {
+                    Spacer()
+                    EdgeZoomStrip(zoom: $currentZoom, maxZoom: 6.0) { factor in
+                        recordingManager.setZoom(factor: factor)
+                    }
+                    .padding(.trailing, 6)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
+                .animation(Self.clipCaptureSpring, value: isStatsOnlyClipping)
             }
 
             // Clock control chip — its OWN top-center overlay, fully independent of the
