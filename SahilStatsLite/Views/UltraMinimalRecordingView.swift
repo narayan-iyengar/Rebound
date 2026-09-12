@@ -372,6 +372,14 @@ struct UltraMinimalRecordingView: View {
                     }
                     statPad
                         .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
+                        // During a stats-only clip the camera preview is revealed to frame the
+                        // shot, so slide the pad off-screen for those ~15s and let taps fall
+                        // through (you can still tap to score). It springs back when the clip
+                        // ends — adjust stats then.
+                        .offset(y: isStatsOnlyClipping ? 800 : 0)
+                        .opacity(isStatsOnlyClipping ? 0 : 1)
+                        .allowsHitTesting(!isStatsOnlyClipping)
+                        .animation(Self.clipCaptureSpring, value: isStatsOnlyClipping)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
