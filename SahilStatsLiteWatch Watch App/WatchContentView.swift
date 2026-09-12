@@ -184,21 +184,25 @@ private struct WatchGameCard: View {
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(chip.1.opacity(0.15), in: Capsule())
 
-                    Text("vs")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(WChalk.dust)
-                        .padding(.top, 2)
+                    // Sahil's team first, then opponent — "Lava vs One on One Gold".
+                    HStack(spacing: 4) {
+                        if !game.teamName.isEmpty {
+                            Text(game.teamName)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(WChalk.yellow)
+                                .lineLimit(1)
+                        }
+                        Text("vs")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(WChalk.dust)
+                    }
+                    .padding(.top, 2)
 
                     Text(game.opponent)
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundColor(WChalk.sky)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
-
-                    Text(game.teamName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(WChalk.yellow)
-                        .lineLimit(1)
 
                     HStack(spacing: 4) {
                         Image(systemName: "clock").font(.system(size: 9))
