@@ -438,16 +438,17 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
             currentClipURL = url
             exporting = true
 
-            // Flush the backlog.
+            // Flush the backlog. One-shot dump of the whole ring — spin generously so the
+            // clip's opening frames aren't dropped (this runs once, before forward capture).
             for sb in videoSamples {
-                appendWhenReady(vInput, sb)
+                appendWhenReady(vInput, sb, maxSpins: 200)
                 lastExportedVideoPTS = CMSampleBufferGetPresentationTimeStamp(sb)
             }
             if let ai = aInput {
                 for sb in audioSamples {
                     let pts = CMSampleBufferGetPresentationTimeStamp(sb)
                     if pts < startPTS { continue }
-                    appendWhenReady(ai, sb)
+                    appendWhenReady(ai, sb, maxSpins: 200)
                     lastExportedAudioPTS = pts
                 }
             }
@@ -513,18 +514,31 @@ nonisolated final class ClipBuffer: @unchecked Sendable {
 
     // MARK: - Helpers
 
-    /// Append a sample, briefly spin-waiting for the input to be ready. Backlog flush
-    /// happens on our own background serial queue, so a short spin is acceptable.
-    private func appendWhenReady(_ input: AVAssetWriterInput, _ sb: CMSampleBuffer) {
+    /// Append a sample, optionally spin-waiting for the input to be ready.
+    ///
+    /// `maxSpins` is the spin budget (each spin = 2ms). Two very different callers:
+    ///   • Backlog flush (beginExportLocked): a one-shot dump of the whole ring into a
+    ///     fresh writer. A generous budget is correct here — dropping frames would punch
+    ///     holes in the clip's opening — and it runs only once per clip.
+    ///   • Live forward path (handleEncoded/AudioLocked): runs on clipQueue for EVERY
+    ///     encoded frame. This same serial queue also runs the stop-deadline check, so a
+    ///     long spin here (under encoder backpressure late in a warm game) jams the queue
+    ///     and the stop arrives late → runaway clip. Use a near-zero budget and drop the
+    ///     frame if the writer isn't ready: a dropped forward frame is invisible; a jammed
+    ///     queue is a 1:09 of feet.
+    @discardableResult
+    private func appendWhenReady(_ input: AVAssetWriterInput, _ sb: CMSampleBuffer, maxSpins: Int = 4) -> Bool {
         var spins = 0
-        while !input.isReadyForMoreMediaData && spins < 200 {
+        while !input.isReadyForMoreMediaData && spins < maxSpins {
             usleep(2000)  // 2ms
             spins += 1
         }
-        guard input.isReadyForMoreMediaData else { return }
+        guard input.isReadyForMoreMediaData else { return false }
         if !input.append(sb) {
             debugPrint("⚠️ ClipBuffer: append failed, writer status \(writer?.status.rawValue ?? -1)")
+            return false
         }
+        return true
     }
 
     private func audioASBD(_ sb: CMSampleBuffer) -> AudioStreamBasicDescription? {
