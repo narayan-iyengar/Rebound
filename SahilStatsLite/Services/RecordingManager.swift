@@ -142,7 +142,21 @@ class RecordingManager: NSObject, ObservableObject {
         }
         let forward = UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 15
         clipBuffer.startClip(forwardSeconds: Double(forward))
+        // Independent main-thread failsafe: the ring's own stop runs on its capture queue,
+        // which can get starved under writer backpressure and let a clip run away (the
+        // 1:00+ clips seen in the field). This fires regardless of that queue's state.
+        clipHardStop?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if self.clipState != .idle && self.clipState != .buffering {
+                debugPrint("🎬 triggerClip main-thread failsafe firing — forcing stop")
+                self.stopClip()
+            }
+        }
+        clipHardStop = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(forward) + 3.0, execute: work)
     }
+    private var clipHardStop: DispatchWorkItem?
 
     /// Cut the forward window short and save now.
     @MainActor

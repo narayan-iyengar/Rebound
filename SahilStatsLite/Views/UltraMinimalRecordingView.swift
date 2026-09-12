@@ -878,6 +878,13 @@ struct UltraMinimalRecordingView: View {
                         Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Tip Off")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(Chalk.yellow)
+                        // Stats-only: the pinned stat pad covers the bottom scoreboard clock,
+                        // so show the running time here in the chip.
+                        if appState.isStatsOnly {
+                            Text(clockTime)
+                                .font(.system(size: 16, weight: .bold)).monospacedDigit()
+                                .foregroundColor(isClockRunning ? Chalk.crisp : Chalk.chalkDim)
+                        }
                     }
                     .padding(.leading, 14)
                     .padding(.trailing, 12)
