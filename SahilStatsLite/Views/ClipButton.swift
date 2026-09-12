@@ -213,18 +213,17 @@ struct EdgeZoomStrip: View {
         let fillH = min(max(0, trackHeight * norm), trackHeight)
 
         return ZStack(alignment: .bottom) {
-            // Just a line: faint hairline at rest, a touch brighter while dragging.
-            Capsule()
-                .fill(Chalk.chalk.opacity(dragging ? 0.28 : 0.13))
-                .frame(width: 2.5, height: trackHeight)
-
-            // Yellow fill up to the current level — only while dragging, so at rest it's
-            // purely the hairline. Its top edge is the indicator; no knob.
+            // Nothing at rest — the left edge is just an invisible drag zone. The control
+            // only appears while you're dragging: a faint full track for context, a yellow
+            // fill to the current level (its top edge is the indicator; no knob), and the
+            // level readout beside it.
             if dragging {
+                Capsule()
+                    .fill(Chalk.chalk.opacity(0.25))
+                    .frame(width: 2.5, height: trackHeight)
                 Capsule()
                     .fill(Chalk.yellow.opacity(0.9))
                     .frame(width: 2.5, height: fillH)
-                // Level readout, riding the top of the fill, off to the side.
                 Text(String(format: "%.1f×", zoom))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .monospacedDigit()
