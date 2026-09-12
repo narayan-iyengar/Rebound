@@ -60,12 +60,13 @@ struct PracticeView: View {
                 Spacer()
             }
 
-            // Right-edge zoom strip — drag up/down to zoom, keeping the center clear.
+            // Left-edge zoom strip — drag up/down to zoom, keeping the center clear.
+            // (Left edge because the phone is typically held in the left hand while filming.)
             if !recordingManager.isSimulator {
                 HStack {
-                    Spacer()
                     EdgeZoomStrip(zoom: $zoom, maxZoom: maxZoom) { applyZoom($0); return zoom }
-                        .padding(.trailing, 6)
+                        .padding(.leading, 6)
+                    Spacer()
                 }
             }
 

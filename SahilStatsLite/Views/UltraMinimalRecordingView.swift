@@ -375,17 +375,17 @@ struct UltraMinimalRecordingView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Right-edge zoom strip — appears only during a stats-only clip, when the camera
+            // Left-edge zoom strip — appears only during a stats-only clip, when the camera
             // preview is revealed to frame the shot (the pad has slid away). Drag up/down to
-            // zoom; the center stays free for scoring taps. Manual zoom is confined to this
-            // window and Practice — full-game framing is auto-zoom.
+            // zoom; the center stays free for scoring taps. Same control and edge as Practice.
+            // Manual zoom is confined to this window and Practice — full-game framing is auto.
             if isStatsOnlyClipping {
                 HStack {
-                    Spacer()
                     EdgeZoomStrip(zoom: $currentZoom, maxZoom: 6.0) { factor in
                         recordingManager.setZoom(factor: factor)
                     }
-                    .padding(.trailing, 6)
+                    .padding(.leading, 6)
+                    Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
