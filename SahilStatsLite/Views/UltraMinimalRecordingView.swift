@@ -1111,10 +1111,12 @@ struct UltraMinimalRecordingView: View {
             Text(label)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(Chalk.dust)
+                .lineLimit(1)
+                .fixedSize()   // never wrap "FOULS" onto a second line
             TallyMarks(count: count.wrappedValue, color: color, barHeight: 30)
                 .frame(minWidth: 58, minHeight: 32, alignment: .center)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 16)
         .padding(.vertical, 13)
         .contentShape(Rectangle())
         .onTapGesture {
