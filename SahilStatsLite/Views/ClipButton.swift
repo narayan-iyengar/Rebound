@@ -221,24 +221,16 @@ struct EdgeZoomStrip: View {
             .onEnded { _ in dragStartNorm = nil; activeEdge = nil }
     }
 
-    // Line + fill + number, shown on the edge opposite the thumb.
+    // Just the level readout, shown on the edge opposite the thumb. No line — the number
+    // is the only thing you actually need while zooming.
     private var indicator: some View {
-        let fillH = min(max(0, trackHeight * normFor(zoom)), trackHeight)
-        return ZStack(alignment: .bottom) {
-            Capsule().fill(Chalk.chalk.opacity(0.25)).frame(width: 2.5, height: trackHeight)
-            Capsule().fill(Chalk.yellow.opacity(0.9)).frame(width: 2.5, height: fillH)
-        }
-        .overlay(alignment: .top) {
-            Text(String(format: "%.1f×", zoom))
-                .font(.system(size: 15, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .foregroundColor(Chalk.yellow)
-                .shadow(color: .black.opacity(0.5), radius: 3)
-                .fixedSize()
-                .offset(y: -26)
-        }
-        .frame(width: zoneWidth)
-        .allowsHitTesting(false)
+        Text(String(format: "%.1f×", zoom))
+            .font(.system(size: 22, weight: .heavy, design: .rounded))
+            .monospacedDigit()
+            .foregroundColor(Chalk.yellow)
+            .shadow(color: .black.opacity(0.55), radius: 4)
+            .frame(width: zoneWidth + 24)
+            .allowsHitTesting(false)
     }
 
     var body: some View {
