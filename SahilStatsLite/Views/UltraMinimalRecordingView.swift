@@ -370,8 +370,17 @@ struct UltraMinimalRecordingView: View {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showSahilStats = false }
                             }
                     }
-                    statPad
-                        .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
+                    VStack(spacing: 8) {
+                        // Stats-only: a prominent standalone clock readout sitting just above the
+                        // pinned pad. Mirrors recording view — the clock is a separate scoreboard
+                        // readout and the top chip stays a pure control — so switching modes is no
+                        // mental shift. Display only; taps fall through to the scoring zones.
+                        if appState.isStatsOnly {
+                            statsOnlyClockReadout
+                        }
+                        statPad
+                            .contentShape(Rectangle())  // absorb taps on the pad itself (never score)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -860,11 +869,29 @@ struct UltraMinimalRecordingView: View {
     // (no modal, no navigation — stays on the recording canvas). Auto-collapses when idle.
     // Lives top-center because the bottom corners are the thumb-grip zone in landscape,
     // where the old always-visible bar caused accidental taps (including "End").
+    // Stats-only: prominent clock + period, shown just above the pinned stat pad.
+    // Display only — the play/pause control stays in the top chip (same as recording
+    // view), so this is purely a readout and taps fall through to the scoring zones.
+    private var statsOnlyClockReadout: some View {
+        HStack(spacing: 8) {
+            Text(period)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Chalk.dust)
+            Text("·").foregroundColor(Chalk.dust)
+            Text(clockTime)
+                .font(.system(size: 26, weight: .bold)).monospacedDigit()
+                .foregroundColor(isClockRunning ? Chalk.yellow : Chalk.chalkDim)
+        }
+        .allowsHitTesting(false)
+    }
+
     private var clockControlChip: some View {
         VStack(spacing: 6) {
-            // Collapsed chip: [ ⏸ Pause | ⌄ ] — no clock number here; the clock lives
-            // only at the scoreboard (bottom-right), which is what's burned into the
-            // video. This chip is purely the control, so there's no double clock.
+            // Collapsed chip: [ ⏸ Pause | ⌄ ] — no clock number here. The chip is purely
+            // the control in BOTH modes: in recording the clock lives at the scoreboard
+            // (bottom-right, burned into the video); in stats-only it lives in the standalone
+            // readout above the pinned pad. Keeping the chip number-free means it reads the
+            // same way everywhere and there's never a double clock.
             HStack(spacing: 0) {
                 // Primary: one-tap pause/resume — big, forgiving target
                 Button {
@@ -878,13 +905,6 @@ struct UltraMinimalRecordingView: View {
                         Text(clockEverStarted ? (isClockRunning ? "Pause" : "Resume") : "Tip Off")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(Chalk.yellow)
-                        // Stats-only: the pinned stat pad covers the bottom scoreboard clock,
-                        // so show the running time here in the chip.
-                        if appState.isStatsOnly {
-                            Text(clockTime)
-                                .font(.system(size: 16, weight: .bold)).monospacedDigit()
-                                .foregroundColor(isClockRunning ? Chalk.crisp : Chalk.chalkDim)
-                        }
                     }
                     .padding(.leading, 14)
                     .padding(.trailing, 12)
@@ -1048,21 +1068,8 @@ struct UltraMinimalRecordingView: View {
             .padding(.top, 50)
             .padding(.bottom, 54)
 
-            // Clock + period, bottom center (display only).
-            VStack {
-                Spacer()
-                HStack(spacing: 8) {
-                    Text(period)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Chalk.chalkDim)
-                    Text("·").foregroundColor(Chalk.dust)
-                    Text(clockTime)
-                        .font(.system(size: 18, weight: .bold)).monospacedDigit()
-                        .foregroundColor(isClockRunning ? Chalk.crisp : Chalk.yellow)
-                }
-                .padding(.bottom, 14)
-            }
-            .allowsHitTesting(false)
+            // Clock + period now live in the standalone statsOnlyClockReadout above the
+            // pinned pad (this bottom-center spot was covered by that pad anyway).
         }
     }
 
