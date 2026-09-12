@@ -89,6 +89,17 @@ struct PracticeView: View {
         }
         .statusBar(hidden: true)
         .persistentSystemOverlays(.hidden)
+        // Each clip starts wide: when a clip finishes, reset the camera + strip to 1× so the
+        // next clip begins at full frame (no carry-over of the last zoom).
+        .onChange(of: recordingManager.clipState) { old, new in
+            func capturing(_ s: ClipState) -> Bool {
+                switch s { case .clipping, .saving, .saved: return true; default: return false }
+            }
+            if capturing(old) && !capturing(new) {
+                zoom = recordingManager.setZoom(factor: 1.0)
+                pinchBaseZoom = zoom
+            }
+        }
         .task {
             // Arm a clip-only session: camera on, buffering, no file recording, no overlay.
             recordingManager.reset()

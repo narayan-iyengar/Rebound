@@ -479,6 +479,18 @@ struct UltraMinimalRecordingView: View {
                 autoZoomManager.manualZoomOverride(newZoom)
             }
         }
+        // Each stats-only clip starts wide: when a clip finishes, reset the camera + strip
+        // to 1× so the next clip begins at full-court (no carry-over of the last zoom).
+        // Game mode is left alone — auto-zoom owns framing there.
+        .onChange(of: recordingManager.clipState) { old, new in
+            guard appState.isStatsOnly else { return }
+            func capturing(_ s: ClipState) -> Bool {
+                switch s { case .clipping, .saving, .saved: return true; default: return false }
+            }
+            if capturing(old) && !capturing(new) {
+                currentZoom = recordingManager.setZoom(factor: 1.0)
+            }
+        }
         .animation(.spring(response: 0.3), value: showSahilStats)
         .animation(Self.clipCaptureSpring, value: isStatsOnlyClipping)
         // Mirror team fouls/timeouts to the watch whenever they change (either device).
