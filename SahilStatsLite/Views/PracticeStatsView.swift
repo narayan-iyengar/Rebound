@@ -3,11 +3,12 @@
 //  SahilStatsLite
 //
 //  PURPOSE: The Practice tab — one tab, three modes (Shooting · Workout · Clips).
-//           Shooting: a month calendar to log at-home shooting (made/attempts per shot
-//           type in a day-entry sheet), a half-court shot map with a dot per shot type
-//           colored hot/cold by all-time %, and a per-dot trend sheet. Workout + Clips
-//           are stubs for now (Clips launches the existing practice recorder).
-//  KEY TYPES: PracticeStatsView, PracticeShootingStore, ShotKind, ShotDay
+//           Shooting: a month calendar to log at-home shooting (made/attempts per SPOT
+//           in a day-entry sheet — 5 two-point spots, 5 three-point spots, plus the free
+//           throw), a half-court shot map with a pulsing dot per spot colored hot/cold by
+//           all-time %, and a per-spot trend sheet. Workout + Clips are stubs (Clips
+//           launches the existing practice recorder).
+//  KEY TYPES: PracticeStatsView, PracticeShootingStore, ShotSpot, ShotDay
 //  DEPENDS ON: AppState (Clips), Charts
 //
 //  NOTE: Keep this header updated when modifying this file.
@@ -19,19 +20,48 @@ import Combine
 
 // MARK: - Model
 
-enum ShotKind: String, CaseIterable, Codable, Identifiable {
-    case layup = "Layups", mid = "Mid-range", three = "3-pointers", ft = "Free throws"
+enum ShotRange { case two, three, ft }
+
+enum ShotSpot: String, CaseIterable, Codable, Identifiable {
+    // 2-pointers
+    case rim = "Layup / rim"
+    case leftBaseline2 = "Left baseline"
+    case rightBaseline2 = "Right baseline"
+    case leftElbow2 = "Left elbow"
+    case rightElbow2 = "Right elbow"
+    // 3-pointers
+    case leftCorner3 = "Left corner 3"
+    case rightCorner3 = "Right corner 3"
+    case leftWing3 = "Left wing 3"
+    case rightWing3 = "Right wing 3"
+    case top3 = "Top 3"
+    // Free throw
+    case ft = "Free throw"
+
     var id: String { rawValue }
-    var short: String {
-        switch self { case .layup: return "LAY"; case .mid: return "MID"; case .three: return "3PT"; case .ft: return "FT" }
+
+    var range: ShotRange {
+        switch self {
+        case .rim, .leftBaseline2, .rightBaseline2, .leftElbow2, .rightElbow2: return .two
+        case .leftCorner3, .rightCorner3, .leftWing3, .rightWing3, .top3: return .three
+        case .ft: return .ft
+        }
     }
-    /// Normalized position on the half court (x, y with y=0 at the baseline/hoop).
+
+    /// Normalized position on the half court (x 0…1, y 0=baseline/hoop … 1=half court).
     var pos: CGPoint {
         switch self {
-        case .layup: return CGPoint(x: 0.50, y: 0.16)
-        case .ft:    return CGPoint(x: 0.50, y: 0.44)
-        case .mid:   return CGPoint(x: 0.24, y: 0.56)
-        case .three: return CGPoint(x: 0.50, y: 0.80)
+        case .rim:            return CGPoint(x: 0.50, y: 0.05)
+        case .leftBaseline2:  return CGPoint(x: 0.27, y: 0.06)
+        case .rightBaseline2: return CGPoint(x: 0.73, y: 0.06)
+        case .leftElbow2:     return CGPoint(x: 0.35, y: 0.30)
+        case .rightElbow2:    return CGPoint(x: 0.65, y: 0.30)
+        case .leftCorner3:    return CGPoint(x: 0.07, y: 0.05)
+        case .rightCorner3:   return CGPoint(x: 0.93, y: 0.05)
+        case .leftWing3:      return CGPoint(x: 0.13, y: 0.44)
+        case .rightWing3:     return CGPoint(x: 0.87, y: 0.44)
+        case .top3:           return CGPoint(x: 0.50, y: 0.66)
+        case .ft:             return CGPoint(x: 0.50, y: 0.34)
         }
     }
 }
@@ -39,10 +69,9 @@ enum ShotKind: String, CaseIterable, Codable, Identifiable {
 struct ShotDay: Codable, Identifiable {
     var dateKey: String            // "yyyy-MM-dd"
     var date: Date
-    var made: [String: Int] = [:]  // ShotKind.rawValue -> made
+    var made: [String: Int] = [:]  // ShotSpot.rawValue -> made
     var att: [String: Int] = [:]
     var id: String { dateKey }
-    var totalAtt: Int { att.values.reduce(0, +) }
 }
 
 @MainActor
@@ -59,40 +88,44 @@ final class PracticeShootingStore: ObservableObject {
 
     func day(for date: Date) -> ShotDay? { days[Self.dateKey(date)] }
 
-    func save(date: Date, made: [ShotKind: Int], att: [ShotKind: Int]) {
+    func save(date: Date, made: [ShotSpot: Int], att: [ShotSpot: Int]) {
         let k = Self.dateKey(date)
         var m: [String: Int] = [:], a: [String: Int] = [:]
-        for kind in ShotKind.allCases {
-            let mv = max(0, made[kind] ?? 0), av = max(mv, att[kind] ?? 0)
-            if av > 0 { m[kind.rawValue] = mv; a[kind.rawValue] = av }
+        for spot in ShotSpot.allCases {
+            let mv = max(0, made[spot] ?? 0), av = max(mv, att[spot] ?? 0)
+            if av > 0 { m[spot.rawValue] = mv; a[spot.rawValue] = av }
         }
         if a.isEmpty { days[k] = nil } else { days[k] = ShotDay(dateKey: k, date: date, made: m, att: a) }
         persist()
     }
 
-    /// All-time made/attempts for a shot kind.
-    func total(_ kind: ShotKind) -> (made: Int, att: Int) {
+    func total(_ spot: ShotSpot) -> (made: Int, att: Int) {
         var m = 0, a = 0
-        for d in days.values { m += d.made[kind.rawValue] ?? 0; a += d.att[kind.rawValue] ?? 0 }
+        for d in days.values { m += d.made[spot.rawValue] ?? 0; a += d.att[spot.rawValue] ?? 0 }
         return (m, a)
     }
-    func pct(_ kind: ShotKind) -> Double? {
-        let t = total(kind); return t.att > 0 ? Double(t.made) / Double(t.att) * 100 : nil
+    func pct(_ spot: ShotSpot) -> Double? {
+        let t = total(spot); return t.att > 0 ? Double(t.made) / Double(t.att) * 100 : nil
     }
-    /// Overall field goal % (everything except FT).
+    /// Combined % for a whole range (all 2s, all 3s).
+    func pct(range: ShotRange) -> Double? {
+        var m = 0, a = 0
+        for spot in ShotSpot.allCases where spot.range == range { let t = total(spot); m += t.made; a += t.att }
+        return a > 0 ? Double(m) / Double(a) * 100 : nil
+    }
     var fgPct: Double? {
         var m = 0, a = 0
-        for kind in [ShotKind.layup, .mid, .three] { let t = total(kind); m += t.made; a += t.att }
+        for spot in ShotSpot.allCases where spot.range != .ft { let t = total(spot); m += t.made; a += t.att }
         return a > 0 ? Double(m) / Double(a) * 100 : nil
     }
     var ftPct: Double? { pct(.ft) }
 
-    /// Per-session (per logged day) % for one kind, oldest first.
-    func trend(_ kind: ShotKind) -> [(date: Date, pct: Double)] {
+    /// Per-session (per logged day) % for one spot, oldest first.
+    func trend(_ spot: ShotSpot) -> [(date: Date, pct: Double)] {
         days.values
-            .filter { ($0.att[kind.rawValue] ?? 0) > 0 }
+            .filter { ($0.att[spot.rawValue] ?? 0) > 0 }
             .sorted { $0.date < $1.date }
-            .map { (($0.date), Double($0.made[kind.rawValue] ?? 0) / Double($0.att[kind.rawValue] ?? 1) * 100) }
+            .map { (($0.date), Double($0.made[spot.rawValue] ?? 0) / Double($0.att[spot.rawValue] ?? 1) * 100) }
     }
 
     private func load() {
@@ -107,10 +140,8 @@ final class PracticeShootingStore: ObservableObject {
     }
 }
 
-// MARK: - Shot color
-
 private func pctColor(_ pct: Double?) -> Color {
-    guard let p = pct else { return Chalk.dust }
+    guard let p = pct else { return Chalk.dust.opacity(0.6) }
     if p >= 55 { return Chalk.green }
     if p >= 38 { return Chalk.yellow }
     return Chalk.coral
@@ -127,7 +158,7 @@ struct PracticeStatsView: View {
 
     @State private var month = Date()
     @State private var entryDate: Date? = nil
-    @State private var trendKind: ShotKind? = nil
+    @State private var trendSpot: ShotSpot? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -137,24 +168,20 @@ struct PracticeStatsView: View {
             }
             .padding(.horizontal).padding(.top, 8).padding(.bottom, 4)
 
-            // Mode switcher
             HStack(spacing: 0) {
                 ForEach(Mode.allCases) { m in
                     Button { withAnimation(.easeInOut(duration: 0.2)) { mode = m } } label: {
                         Text(m.rawValue)
                             .font(.system(size: 13, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity).padding(.vertical, 8)
                             .background(mode == m ? Chalk.yellow : Color.clear, in: Capsule())
                             .foregroundColor(mode == m ? Chalk.board : Chalk.chalkDim)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(4)
-            .background(Chalk.board2, in: Capsule())
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(4).background(Chalk.board2, in: Capsule())
+            .padding(.horizontal).padding(.bottom, 8)
 
             ScrollView {
                 VStack(spacing: 16) {
@@ -172,20 +199,13 @@ struct PracticeStatsView: View {
                              set: { entryDate = $0?.date })) { wrap in
             ShootingEntrySheet(date: wrap.date)
         }
-        .sheet(item: $trendKind) { kind in
-            ShotTrendSheet(kind: kind)
-        }
+        .sheet(item: $trendSpot) { spot in ShotTrendSheet(spot: spot) }
     }
 
     private struct IdentifiableDate: Identifiable { let date: Date; var id: String { PracticeShootingStore.dateKey(date) } }
 
-    // MARK: Shooting mode
-
     private var shootingContent: some View {
-        VStack(spacing: 16) {
-            calendarCard
-            shotMapCard
-        }
+        VStack(spacing: 16) { calendarCard; shotMapCard }
     }
 
     private var calendarCard: some View {
@@ -207,11 +227,7 @@ struct PracticeStatsView: View {
                     Text(d).font(.system(size: 10)).foregroundColor(Chalk.dust)
                 }
                 ForEach(Array(monthDays.enumerated()), id: \.offset) { _, day in
-                    if let day {
-                        dayCell(day)
-                    } else {
-                        Color.clear.frame(height: 38)
-                    }
+                    if let day { dayCell(day) } else { Color.clear.frame(height: 38) }
                 }
             }
             HStack(spacing: 6) {
@@ -230,9 +246,7 @@ struct PracticeStatsView: View {
         let n = Calendar.current.component(.day, from: day)
         return Button { entryDate = day } label: {
             VStack(spacing: 2) {
-                Text("\(n)")
-                    .font(.system(size: 13, weight: isToday ? .heavy : .regular))
-                    .foregroundColor(isToday ? Chalk.yellow : Chalk.chalk)
+                Text("\(n)").font(.system(size: 13, weight: isToday ? .heavy : .regular)).foregroundColor(isToday ? Chalk.yellow : Chalk.chalk)
                 Circle().fill(logged ? Chalk.yellow : Color.clear).frame(width: 5, height: 5)
             }
             .frame(maxWidth: .infinity).frame(height: 38)
@@ -248,12 +262,12 @@ struct PracticeStatsView: View {
                 Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
                 Text("tap a spot").font(.system(size: 11)).foregroundColor(Chalk.dust)
             }
-            ShotMap(store: store) { kind in trendKind = kind }
-                .frame(height: 220)
+            ShotMap(store: store) { spot in trendSpot = spot }
+                .frame(height: 260)
                 .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
             HStack {
-                Text("FG \(pctText(store.fgPct)) · FT \(pctText(store.ftPct))")
-                    .font(.system(size: 14, weight: .bold)).foregroundColor(Chalk.crisp)
+                Text("FG \(pctText(store.fgPct)) · 3PT \(pctText(store.pct(range: .three))) · FT \(pctText(store.ftPct))")
+                    .font(.system(size: 13, weight: .bold)).foregroundColor(Chalk.crisp)
                 Spacer()
                 Text("\(store.days.count) session\(store.days.count == 1 ? "" : "s")")
                     .font(.system(size: 11)).foregroundColor(Chalk.dust)
@@ -264,18 +278,14 @@ struct PracticeStatsView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
     }
 
-    // MARK: Clips mode
-
     private var clipsContent: some View {
         VStack(spacing: 14) {
             Image(systemName: "film.stack").font(.system(size: 44)).foregroundColor(Chalk.coral.opacity(0.85))
             Text("Practice clips").font(.chalkScript(26)).foregroundColor(Chalk.chalk)
             Text("Record and save highlight clips while he practices — same clip button, no game needed.")
                 .font(.system(size: 14)).foregroundColor(Chalk.dust).multilineTextAlignment(.center).padding(.horizontal, 16)
-            ChalkButton(title: "Start recording", icon: "record.circle", color: Chalk.coral, filled: true) {
-                appState.startPractice()
-            }
-            .padding(.top, 4)
+            ChalkButton(title: "Start recording", icon: "record.circle", color: Chalk.coral, filled: true) { appState.startPractice() }
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity).padding(.vertical, 30)
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
@@ -293,14 +303,9 @@ struct PracticeStatsView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
     }
 
-    // MARK: helpers
-
-    private var monthTitle: String {
-        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f.string(from: month)
-    }
+    private var monthTitle: String { let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f.string(from: month) }
     private func pctText(_ p: Double?) -> String { p.map { "\(Int($0.rounded()))%" } ?? "—" }
 
-    /// Days of the visible month, padded with nils for the leading weekday offset.
     private var monthDays: [Date?] {
         let cal = Calendar.current
         guard let interval = cal.dateInterval(of: .month, for: month),
@@ -313,53 +318,52 @@ struct PracticeStatsView: View {
     }
 }
 
-// MARK: - Shot map (half court + dots)
+// MARK: - Shot map (half court + spot dots)
 
 private struct ShotMap: View {
     @ObservedObject var store: PracticeShootingStore
-    let onTap: (ShotKind) -> Void
+    let onTap: (ShotSpot) -> Void
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
             ZStack {
-                // Court lines
                 Path { p in
-                    p.move(to: CGPoint(x: w * 0.07, y: h * 0.09)); p.addLine(to: CGPoint(x: w * 0.93, y: h * 0.09)) // baseline
-                    p.addRect(CGRect(x: w * 0.40, y: h * 0.09, width: w * 0.20, height: h * 0.34)) // key
-                    p.addEllipse(in: CGRect(x: w * 0.40, y: h * 0.33, width: w * 0.20, height: h * 0.20)) // ft circle
+                    p.move(to: CGPoint(x: w * 0.06, y: h * 0.08)); p.addLine(to: CGPoint(x: w * 0.94, y: h * 0.08))   // baseline
+                    p.addRect(CGRect(x: w * 0.40, y: h * 0.08, width: w * 0.20, height: h * 0.30))                     // key
+                    p.addEllipse(in: CGRect(x: w * 0.40, y: h * 0.28, width: w * 0.20, height: h * 0.20))              // ft circle
                 }
-                .stroke(Chalk.dust.opacity(0.45), lineWidth: 1.3)
+                .stroke(Chalk.dust.opacity(0.4), lineWidth: 1.3)
                 Path { p in
-                    p.move(to: CGPoint(x: w * 0.14, y: h * 0.09)); p.addLine(to: CGPoint(x: w * 0.14, y: h * 0.34))
-                    p.addQuadCurve(to: CGPoint(x: w * 0.86, y: h * 0.34), control: CGPoint(x: w * 0.5, y: h * 0.95))
-                    p.addLine(to: CGPoint(x: w * 0.86, y: h * 0.09))
+                    p.move(to: CGPoint(x: w * 0.11, y: h * 0.08)); p.addLine(to: CGPoint(x: w * 0.11, y: h * 0.30))
+                    p.addQuadCurve(to: CGPoint(x: w * 0.89, y: h * 0.30), control: CGPoint(x: w * 0.5, y: h * 1.02))
+                    p.addLine(to: CGPoint(x: w * 0.89, y: h * 0.08))
                 }
-                .stroke(Chalk.dust.opacity(0.45), lineWidth: 1.3)
-                Circle().stroke(Chalk.coral, lineWidth: 2).frame(width: 10, height: 10)
-                    .position(x: w * 0.5, y: h * 0.13)
+                .stroke(Chalk.dust.opacity(0.4), lineWidth: 1.3)
+                Circle().stroke(Chalk.coral, lineWidth: 2).frame(width: 9, height: 9).position(x: w * 0.5, y: h * 0.115)
 
-                ForEach(ShotKind.allCases) { kind in
-                    dot(kind, at: CGPoint(x: kind.pos.x * w, y: h * 0.09 + kind.pos.y * h * 0.9))
+                ForEach(Array(ShotSpot.allCases.enumerated()), id: \.element) { idx, spot in
+                    dot(spot, delay: Double(idx) * 0.13,
+                        at: CGPoint(x: spot.pos.x * w, y: h * 0.08 + spot.pos.y * h * 0.9))
                 }
             }
         }
     }
 
-    private func dot(_ kind: ShotKind, at pt: CGPoint) -> some View {
-        let pct = store.pct(kind)
+    private func dot(_ spot: ShotSpot, delay: Double, at pt: CGPoint) -> some View {
+        let pct = store.pct(spot)
         let color = pctColor(pct)
-        return Button { onTap(kind) } label: {
+        return Button { onTap(spot) } label: {
             ZStack {
-                Circle().fill(color.opacity(0.25)).frame(width: 34, height: 34)
-                    .modifier(Pulse())
-                Circle().fill(color).frame(width: 15, height: 15)
-                VStack(spacing: 0) {
-                    Text(kind.short).font(.system(size: 8, weight: .heavy)).foregroundColor(Chalk.chalk)
-                    Text(pct.map { "\(Int($0.rounded()))%" } ?? "–").font(.system(size: 9, weight: .bold)).foregroundColor(color)
+                Circle().fill(color.opacity(0.22)).frame(width: 26, height: 26).modifier(Pulse(delay: delay))
+                Circle().fill(color).frame(width: 13, height: 13)
+                if let pct {
+                    Text("\(Int(pct.rounded()))")
+                        .font(.system(size: 8, weight: .heavy)).foregroundColor(Chalk.board)
                 }
-                .offset(y: 26)
             }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .position(pt)
@@ -367,11 +371,13 @@ private struct ShotMap: View {
 }
 
 private struct Pulse: ViewModifier {
+    let delay: Double
     @State private var on = false
     func body(content: Content) -> some View {
-        content.scaleEffect(on ? 1.15 : 0.85).opacity(on ? 1 : 0.55)
-            .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: on)
-            .onAppear { on = true }
+        content.scaleEffect(on ? 1.2 : 0.85).opacity(on ? 0.9 : 0.4)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true).delay(delay)) { on = true }
+            }
     }
 }
 
@@ -381,59 +387,60 @@ private struct ShootingEntrySheet: View {
     let date: Date
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = PracticeShootingStore.shared
-    @State private var made: [ShotKind: Int] = [:]
-    @State private var att: [ShotKind: Int] = [:]
+    @State private var made: [ShotSpot: Int] = [:]
+    @State private var att: [ShotSpot: Int] = [:]
+
+    private let twos: [ShotSpot] = [.rim, .leftBaseline2, .rightBaseline2, .leftElbow2, .rightElbow2]
+    private let threes: [ShotSpot] = [.leftCorner3, .rightCorner3, .leftWing3, .rightWing3, .top3]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(ShotKind.allCases) { kind in
-                        HStack {
-                            Text(kind.rawValue).font(.system(size: 15, weight: .medium)).foregroundColor(Chalk.chalk)
-                            Spacer()
-                            stepper("made", made[kind] ?? 0, Chalk.green) { made[kind] = max(0, $0); if (att[kind] ?? 0) < (made[kind] ?? 0) { att[kind] = made[kind] } }
-                            Text("/").foregroundColor(Chalk.dust)
-                            stepper("att", att[kind] ?? 0, Chalk.chalkDim) { att[kind] = max(made[kind] ?? 0, $0) }
-                        }
-                        .padding(12)
-                        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
-                    }
+                VStack(spacing: 14) {
+                    section("2-POINTERS", twos)
+                    section("3-POINTERS", threes)
+                    section("FREE THROW", [.ft])
                 }
                 .padding()
             }
             .chalkBoard()
-            .navigationTitle(titleText)
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(titleText).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { store.save(date: date, made: made, att: att); dismiss() }
-                }
+                ToolbarItem(placement: .confirmationAction) { Button("Save") { store.save(date: date, made: made, att: att); dismiss() } }
             }
         }
         .onAppear {
             if let d = store.day(for: date) {
-                for kind in ShotKind.allCases {
-                    made[kind] = d.made[kind.rawValue] ?? 0
-                    att[kind] = d.att[kind.rawValue] ?? 0
-                }
+                for spot in ShotSpot.allCases { made[spot] = d.made[spot.rawValue] ?? 0; att[spot] = d.att[spot.rawValue] ?? 0 }
             }
         }
     }
 
-    private var titleText: String {
-        let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; return f.string(from: date)
+    private func section(_ header: String, _ spots: [ShotSpot]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(header).font(.system(size: 11, weight: .heavy)).tracking(1).foregroundColor(Chalk.dust)
+            ForEach(spots) { spot in
+                HStack {
+                    Text(spot.rawValue).font(.system(size: 14, weight: .medium)).foregroundColor(Chalk.chalk)
+                    Spacer()
+                    stepper(made[spot] ?? 0, Chalk.green) { made[spot] = max(0, $0); if (att[spot] ?? 0) < (made[spot] ?? 0) { att[spot] = made[spot] } }
+                    Text("/").foregroundColor(Chalk.dust)
+                    stepper(att[spot] ?? 0, Chalk.chalkDim) { att[spot] = max(made[spot] ?? 0, $0) }
+                }
+                .padding(10)
+                .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
     }
 
-    private func stepper(_ label: String, _ value: Int, _ color: Color, _ set: @escaping (Int) -> Void) -> some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 8) {
-                Button { set(value - 1) } label: { Image(systemName: "minus").font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.coral).frame(width: 26, height: 26).background(Color.black.opacity(0.25), in: Circle()) }.buttonStyle(.plain)
-                Text("\(value)").font(.system(size: 18, weight: .bold)).monospacedDigit().foregroundColor(color).frame(width: 30)
-                Button { set(value + 1) } label: { Image(systemName: "plus").font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.green).frame(width: 26, height: 26).background(Color.black.opacity(0.25), in: Circle()) }.buttonStyle(.plain)
-            }
-            Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
+    private var titleText: String { let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; return f.string(from: date) }
+
+    private func stepper(_ value: Int, _ color: Color, _ set: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 6) {
+            Button { set(value - 1) } label: { Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.coral).frame(width: 24, height: 24).background(Color.black.opacity(0.25), in: Circle()) }.buttonStyle(.plain)
+            Text("\(value)").font(.system(size: 17, weight: .bold)).monospacedDigit().foregroundColor(color).frame(width: 26)
+            Button { set(value + 1) } label: { Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.green).frame(width: 24, height: 24).background(Color.black.opacity(0.25), in: Circle()) }.buttonStyle(.plain)
         }
     }
 }
@@ -441,33 +448,32 @@ private struct ShootingEntrySheet: View {
 // MARK: - Trend sheet
 
 private struct ShotTrendSheet: View {
-    let kind: ShotKind
+    let spot: ShotSpot
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = PracticeShootingStore.shared
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                let t = store.total(kind)
+                let t = store.total(spot)
                 HStack(alignment: .lastTextBaseline, spacing: 10) {
-                    Text(store.pct(kind).map { "\(Int($0.rounded()))%" } ?? "—")
-                        .font(.system(size: 46, weight: .heavy)).foregroundColor(pctColor(store.pct(kind)))
+                    Text(store.pct(spot).map { "\(Int($0.rounded()))%" } ?? "—")
+                        .font(.system(size: 46, weight: .heavy)).foregroundColor(pctColor(store.pct(spot)))
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(kind.rawValue).font(.system(size: 15, weight: .semibold)).foregroundColor(Chalk.chalk)
+                        Text(spot.rawValue).font(.system(size: 15, weight: .semibold)).foregroundColor(Chalk.chalk)
                         Text("\(t.made) / \(t.att) all-time").font(.system(size: 12)).foregroundColor(Chalk.dust)
                     }
                     Spacer()
                 }
-
-                let data = store.trend(kind)
+                let data = store.trend(spot)
                 if data.count > 1 {
                     Chart {
                         ForEach(Array(data.enumerated()), id: \.offset) { i, pt in
                             LineMark(x: .value("Session", i), y: .value("%", pt.pct))
-                                .foregroundStyle(pctColor(store.pct(kind)))
+                                .foregroundStyle(pctColor(store.pct(spot)))
                                 .lineStyle(StrokeStyle(lineWidth: 2.6, lineJoin: .round)).interpolationMethod(.catmullRom)
                             PointMark(x: .value("Session", i), y: .value("%", pt.pct))
-                                .foregroundStyle(pctColor(store.pct(kind))).symbolSize(24)
+                                .foregroundStyle(pctColor(store.pct(spot))).symbolSize(24)
                         }
                     }
                     .frame(height: 200)
@@ -475,13 +481,12 @@ private struct ShotTrendSheet: View {
                     .chartXAxis(.hidden)
                     Text("% per session (oldest → newest)").font(.system(size: 11)).foregroundColor(Chalk.dust)
                 } else {
-                    Text("Log a few sessions and the trend shows up here.")
+                    Text("Log a few sessions from this spot and its trend shows up here.")
                         .font(.system(size: 14)).foregroundColor(Chalk.dust).padding(.top, 20)
                 }
                 Spacer()
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding().frame(maxWidth: .infinity, alignment: .leading)
             .chalkBoard()
             .navigationTitle("Trend").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
