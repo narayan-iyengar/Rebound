@@ -517,23 +517,19 @@ struct AllGamesView: View {
         }
     }
 
-    // Chronological "form guide": a small result square per game with its score below.
-    // Fixed-size squares stay tidy whether the weekend had 2 games or 6.
+    // Chronological "form guide": one colored score tile per game. The tile color IS the
+    // result (green = win, coral = loss), so the score lives right inside it — no separate
+    // letter or caption. Left-aligned, tidy whether the weekend had 2 games or 6.
     private func winLossStrip(_ cluster: GameCluster) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             ForEach(cluster.games.sorted { $0.date < $1.date }) { game in
-                VStack(spacing: 3) {
-                    Text(game.isWin ? "W" : "L")
-                        .font(.system(size: 12, weight: .heavy))
-                        .foregroundColor(Chalk.board)
-                        .frame(width: 34, height: 30)
-                        .background(game.isWin ? Chalk.green : Chalk.coral,
-                                    in: RoundedRectangle(cornerRadius: 7))
-                    Text(game.scoreString)
-                        .font(.system(size: 10, weight: .medium)).monospacedDigit()
-                        .foregroundColor(Chalk.dust)
-                        .fixedSize()
-                }
+                Text(game.scoreString)
+                    .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                    .foregroundColor(Chalk.board)
+                    .padding(.horizontal, 9).padding(.vertical, 6)
+                    .background(game.isWin ? Chalk.green : Chalk.coral,
+                                in: RoundedRectangle(cornerRadius: 7))
+                    .fixedSize()
             }
             Spacer(minLength: 0)
         }
