@@ -138,7 +138,7 @@ struct CareerStatsSheet: View {
         let rowBytes = CVPixelBufferGetBytesPerRow(mask)
         guard let base = CVPixelBufferGetBaseAddress(mask) else { return nil }
         let ptr = base.assumingMemoryBound(to: UInt8.self)
-        let threshold: UInt8 = 40
+        let threshold: UInt8 = 10   // low, so dim legs/feet still count toward the bounds
         var minX = w, minY = h, maxX = -1, maxY = -1
         for y in 0..<h {
             let row = ptr + y * rowBytes
