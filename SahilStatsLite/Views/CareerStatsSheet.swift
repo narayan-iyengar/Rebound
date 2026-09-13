@@ -371,7 +371,10 @@ struct CareerStatsSheet: View {
             PhotosPicker(selection: $photoItem, matching: .images) {
                 Group {
                     if let img = display {
-                        Image(uiImage: img).resizable().scaledToFill()
+                        // Cutout has a transparent ground → fit the whole figure (no chopping);
+                        // the raw rectangular photo fills the frame.
+                        Image(uiImage: img).resizable()
+                            .aspectRatio(contentMode: sketchMode ? .fit : .fill)
                     } else {
                         VStack(spacing: 6) {
                             Image(systemName: "person.crop.rectangle.badge.plus")
