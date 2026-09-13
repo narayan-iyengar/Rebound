@@ -19,6 +19,7 @@ import Charts
 import PhotosUI
 import UIKit
 import CoreImage
+import Vision
 
 struct CareerStatsSheet: View {
     @ObservedObject private var persistenceManager = GamePersistenceManager.shared
@@ -60,7 +61,10 @@ struct CareerStatsSheet: View {
     private func loadPhoto() {
         guard photo == nil, let data = try? Data(contentsOf: photoURL), let img = UIImage(data: data) else { return }
         photo = img
-        sketch = chalkSketch(img)
+        Task.detached(priority: .userInitiated) {
+            let s = Self.chalkSketch(img)
+            await MainActor.run { sketch = s }
+        }
     }
 
     private func savePhoto(_ item: PhotosPickerItem?) {
@@ -68,23 +72,43 @@ struct CareerStatsSheet: View {
         Task {
             guard let data = try? await item.loadTransferable(type: Data.self), let img = UIImage(data: data) else { return }
             try? data.write(to: photoURL)
-            let s = chalkSketch(img)
+            let s = Self.chalkSketch(img)
             await MainActor.run { photo = img; sketch = s }
         }
     }
 
     /// Turn a photo into a white chalk line-drawing on a transparent ground (so the board
     /// shows through) — looks hand-drawn, matching the chalkboard theme.
-    private func chalkSketch(_ image: UIImage) -> UIImage? {
-        guard let ci = CIImage(image: image) else { return nil }
+    /// Isolate the person (drops the crowd/background) so the stylization has a clean subject.
+    private static func personCutout(_ image: UIImage) -> CIImage? {
+        guard let cg = image.cgImage else { return nil }
+        let req = VNGeneratePersonSegmentationRequest()
+        req.qualityLevel = .accurate
+        req.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        let handler = VNImageRequestHandler(cgImage: cg, options: [:])
+        guard (try? handler.perform([req])) != nil, let mask = req.results?.first?.pixelBuffer else { return nil }
+        let base = CIImage(cgImage: cg)
+        var maskCI = CIImage(cvPixelBuffer: mask)
+        let sx = base.extent.width / maskCI.extent.width
+        let sy = base.extent.height / maskCI.extent.height
+        maskCI = maskCI.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
+        return CIFilter(name: "CIBlendWithMask", parameters: [
+            kCIInputImageKey: base, kCIInputMaskImageKey: maskCI, kCIInputBackgroundImageKey: CIImage.empty()
+        ])?.outputImage
+    }
+
+    /// Chalk portrait: cut out Sahil (no crowd), then soft edge-work → white strokes on a
+    /// transparent ground so it reads as a hand-drawn chalk figure on the board. Falls back
+    /// to the whole frame if segmentation finds no person.
+    private static func chalkSketch(_ image: UIImage) -> UIImage? {
         let ctx = CIContext(options: nil)
-        // Denoise hard first so a busy crowd background doesn't turn to grain, then a soft
-        // edge-work pass gives clean white "chalk" strokes on black; mask black → transparent.
-        let denoised = ci
-            .applyingFilter("CINoiseReduction", parameters: ["inputNoiseLevel": 0.25, "inputSharpness": 0.4])
-            .applyingFilter("CIMedianFilter")
-        let mono = denoised.applyingFilter("CIPhotoEffectMono")
-        let edges = mono.applyingFilter("CIEdgeWork", parameters: ["inputRadius": 2.2])
+        let subject = personCutout(image) ?? CIImage(image: image)
+        guard let base = subject else { return nil }
+        let cropped = base.cropped(to: base.extent.isInfinite ? (CIImage(image: image)?.extent ?? .zero) : base.extent)
+        let mono = cropped
+            .applyingFilter("CINoiseReduction", parameters: ["inputNoiseLevel": 0.2, "inputSharpness": 0.4])
+            .applyingFilter("CIPhotoEffectMono")
+        let edges = mono.applyingFilter("CIEdgeWork", parameters: ["inputRadius": 1.6])
         let masked = edges.applyingFilter("CIMaskToAlpha")
         guard let cg = ctx.createCGImage(masked, from: masked.extent) else { return nil }
         return UIImage(cgImage: cg)
@@ -471,20 +495,18 @@ struct CareerStatsSheet: View {
                     }
                     Text("trend").font(.chalkScript(20)).foregroundColor(Chalk.dust)
                     Spacer()
-                    HStack(spacing: 0) {
-                        ForEach(TrendPeriod.allCases) { p in
-                            Button { trendPeriod = p } label: {
-                                Text(p.rawValue)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .padding(.horizontal, 10).padding(.vertical, 5)
-                                    .background(trendPeriod == p ? posterAccent : Color.clear, in: Capsule())
-                                    .foregroundColor(trendPeriod == p ? Chalk.board : Chalk.dust)
-                            }
-                            .buttonStyle(.plain)
+                    Button {
+                        let all = TrendPeriod.allCases
+                        if let i = all.firstIndex(of: trendPeriod) { trendPeriod = all[(i + 1) % all.count] }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(trendPeriod.rawValue).font(.system(size: 12, weight: .semibold)).foregroundColor(posterAccent)
+                            Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .bold)).foregroundColor(Chalk.dust)
                         }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Chalk.board.opacity(0.5), in: Capsule())
                     }
-                    .padding(3)
-                    .background(Chalk.board.opacity(0.5), in: Capsule())
+                    .buttonStyle(.plain)
                 }
                 Chart {
                     ForEach(Array(data.enumerated()), id: \.offset) { i, b in
