@@ -96,16 +96,20 @@ struct CareerStatsSheet: View {
 
     // MARK: - Grade from date
 
-    private func gradeLabel(on date: Date) -> String {
+    private func gradeNumber(on date: Date) -> Int {
         let cal = Calendar.current
         let m = cal.component(.month, from: date), y = cal.component(.year, from: date)
         let schoolStartYear = m >= 8 ? y : y - 1
         let by = cal.component(.year, from: birthday), bm = cal.component(.month, from: birthday)
         let kStart = by + (bm >= 9 ? 6 : 5)
-        let grade = schoolStartYear - kStart
+        return schoolStartYear - kStart
+    }
+
+    /// "K", "2nd", "4th" — compact grade tag.
+    private func gradeShort(_ grade: Int) -> String {
         switch grade {
         case ..<0: return "Pre-K"
-        case 0: return "Kindergarten"
+        case 0: return "K"
         default:
             let suf: String
             switch grade % 10 {
@@ -114,8 +118,15 @@ struct CareerStatsSheet: View {
             case 3 where grade != 13: suf = "rd"
             default: suf = "th"
             }
-            return "\(grade)\(suf) grade"
+            return "\(grade)\(suf)"
         }
+    }
+
+    /// Grade span a set of games covers, e.g. "3rd grade" or "2nd–4th grade".
+    private func gradeSpan(_ g: [Game]) -> String {
+        let grades = g.map { gradeNumber(on: $0.date) }
+        guard let lo = grades.min(), let hi = grades.max() else { return "" }
+        return lo == hi ? "\(gradeShort(lo)) grade" : "\(gradeShort(lo))–\(gradeShort(hi)) grade"
     }
 
     // MARK: - Cards
@@ -128,37 +139,35 @@ struct CareerStatsSheet: View {
         let isCareer: Bool
     }
 
-    private func dominantTeam(_ g: [Game]) -> String {
-        let counts = Dictionary(grouping: g, by: { $0.teamName }).mapValues { $0.count }
-        return counts.max { $0.value < $1.value }?.key ?? "Lava"
-    }
-
-    /// Academic year a date falls in (school year starts in August).
-    private func academicYear(_ date: Date) -> Int {
-        let cal = Calendar.current
-        let m = cal.component(.month, from: date), y = cal.component(.year, from: date)
-        return m >= 8 ? y : y - 1
-    }
-
-    /// One card per GRADE (school year), not per season — a handful of collectible cards
-    /// instead of 3-a-year. Career (overall) card is first, then grades newest→oldest.
+    /// One card per TEAM (Lava, Elements, …) so a team's games live together across every
+    /// grade — that's the identity Sahil cares about. Teams with only a game or two fold
+    /// into a single "Guest" card. Career (overall) card is first when there's more than one.
     private var cards: [CardModel] {
         let g = filteredGames
         guard !g.isEmpty else { return [] }
-        var byYear: [Int: [Game]] = [:]
-        for game in g { byYear[academicYear(game.date), default: []].append(game) }
-        let gradeCards: [CardModel] = byYear.keys.sorted(by: >).map { yr in
-            let games = byYear[yr]!
-            let rep = games.max { $0.date < $1.date }!.date
-            let span = String(format: "'%02d–'%02d", yr % 100, (yr + 1) % 100)
-            return CardModel(id: "y\(yr)", title: gradeLabel(on: rep), subtitle: span, games: games, isCareer: false)
+        let threshold = 3
+        var byTeam: [String: [Game]] = [:]
+        for game in g {
+            let name = game.teamName.trimmingCharacters(in: .whitespaces)
+            byTeam[name.isEmpty ? "Team" : name, default: []].append(game)
         }
-        // Overall card first when there's more than one grade to compare.
-        if gradeCards.count > 1 {
-            let career = CardModel(id: "__career", title: "Career", subtitle: "All-time", games: g, isCareer: true)
-            return [career] + gradeCards
+        var teamCards: [(name: String, games: [Game])] = []
+        var guest: [Game] = []
+        for (name, games) in byTeam {
+            if games.count >= threshold { teamCards.append((name, games)) } else { guest += games }
         }
-        return gradeCards
+        teamCards.sort { $0.games.count > $1.games.count }
+        var out: [CardModel] = teamCards.map {
+            CardModel(id: "t-\($0.name)", title: $0.name, subtitle: gradeSpan($0.games), games: $0.games, isCareer: false)
+        }
+        if !guest.isEmpty {
+            out.append(CardModel(id: "t-guest", title: "Guest", subtitle: gradeSpan(guest), games: guest, isCareer: false))
+        }
+        if out.count > 1 {
+            let career = CardModel(id: "__career", title: "Career", subtitle: gradeSpan(g), games: g, isCareer: true)
+            return [career] + out
+        }
+        return out
     }
 
     // MARK: - Milestones (over the filtered set)
@@ -237,8 +246,8 @@ struct CareerStatsSheet: View {
                     SeasonTradingCard(
                         title: card.title,
                         subtitle: card.subtitle,
-                        accent: card.isCareer ? Chalk.yellow : TeamPalette.color(for: dominantTeam(card.games)),
-                        teamLabel: card.isCareer ? "ALL TEAMS" : dominantTeam(card.games).uppercased(),
+                        accent: card.isCareer ? Chalk.yellow : TeamPalette.color(for: card.title),
+                        teamLabel: card.title.uppercased(),
                         agg: aggregate(card.games),
                         trend: trendValues(card.games),
                         showTrend: showCardTrend,
@@ -404,11 +413,11 @@ private struct SeasonTradingCard: View {
 
     private var front: some View {
         VStack(spacing: 0) {
-            // Team-color header band.
+            // Team-color header band: team name + grade span.
             HStack {
                 Text(teamLabel).font(.system(size: 13, weight: .heavy)).tracking(1).foregroundColor(Chalk.board)
                 Spacer()
-                Text(title.uppercased()).font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.board.opacity(0.85))
+                Text(subtitle).font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.board.opacity(0.85))
             }
             .padding(.horizontal, 14).padding(.vertical, 9)
             .background(accent)
@@ -417,7 +426,8 @@ private struct SeasonTradingCard: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Sahil").font(.chalkHand(34)).foregroundColor(Chalk.chalk)
                     Spacer()
-                    Text(subtitle).font(.system(size: 12, weight: .medium)).foregroundColor(Chalk.dust)
+                    Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
+                        .font(.system(size: 12, weight: .medium)).foregroundColor(Chalk.dust)
                 }
                 .padding(.top, 12)
 
@@ -463,7 +473,7 @@ private struct SeasonTradingCard: View {
             .background(Chalk.board.opacity(0.5))
 
             HStack {
-                Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
+                Text("\(agg.totalPoints) total pts")
                     .font(.system(size: 10)).foregroundColor(Chalk.dust)
                 Spacer()
                 Text("★ tap to flip").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
