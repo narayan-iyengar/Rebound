@@ -481,9 +481,10 @@ struct AllGamesView: View {
                                     .foregroundColor(Chalk.chalk)
                                 teamChip(cluster.team, color: color)
                             }
-                            Text(cluster.sharedLocation ?? "\(cluster.games.count) games")
+                            Text(clusterSubLabel(cluster))
                                 .font(.system(size: 11))
                                 .foregroundColor(Chalk.dust)
+                                .lineLimit(1)
                         }
                         Spacer()
                         Text("\(cluster.wins)–\(cluster.losses)")
@@ -516,19 +517,59 @@ struct AllGamesView: View {
         }
     }
 
-    // A row of small W/L chips, chronological.
+    // Chronological "form guide": a small result square per game with its score below.
+    // Fixed-size squares stay tidy whether the weekend had 2 games or 6.
     private func winLossStrip(_ cluster: GameCluster) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 8) {
             ForEach(cluster.games.sorted { $0.date < $1.date }) { game in
-                let win = game.isWin
-                Text(win ? "W" : "L")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundColor(Chalk.board)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .background(win ? Chalk.green : Chalk.coral, in: RoundedRectangle(cornerRadius: 6))
+                VStack(spacing: 3) {
+                    Text(game.isWin ? "W" : "L")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundColor(Chalk.board)
+                        .frame(width: 34, height: 30)
+                        .background(game.isWin ? Chalk.green : Chalk.coral,
+                                    in: RoundedRectangle(cornerRadius: 7))
+                    Text(game.scoreString)
+                        .font(.system(size: 10, weight: .medium)).monospacedDigit()
+                        .foregroundColor(Chalk.dust)
+                        .fixedSize()
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Cluster sub-label: a shortened venue/city (street number + street dropped), else count.
+    private func clusterSubLabel(_ cluster: GameCluster) -> String {
+        if let loc = cluster.sharedLocation, let short = Self.shortLocation(loc) {
+            return short
+        }
+        return "\(cluster.games.count) games"
+    }
+
+    /// Trim a freeform address to something glanceable: drop trailing state + ZIP, and if it
+    /// starts with a street number, drop through the street-type word so a city/venue remains.
+    private static func shortLocation(_ raw: String) -> String? {
+        var s = raw.trimmingCharacters(in: .whitespaces)
+        // Drop trailing ZIP.
+        s = s.replacingOccurrences(of: #"\s*\d{5}(-\d{4})?$"#, with: "", options: .regularExpression)
+        // Drop trailing state token.
+        for st in [", CA", " CA", ", California", " California"] where s.hasSuffix(st) {
+            s = String(s.dropLast(st.count)); break
+        }
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
+        // If it opens with a street address, drop up to the street-type word → leaves the city.
+        if let first = s.first, first.isNumber {
+            let suffixes: Set<String> = ["st", "st.", "street", "dr", "dr.", "drive", "ave", "ave.",
+                                         "avenue", "rd", "rd.", "road", "blvd", "blvd.", "ln", "ln.",
+                                         "lane", "way", "ct", "ct.", "court", "pkwy", "hwy", "pl", "pl."]
+            let words = s.split(separator: " ").map(String.init)
+            if let idx = words.firstIndex(where: { suffixes.contains($0.lowercased()) }), idx + 1 < words.count {
+                s = words[(idx + 1)...].joined(separator: " ")
             }
         }
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
+        return s.isEmpty ? nil : s
     }
 
     private func teamChip(_ name: String, color: Color) -> some View {
