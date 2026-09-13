@@ -572,28 +572,39 @@ struct CareerStatsSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader("Points per game", trailing: "\(g.count) games")
                 Chart(pointsTrend) { p in
-                    LineMark(x: .value("Game", p.game), y: .value("Points", p.value))
-                        .foregroundStyle(by: .value("Series", p.kind))
-                        .lineStyle(StrokeStyle(lineWidth: p.kind == "Per game" ? 2.5 : 1.8))
-                        .interpolationMethod(.catmullRom)
                     if p.kind == "Per game" {
+                        // Faint dots for spread — no connecting line, so it never reads as a hairball.
                         PointMark(x: .value("Game", p.game), y: .value("Points", p.value))
+                            .foregroundStyle(Chalk.yellow.opacity(0.22))
+                            .symbolSize(12)
+                    } else {
+                        // The rolling average IS the story — bold and smooth.
+                        LineMark(x: .value("Game", p.game), y: .value("Points", p.value))
                             .foregroundStyle(Chalk.yellow)
-                            .symbolSize(26)
+                            .lineStyle(StrokeStyle(lineWidth: 2.8, lineJoin: .round))
+                            .interpolationMethod(.catmullRom)
                     }
                 }
-                .chartForegroundStyleScale(["Per game": Chalk.yellow, "5-game avg": Chalk.sky])
-                .chartLegend(position: .bottom, spacing: 8)
-                .frame(height: 180)
+                .frame(height: 170)
                 .chartYAxis {
                     AxisMarks(position: .leading) { _ in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(Chalk.dust.opacity(0.25))
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(Chalk.dust.opacity(0.2))
                         AxisValueLabel().foregroundStyle(Chalk.dust)
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 6)) { _ in
+                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                         AxisValueLabel().foregroundStyle(Chalk.dust)
+                    }
+                }
+                HStack(spacing: 14) {
+                    HStack(spacing: 5) {
+                        Circle().fill(Chalk.yellow.opacity(0.3)).frame(width: 7, height: 7)
+                        Text("per game").font(.system(size: 11)).foregroundColor(Chalk.dust)
+                    }
+                    HStack(spacing: 5) {
+                        Rectangle().fill(Chalk.yellow).frame(width: 14, height: 2.5)
+                        Text("5-game trend").font(.system(size: 11)).foregroundColor(Chalk.dust)
                     }
                 }
             }
@@ -602,14 +613,24 @@ struct CareerStatsSheet: View {
 
     // MARK: - B · Averages dashboard (big number + micro-trend sparkline)
 
+    /// Smooth a per-game series with a rolling average so the tile sparkline reads as a
+    /// direction, not a 70-game scribble.
+    private func smooth(_ vals: [Double], window: Int = 5) -> [Double] {
+        vals.indices.map { i in
+            let lo = max(0, i - window + 1)
+            let slice = Array(vals[lo...i])
+            return slice.reduce(0, +) / Double(slice.count)
+        }
+    }
+
     private func series(_ f: (PlayerStats) -> Double) -> [Double] {
-        chronoGames.map { f($0.playerStats) }
+        smooth(chronoGames.map { f($0.playerStats) })
     }
     private func fgPctSeries() -> [Double] {
-        chronoGames.map {
+        smooth(chronoGames.map {
             let att = $0.playerStats.totalFGAttempted
             return att > 0 ? Double($0.playerStats.totalFGMade) / Double(att) * 100 : 0
-        }
+        })
     }
 
     private var averagesDashboard: some View {
