@@ -122,7 +122,9 @@ struct CareerStatsSheet: View {
         if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([humanReq])) != nil,
            let box = humanReq.results?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })?.boundingBox {
             var r = VNImageRectForNormalizedRect(box, Int(base.extent.width), Int(base.extent.height))
-            r = r.insetBy(dx: -r.width * 0.14, dy: -r.height * 0.10)   // a little headroom
+            // Widen a lot horizontally so extended arms / the ball aren't clipped — safe
+            // because the crowd is already masked out, so extra width is just transparent.
+            r = r.insetBy(dx: -r.width * 0.40, dy: -r.height * 0.12)
             let clamped = r.intersection(base.extent)
             if !clamped.isNull, clamped.width > 40, clamped.height > 40 { cropRect = clamped }
         }
