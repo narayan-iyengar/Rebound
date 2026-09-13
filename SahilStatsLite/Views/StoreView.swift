@@ -31,6 +31,37 @@ struct StoreView: View {
     @State private var labelDraft = ""
     @State private var showTagEditor = false
 
+    // Collapsible time sections (older years collapsed by default)
+    @State private var expandedSections: Set<String> = []
+
+    /// Clip sessions grouped into adaptive time sections (This Week / This Month / month /
+    /// year), newest first — same philosophy as the game log.
+    private var sections: [(title: String, collapsed: Bool, groups: [HighlightGroup])] {
+        var result: [(title: String, collapsed: Bool, groups: [HighlightGroup])] = []
+        for group in store.grouped {   // already newest-first
+            let info = AdaptiveTimeSection.info(for: group.date)
+            if var last = result.last, last.title == info.title {
+                last.groups.append(group)
+                result[result.count - 1] = last
+            } else {
+                result.append((info.title, info.collapsed, [group]))
+            }
+        }
+        return result
+    }
+
+    private func isExpanded(_ title: String, collapsed: Bool) -> Bool {
+        collapsed ? expandedSections.contains(title) : true
+    }
+
+    /// Final result of the game a clip session belongs to (nil for practice / unlinked clips).
+    private func result(for group: HighlightGroup) -> (letter: String, color: Color)? {
+        guard !group.isPractice else { return nil }
+        guard let game = GamePersistenceManager.shared.savedGames.first(where: { $0.id == group.id })
+        else { return nil }
+        return (game.isWin ? "W" : "L", game.isWin ? Chalk.green : Chalk.coral)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
@@ -39,8 +70,14 @@ struct StoreView: View {
                 if store.highlights.isEmpty {
                     emptyState
                 } else {
-                    ForEach(store.grouped) { group in
-                        gameSection(group)
+                    ForEach(sections, id: \.title) { section in
+                        sectionHeader(title: section.title, collapsed: section.collapsed,
+                                      sessionCount: section.groups.count)
+                        if isExpanded(section.title, collapsed: section.collapsed) {
+                            ForEach(section.groups) { group in
+                                gameSection(group)
+                            }
+                        }
                     }
                 }
 
@@ -130,6 +167,36 @@ struct StoreView: View {
         .chalkCard()
     }
 
+    // MARK: - Time section header
+
+    private func sectionHeader(title: String, collapsed: Bool, sessionCount: Int) -> some View {
+        Button {
+            guard collapsed else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if expandedSections.contains(title) { expandedSections.remove(title) }
+                else { expandedSections.insert(title) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title.uppercased())
+                    .font(.system(size: 13, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundColor(Chalk.chalkDim)
+                if collapsed {
+                    Image(systemName: isExpanded(title, collapsed: collapsed) ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Chalk.dust)
+                }
+                Spacer()
+                Text("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Chalk.dust)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Game section
 
     private func gameSection(_ group: HighlightGroup) -> some View {
@@ -147,6 +214,16 @@ struct StoreView: View {
                         .font(.chalkScript(26))
                         .foregroundColor(Chalk.chalk)
                         .lineLimit(1)
+                    if !group.isPractice, !group.homeTeam.isEmpty {
+                        teamChip(group.homeTeam)
+                    }
+                    if let r = result(for: group) {
+                        Text(r.letter)
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundColor(Chalk.board)
+                            .frame(width: 22, height: 22)
+                            .background(r.color, in: RoundedRectangle(cornerRadius: 6))
+                    }
                     Spacer()
                     Text(Self.sessionDate(group.date))
                         .font(.system(size: 12, weight: .medium))
@@ -187,6 +264,17 @@ struct StoreView: View {
                     }
             }
         }
+    }
+
+    // Team chip — same color rules as the game log (Lava yellow, others auto-hashed).
+    private func teamChip(_ name: String) -> some View {
+        let color = TeamPalette.color(for: name)
+        return Text(name.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(color.opacity(0.18), in: Capsule())
+            .lineLimit(1)
     }
 
     // Editable tag chip for a session (any group — practice or game).

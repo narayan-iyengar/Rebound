@@ -155,7 +155,7 @@ struct AllGamesView: View {
         var current: [GameCluster] = []
         var currentInfo: (title: String, collapsed: Bool)? = nil
         for cluster in clusters {
-            let info = Self.sectionInfo(for: cluster.endDate)
+            let info = AdaptiveTimeSection.info(for: cluster.endDate)
             if let ci = currentInfo, ci.title == info.title {
                 current.append(cluster)
             } else {
@@ -174,47 +174,11 @@ struct AllGamesView: View {
         return result
     }
 
-    /// Adaptive bucket for a date: This Week / This Month / month (this year) / year (older).
-    private static func sectionInfo(for date: Date) -> (title: String, collapsed: Bool) {
-        let cal = Calendar.current
-        let now = Date()
-        if let days = cal.dateComponents([.day], from: cal.startOfDay(for: date),
-                                         to: cal.startOfDay(for: now)).day, days >= 0, days < 7 {
-            return ("This Week", false)
-        }
-        if cal.isDate(date, equalTo: now, toGranularity: .month) {
-            return ("This Month", false)
-        }
-        let df = DateFormatter()
-        if cal.isDate(date, equalTo: now, toGranularity: .year) {
-            df.dateFormat = "MMMM"
-            return (df.string(from: date), false)
-        }
-        df.dateFormat = "yyyy"
-        return (df.string(from: date), true)
-    }
-
     private func isExpanded(_ section: TimeSection) -> Bool {
         section.collapsedByDefault ? expandedSections.contains(section.title) : true
     }
 
-    // MARK: Team color (Lava pinned; everyone else stable-hashed, avoiding W/L green & coral)
-
-    private static let teamPalette: [Color] = [
-        Chalk.sky,
-        Color(red: 0.78, green: 0.72, blue: 0.88),   // lavender
-        Color(red: 0.88, green: 0.66, blue: 0.77),   // rose
-        Color(red: 0.66, green: 0.71, blue: 0.88),   // periwinkle
-        Color(red: 0.85, green: 0.77, blue: 0.55)    // sand
-    ]
-
-    private func teamColor(_ name: String) -> Color {
-        let key = name.trimmingCharacters(in: .whitespaces).lowercased()
-        if key == "lava" { return Chalk.yellow }
-        var hash: UInt64 = 5381
-        for scalar in key.unicodeScalars { hash = (hash &* 33) &+ UInt64(scalar.value) }
-        return Self.teamPalette[Int(hash % UInt64(Self.teamPalette.count))]
-    }
+    private func teamColor(_ name: String) -> Color { TeamPalette.color(for: name) }
 
     /// When shown as a page in the home pager (not a sheet): no nav wrapper, no Done.
     var embedded: Bool = false
