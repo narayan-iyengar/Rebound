@@ -537,53 +537,74 @@ struct CareerStatsSheet: View {
         .padding(.vertical, 6)
     }
 
-    // MARK: - A · Per-game points trend
+    // MARK: - A · Scoring trend (adaptive buckets so it stays readable at any career length)
 
     private var chronoGames: [Game] { filteredGames.sorted { $0.date < $1.date } }
 
-    private func rollingAvg(_ vals: [Int], window: Int = 5) -> [Double] {
-        vals.indices.map { i in
-            let lo = max(0, i - window + 1)
-            let slice = Array(vals[lo...i])
-            return Double(slice.reduce(0, +)) / Double(slice.count)
+    private struct Bucket: Identifiable { let id = UUID(); let label: String; let ppg: Double }
+
+    /// Span in days between the first and last filtered game.
+    private var trendSpanDays: Int {
+        guard let f = chronoGames.first?.date, let l = chronoGames.last?.date else { return 0 }
+        return Calendar.current.dateComponents([.day], from: f, to: l).day ?? 0
+    }
+
+    private var trendUnit: String {
+        trendSpanDays < 70 ? "by week" : (trendSpanDays < 900 ? "by month" : "by season")
+    }
+
+    /// Group the games by a key + label, averaging PPG per bucket, ordered by time.
+    private func buckets(key: (Game) -> String, label: (Game) -> String) -> [Bucket] {
+        var groups: [String: [Game]] = [:]
+        var earliest: [String: Date] = [:]
+        for g in chronoGames {
+            let k = key(g)
+            groups[k, default: []].append(g)
+            if earliest[k] == nil || g.date < earliest[k]! { earliest[k] = g.date }
+        }
+        return groups.keys.sorted { earliest[$0]! < earliest[$1]! }.map { k in
+            let gs = groups[k]!
+            let anchor = gs.min { $0.date < $1.date }!
+            let ppg = Double(gs.reduce(0) { $0 + $1.playerStats.points }) / Double(gs.count)
+            return Bucket(label: label(anchor), ppg: ppg)
         }
     }
 
-    private struct TrendPoint: Identifiable {
-        let id = UUID(); let game: Int; let value: Double; let kind: String
-    }
-
-    private var pointsTrend: [TrendPoint] {
-        let g = chronoGames
-        let pts = g.map { $0.playerStats.points }
-        let avg = rollingAvg(pts)
-        var out: [TrendPoint] = []
-        for i in g.indices {
-            out.append(TrendPoint(game: i + 1, value: Double(pts[i]), kind: "Per game"))
-            out.append(TrendPoint(game: i + 1, value: avg[i], kind: "5-game avg"))
+    private var trendBuckets: [Bucket] {
+        guard chronoGames.count > 1 else { return [] }
+        let cal = Calendar.current
+        let wf = DateFormatter(); wf.dateFormat = "M/d"
+        let mf = DateFormatter(); mf.dateFormat = "MMM yy"
+        if trendSpanDays < 70 {
+            return buckets(
+                key: { "\(cal.component(.yearForWeekOfYear, from: $0.date))-\(String(format: "%02d", cal.component(.weekOfYear, from: $0.date)))" },
+                label: { wf.string(from: $0.date) })
+        } else if trendSpanDays < 900 {
+            return buckets(
+                key: { "\(cal.component(.year, from: $0.date))-\(String(format: "%02d", cal.component(.month, from: $0.date)))" },
+                label: { mf.string(from: $0.date) })
+        } else {
+            return buckets(key: { $0.season }, label: { shortSeason($0.season) })
         }
-        return out
     }
 
     @ViewBuilder
     private var perGameTrendSection: some View {
-        let g = chronoGames
-        if g.count > 1 {
+        let data = trendBuckets
+        if data.count > 1 {
             VStack(alignment: .leading, spacing: 8) {
-                sectionHeader("Points per game", trailing: "\(g.count) games")
-                Chart(pointsTrend) { p in
-                    if p.kind == "Per game" {
-                        // Faint dots for spread — no connecting line, so it never reads as a hairball.
-                        PointMark(x: .value("Game", p.game), y: .value("Points", p.value))
-                            .foregroundStyle(Chalk.yellow.opacity(0.22))
-                            .symbolSize(12)
-                    } else {
-                        // The rolling average IS the story — bold and smooth.
-                        LineMark(x: .value("Game", p.game), y: .value("Points", p.value))
-                            .foregroundStyle(Chalk.yellow)
-                            .lineStyle(StrokeStyle(lineWidth: 2.8, lineJoin: .round))
-                            .interpolationMethod(.catmullRom)
-                    }
+                sectionHeader("Scoring trend", trailing: "\(trendUnit) · \(chronoGames.count) games")
+                Chart(data) { b in
+                    AreaMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
+                        .foregroundStyle(Chalk.yellow.opacity(0.08))
+                        .interpolationMethod(.catmullRom)
+                    LineMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
+                        .foregroundStyle(Chalk.yellow)
+                        .lineStyle(StrokeStyle(lineWidth: 2.8, lineJoin: .round))
+                        .interpolationMethod(.catmullRom)
+                    PointMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
+                        .foregroundStyle(Chalk.yellow)
+                        .symbolSize(26)
                 }
                 .frame(height: 170)
                 .chartYAxis {
@@ -595,16 +616,6 @@ struct CareerStatsSheet: View {
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                         AxisValueLabel().foregroundStyle(Chalk.dust)
-                    }
-                }
-                HStack(spacing: 14) {
-                    HStack(spacing: 5) {
-                        Circle().fill(Chalk.yellow.opacity(0.3)).frame(width: 7, height: 7)
-                        Text("per game").font(.system(size: 11)).foregroundColor(Chalk.dust)
-                    }
-                    HStack(spacing: 5) {
-                        Rectangle().fill(Chalk.yellow).frame(width: 14, height: 2.5)
-                        Text("5-game trend").font(.system(size: 11)).foregroundColor(Chalk.dust)
                     }
                 }
             }
