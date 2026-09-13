@@ -50,6 +50,7 @@ struct CareerStatsSheet: View {
         var isPct: Bool { self == .fg }
     }
     @State private var trendStat: TrendStat = .points
+    @State private var cardFlipped = false
 
     // MARK: - Photo storage + chalk-sketch rendering
 
@@ -81,7 +82,7 @@ struct CareerStatsSheet: View {
     /// cream highlights), DIM the crowd via the person mask (but never remove him — so a
     /// motion-blurred leg the mask misses still shows, just darker), and crop to the full-body
     /// human box at the card's aspect ratio so he fills the frame with nothing clipped.
-    private static let cardAspect: CGFloat = 116.0 / 148.0
+    private static let cardAspect: CGFloat = 138.0 / 176.0
 
     private static func chalkSketch(_ image: UIImage) -> UIImage? {
         guard let cg = image.cgImage else { return nil }
@@ -302,7 +303,6 @@ struct CareerStatsSheet: View {
                             emptyCard("No games match", "Nothing for this filter. Try clearing one.")
                         } else {
                             posterCard
-                            statTableSection
                             if showCardTrend { scoringTrendSection }
                             badgesSection
                         }
@@ -325,46 +325,127 @@ struct CareerStatsSheet: View {
     private var kicker: String { seasonFilter ?? latestGrade(filteredGames) }
 
     private var posterCard: some View {
+        ZStack {
+            cardFront.opacity(cardFlipped ? 0 : 1)
+            cardBack.opacity(cardFlipped ? 1 : 0)
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+        }
+        .rotation3DEffect(.degrees(cardFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+        .animation(.spring(response: 0.55, dampingFraction: 0.85), value: cardFlipped)
+    }
+
+    /// Foil frame + court backdrop + shadow, shared by both card faces.
+    private func cardFace<V: View>(_ accent: Color, @ViewBuilder _ content: () -> V) -> some View {
+        content()
+            .frame(maxWidth: .infinity, minHeight: 230, alignment: .leading)
+            .background(courtBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(foil(accent), lineWidth: 3))
+            .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
+    }
+
+    private func flipButton(_ accent: Color) -> some View {
+        Button { cardFlipped.toggle() } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90").font(.system(size: 10, weight: .bold))
+                Text(cardFlipped ? "front" : "stats").font(.system(size: 10, weight: .bold))
+            }
+            .foregroundColor(Chalk.board)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(accent, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cardFront: some View {
         let a = overall
         let accent = posterAccent
-        return HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 0) {
-                if let t = teamFilter {
-                    Text(t.uppercased()).font(.system(size: 11, weight: .heavy)).tracking(1).foregroundColor(accent)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(accent.opacity(0.16), in: Capsule())
-                        .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
+        return cardFace(accent) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let t = teamFilter {
+                        Text(t.uppercased()).font(.system(size: 11, weight: .heavy)).tracking(1).foregroundColor(accent)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(accent.opacity(0.16), in: Capsule())
+                            .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
+                    }
+                    Spacer(minLength: 10)
+                    Text(kicker.uppercased())
+                        .font(.system(size: 12, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
+                    Text("Sahil").font(.chalkHand(58)).foregroundColor(Chalk.chalk)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 40, height: 4)
+                        Text("\(a.games) game\(a.games == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(Chalk.dust)
+                        Text("·").foregroundColor(Chalk.dust)
+                        HStack(spacing: 2) {
+                            Text("\(a.wins)").foregroundColor(Chalk.green)
+                            Text("–").foregroundColor(Chalk.dust)
+                            Text("\(a.losses)").foregroundColor(Chalk.coral)
+                        }.font(.system(size: 12, weight: .bold)).monospacedDigit()
+                    }
+                    .padding(.top, 8)
+                    Spacer(minLength: 10)
+                    flipButton(accent)
                 }
-                Spacer(minLength: 10)
-                Text(kicker.uppercased())
-                    .font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
-                Text("Sahil").font(.chalkHand(50)).foregroundColor(Chalk.chalk)
-                    .lineLimit(1).minimumScaleFactor(0.5)
-                HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 40, height: 4)
-                    Text("\(a.games) game\(a.games == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(Chalk.dust)
-                    Text("·").foregroundColor(Chalk.dust)
-                    HStack(spacing: 2) {
-                        Text("\(a.wins)").foregroundColor(Chalk.green)
-                        Text("–").foregroundColor(Chalk.dust)
-                        Text("\(a.losses)").foregroundColor(Chalk.coral)
-                    }.font(.system(size: 12, weight: .bold)).monospacedDigit()
+                Spacer(minLength: 0)
+                VStack(spacing: 8) {
+                    photoView(accent)
+                    rarityBadge(a.games, accent)
                 }
-                .padding(.top, 8)
             }
-            Spacer(minLength: 0)
-            VStack(spacing: 6) {
-                photoView(accent)
-                rarityBadge(a.games, accent)
-            }
+            .padding(16)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 172, alignment: .leading)
-        .background(courtBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(foil(accent), lineWidth: 3))
-        .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
+    }
+
+    private var cardBack: some View {
+        let accent = posterAccent
+        let a = overall
+        let rows = gradeRows(filteredGames)
+        return cardFace(accent) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("STAT LINE").font(.system(size: 12, weight: .heavy)).tracking(1.5).foregroundColor(accent)
+                    Spacer()
+                    Text(kicker.uppercased()).font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
+                }
+                VStack(spacing: 0) {
+                    tableRow("", "GP", "PPG", "RPG", "APG", "FG", header: true)
+                    ForEach(rows.indices, id: \.self) { i in
+                        let r = rows[i]
+                        tableRow(r.label, "\(r.agg.games)",
+                                 String(format: "%.1f", r.agg.ppg),
+                                 String(format: "%.1f", r.agg.rpg),
+                                 String(format: "%.1f", r.agg.apg),
+                                 "\(Int(r.agg.fgPct.rounded()))")
+                    }
+                    if rows.count > 1 {
+                        Rectangle().fill(Chalk.chalk.opacity(0.18)).frame(height: 1)
+                        tableRow("CAR", "\(a.games)",
+                                 String(format: "%.1f", a.ppg),
+                                 String(format: "%.1f", a.rpg),
+                                 String(format: "%.1f", a.apg),
+                                 "\(Int(a.fgPct.rounded()))", total: true)
+                    }
+                }
+                .padding(.vertical, 3)
+                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+
+                HStack(spacing: 0) {
+                    splitCell("2P", a.twoPct, Chalk.sky)
+                    splitCell("3P", a.tpPct, Chalk.yellow)
+                    splitCell("FT", a.ftPct, Chalk.green)
+                    splitCell("eFG", a.eFG, Chalk.chalkDim)
+                    splitCell("TS", a.ts, Chalk.chalkDim)
+                }
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+
+                HStack { Spacer(); flipButton(accent) }
+            }
+            .padding(14)
+        }
     }
 
     @ViewBuilder
@@ -386,7 +467,7 @@ struct CareerStatsSheet: View {
                         .background(accent.opacity(0.10))
                     }
                 }
-                .frame(width: 116, height: 148)
+                .frame(width: 138, height: 176)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(accent.opacity(display == nil ? 0.4 : 0.6),
@@ -553,52 +634,6 @@ struct CareerStatsSheet: View {
                 .padding(.top, 4)
             }
             .padding(14)
-            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
-        }
-    }
-
-    // MARK: - Stat table (always visible, reflects filters)
-
-    private var statTableSection: some View {
-        let rows = gradeRows(filteredGames)
-        let a = overall
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Text("Stat line").font(.chalkScript(20)).foregroundColor(Chalk.chalk)
-                Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
-            }
-            VStack(spacing: 0) {
-                tableRow("", "GP", "PPG", "RPG", "APG", "FG", header: true)
-                ForEach(rows.indices, id: \.self) { i in
-                    let r = rows[i]
-                    tableRow(r.label, "\(r.agg.games)",
-                             String(format: "%.1f", r.agg.ppg),
-                             String(format: "%.1f", r.agg.rpg),
-                             String(format: "%.1f", r.agg.apg),
-                             "\(Int(r.agg.fgPct.rounded()))")
-                }
-                if rows.count > 1 {
-                    Rectangle().fill(Chalk.chalk.opacity(0.18)).frame(height: 1)
-                    tableRow("CAR", "\(a.games)",
-                             String(format: "%.1f", a.ppg),
-                             String(format: "%.1f", a.rpg),
-                             String(format: "%.1f", a.apg),
-                             "\(Int(a.fgPct.rounded()))", total: true)
-                }
-            }
-            .padding(.vertical, 4)
-            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
-
-            HStack(spacing: 0) {
-                splitCell("2P", a.twoPct, Chalk.sky)
-                splitCell("3P", a.tpPct, Chalk.yellow)
-                splitCell("FT", a.ftPct, Chalk.green)
-                splitCell("eFG", a.eFG, Chalk.chalkDim)
-                splitCell("TS", a.ts, Chalk.chalkDim)
-            }
-            .padding(.vertical, 8)
             .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
         }
