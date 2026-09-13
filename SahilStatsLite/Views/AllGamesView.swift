@@ -523,13 +523,19 @@ struct AllGamesView: View {
     private func winLossStrip(_ cluster: GameCluster) -> some View {
         HStack(spacing: 6) {
             ForEach(cluster.games.sorted { $0.date < $1.date }) { game in
-                Text(game.scoreString)
-                    .font(.system(size: 12, weight: .bold)).monospacedDigit()
-                    .foregroundColor(Chalk.board)
-                    .padding(.horizontal, 9).padding(.vertical, 6)
-                    .background(game.isWin ? Chalk.green : Chalk.coral,
-                                in: RoundedRectangle(cornerRadius: 7))
-                    .fixedSize()
+                HStack(spacing: 5) {
+                    // Letter as well as color, so win/loss reads without relying on the
+                    // green-vs-coral distinction alone (the classic colorblind pairing).
+                    Text(game.isWin ? "W" : "L")
+                        .font(.system(size: 12, weight: .heavy))
+                    Text(game.scoreString)
+                        .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                }
+                .foregroundColor(Chalk.board)
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(game.isWin ? Chalk.green : Chalk.coral,
+                            in: RoundedRectangle(cornerRadius: 7))
+                .fixedSize()
             }
             Spacer(minLength: 0)
         }
