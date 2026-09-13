@@ -511,51 +511,40 @@ private struct SeasonTradingCard: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 10) {
                         emblem
-                        VStack(alignment: .leading, spacing: 1) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text("Sahil").font(.chalkHand(30)).foregroundColor(Chalk.chalk)
-                            Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
-                                .font(.system(size: 11)).foregroundColor(Chalk.dust)
+                            HStack(spacing: 6) {
+                                Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
+                                    .font(.system(size: 11)).foregroundColor(Chalk.dust)
+                                Text("·").font(.system(size: 11)).foregroundColor(Chalk.dust)
+                                HStack(spacing: 2) {
+                                    Text("\(agg.wins)").foregroundColor(Chalk.green)
+                                    Text("–").foregroundColor(Chalk.dust)
+                                    Text("\(agg.losses)").foregroundColor(Chalk.coral)
+                                }
+                                .font(.system(size: 11, weight: .bold)).monospacedDigit()
+                            }
                         }
                         Spacer()
                         rarityBadge
                     }
-                    .padding(.top, 14)
-
-                    HStack(alignment: .lastTextBaseline, spacing: 10) {
-                        Text(String(format: "%.1f", agg.ppg))
-                            .font(.system(size: 56, weight: .heavy)).monospacedDigit()
-                            .foregroundColor(accent)
-                            .shadow(color: accent.opacity(0.35), radius: 8)
-                        Text("PPG").font(.system(size: 15, weight: .bold)).foregroundColor(Chalk.chalkDim)
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 1) {
-                            HStack(spacing: 2) {
-                                Text("\(agg.wins)").foregroundColor(Chalk.green)
-                                Text("–").foregroundColor(Chalk.dust)
-                                Text("\(agg.losses)").foregroundColor(Chalk.coral)
-                            }
-                            .font(.system(size: 24, weight: .heavy)).monospacedDigit()
-                            Text("record").font(.system(size: 10)).foregroundColor(Chalk.dust)
-                        }
-                    }
-                    .padding(.top, 8)
+                    .padding(.top, 16)
 
                     if showTrend {
                         Sparkline(values: trend, color: accent.opacity(0.55))
-                            .frame(height: 28).padding(.vertical, 8)
-                    } else {
-                        Spacer().frame(height: 12)
+                            .frame(height: 44).padding(.top, 16)
                     }
                 }
                 .padding(.horizontal, 16)
 
                 Spacer(minLength: 0)
 
+                // Clean stat line — the front's content (full table lives on the back).
                 HStack(spacing: 0) {
+                    strip(String(format: "%.1f", agg.ppg), "PPG", accent)
                     strip(String(format: "%.1f", agg.rpg), "RPG")
                     strip(String(format: "%.1f", agg.apg), "APG")
                     strip(String(format: "%.1f", agg.spg), "SPG")
-                    strip(String(format: "%.1f", agg.bpg), "BPG")
                     strip(String(format: "%.0f%%", agg.fgPct), "FG")
                 }
                 .background(Color.black.opacity(0.22))
@@ -572,12 +561,12 @@ private struct SeasonTradingCard: View {
         )
     }
 
-    private func strip(_ value: String, _ label: String) -> some View {
+    private func strip(_ value: String, _ label: String, _ color: Color = Chalk.chalk) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(.system(size: 17, weight: .heavy)).monospacedDigit().foregroundColor(Chalk.chalk)
+            Text(value).font(.system(size: 20, weight: .heavy)).monospacedDigit().foregroundColor(color)
             Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 10)
+        .frame(maxWidth: .infinity).padding(.vertical, 13)
     }
 
     // MARK: Back — full line
