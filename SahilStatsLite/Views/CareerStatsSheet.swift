@@ -14,6 +14,33 @@
 import SwiftUI
 import Charts
 
+// A tiny inline trend line for the averages dashboard tiles.
+private struct Sparkline: View {
+    let values: [Double]
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            if values.count > 1, let mn = values.min(), let mx = values.max() {
+                let range = max(mx - mn, 0.0001)
+                Path { p in
+                    for (i, v) in values.enumerated() {
+                        let x = geo.size.width * CGFloat(i) / CGFloat(values.count - 1)
+                        let y = geo.size.height * (1 - CGFloat((v - mn) / range))
+                        if i == 0 { p.move(to: CGPoint(x: x, y: y)) }
+                        else { p.addLine(to: CGPoint(x: x, y: y)) }
+                    }
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+            } else {
+                // Single game (or none): a flat baseline so the tile still looks intentional.
+                Rectangle().fill(color.opacity(0.3)).frame(height: 1.6)
+                    .frame(maxHeight: .infinity, alignment: .center)
+            }
+        }
+    }
+}
+
 // MARK: - Career Stats Sheet
 
 struct CareerStatsSheet: View {
@@ -328,10 +355,11 @@ struct CareerStatsSheet: View {
                             emptyCard("No games match", "Nothing for this filter combination. Try clearing a filter.")
                         } else {
                             heroCard
-                            growthSection
-                            milestonesSection
-                            statLineBox
-                            detailDisclosure
+                            perGameTrendSection      // A — is he improving, game by game
+                            averagesDashboard        // B — averages with micro-trends
+                            milestonesSection        // best-of career highlights
+                            shootingProfileSection   // C — how he scores
+                            detailDisclosure         // explore other stats by week/month/age
                         }
                     }
                     .padding()
@@ -509,42 +537,161 @@ struct CareerStatsSheet: View {
         .padding(.vertical, 6)
     }
 
-    // MARK: - Redesign: growth
+    // MARK: - A · Per-game points trend
+
+    private var chronoGames: [Game] { filteredGames.sorted { $0.date < $1.date } }
+
+    private func rollingAvg(_ vals: [Int], window: Int = 5) -> [Double] {
+        vals.indices.map { i in
+            let lo = max(0, i - window + 1)
+            let slice = Array(vals[lo...i])
+            return Double(slice.reduce(0, +)) / Double(slice.count)
+        }
+    }
+
+    private struct TrendPoint: Identifiable {
+        let id = UUID(); let game: Int; let value: Double; let kind: String
+    }
+
+    private var pointsTrend: [TrendPoint] {
+        let g = chronoGames
+        let pts = g.map { $0.playerStats.points }
+        let avg = rollingAvg(pts)
+        var out: [TrendPoint] = []
+        for i in g.indices {
+            out.append(TrendPoint(game: i + 1, value: Double(pts[i]), kind: "Per game"))
+            out.append(TrendPoint(game: i + 1, value: avg[i], kind: "5-game avg"))
+        }
+        return out
+    }
 
     @ViewBuilder
-    private var growthSection: some View {
-        let data = seasonPPG
-        if data.count > 1 {
-            sectionHeader("Growth", trailing: "tap a season")
-            let maxPPG = max(data.map { $0.ppg }.max() ?? 1, 1)
-            HStack(alignment: .bottom, spacing: 10) {
-                ForEach(data, id: \.season) { d in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            seasonFilter = (seasonFilter == d.season) ? nil : d.season
-                        }
-                    } label: {
-                        VStack(spacing: 4) {
-                            Text(String(format: "%.1f", d.ppg))
-                                .font(.system(size: 12, weight: .bold)).monospacedDigit()
-                                .foregroundColor(d.current ? Chalk.yellow : Chalk.dust)
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(d.current ? Chalk.yellow : Chalk.sky.opacity(0.4))
-                                .frame(height: max(8, CGFloat(d.ppg / maxPPG) * 96))
-                            Text(shortSeason(d.season))
-                                .font(.system(size: 10, weight: d.current ? .bold : .regular))
-                                .foregroundColor(d.current ? Chalk.chalk : Chalk.dust)
-                                .lineLimit(1).fixedSize()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
+    private var perGameTrendSection: some View {
+        let g = chronoGames
+        if g.count > 1 {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionHeader("Points per game", trailing: "\(g.count) games")
+                Chart(pointsTrend) { p in
+                    LineMark(x: .value("Game", p.game), y: .value("Points", p.value))
+                        .foregroundStyle(by: .value("Series", p.kind))
+                        .lineStyle(StrokeStyle(lineWidth: p.kind == "Per game" ? 2.5 : 1.8))
+                        .interpolationMethod(.catmullRom)
+                    if p.kind == "Per game" {
+                        PointMark(x: .value("Game", p.game), y: .value("Points", p.value))
+                            .foregroundStyle(Chalk.yellow)
+                            .symbolSize(26)
                     }
-                    .buttonStyle(.plain)
+                }
+                .chartForegroundStyleScale(["Per game": Chalk.yellow, "5-game avg": Chalk.sky])
+                .chartLegend(position: .bottom, spacing: 8)
+                .frame(height: 180)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(Chalk.dust.opacity(0.25))
+                        AxisValueLabel().foregroundStyle(Chalk.dust)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 6)) { _ in
+                        AxisValueLabel().foregroundStyle(Chalk.dust)
+                    }
                 }
             }
-            .frame(height: 130)
-            .padding(.horizontal, 4)
         }
+    }
+
+    // MARK: - B · Averages dashboard (big number + micro-trend sparkline)
+
+    private func series(_ f: (PlayerStats) -> Double) -> [Double] {
+        chronoGames.map { f($0.playerStats) }
+    }
+    private func fgPctSeries() -> [Double] {
+        chronoGames.map {
+            let att = $0.playerStats.totalFGAttempted
+            return att > 0 ? Double($0.playerStats.totalFGMade) / Double(att) * 100 : 0
+        }
+    }
+
+    private var averagesDashboard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Averages", trailing: nil)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                statTile("PPG", String(format: "%.1f", agg.ppg), Chalk.yellow, series { Double($0.points) })
+                statTile("RPG", String(format: "%.1f", agg.rpg), Chalk.sky, series { Double($0.rebounds) })
+                statTile("APG", String(format: "%.1f", agg.apg), Chalk.green, series { Double($0.assists) })
+                statTile("SPG", String(format: "%.1f", agg.spg), Chalk.chalkDim, series { Double($0.steals) })
+                statTile("BPG", String(format: "%.1f", agg.bpg), Chalk.coral, series { Double($0.blocks) })
+                statTile("FG%", String(format: "%.0f", agg.fgPct), Chalk.chalk, fgPctSeries())
+            }
+        }
+    }
+
+    private func statTile(_ label: String, _ value: String, _ color: Color, _ spark: [Double]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 10, weight: .medium)).foregroundColor(Chalk.dust)
+            Text(value).font(.system(size: 24, weight: .heavy)).monospacedDigit().foregroundColor(color)
+            Sparkline(values: spark, color: color)
+                .frame(height: 18)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1.5))
+    }
+
+    // MARK: - C · Shooting profile
+
+    private var shootingProfileSection: some View {
+        // 2PT is total FG minus 3PT.
+        let twoMade = agg.fgMade - agg.tpMade, twoAtt = agg.fgAtt - agg.tpAtt
+        let twoPct = twoAtt > 0 ? Double(twoMade) / Double(twoAtt) * 100 : 0
+        let eFG = agg.fgAtt > 0 ? (Double(agg.fgMade) + 0.5 * Double(agg.tpMade)) / Double(agg.fgAtt) * 100 : 0
+        let tsDen = 2 * (Double(agg.fgAtt) + 0.44 * Double(agg.ftAtt))
+        let ts = tsDen > 0 ? Double(totalPoints) / tsDen * 100 : 0
+        let ptsOn3 = totalPoints > 0 ? Double(agg.tpMade * 3) / Double(totalPoints) * 100 : 0
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Shooting", trailing: nil)
+            VStack(spacing: 12) {
+                shootBar("2PT", twoPct, twoMade, twoAtt, Chalk.sky)
+                shootBar("3PT", agg.tpPct, agg.tpMade, agg.tpAtt, Chalk.yellow)
+                shootBar("FT", agg.ftPct, agg.ftMade, agg.ftAtt, Chalk.green)
+                HStack(spacing: 10) {
+                    miniStat(String(format: "%.0f%%", eFG), "eFG")
+                    miniStat(String(format: "%.0f%%", ts), "TS")
+                    miniStat(String(format: "%.0f%%", ptsOn3), "pts on 3s")
+                }
+                .padding(.top, 2)
+            }
+            .padding(14)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1.5))
+        }
+    }
+
+    private func shootBar(_ label: String, _ pct: Double, _ made: Int, _ att: Int, _ color: Color) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(label).font(.system(size: 12, weight: .semibold)).foregroundColor(color)
+                Spacer()
+                Text("\(made)/\(att) · \(Int(pct.rounded()))%")
+                    .font(.system(size: 11)).monospacedDigit().foregroundColor(Chalk.dust)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.black.opacity(0.3)).frame(height: 8)
+                    Capsule().fill(color).frame(width: max(4, geo.size.width * CGFloat(min(pct, 100) / 100)), height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+    }
+
+    private func miniStat(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value).font(.system(size: 16, weight: .heavy)).monospacedDigit().foregroundColor(Chalk.crisp)
+            Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Redesign: milestones
@@ -581,50 +728,6 @@ struct CareerStatsSheet: View {
         .frame(maxWidth: .infinity)
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1.5))
-    }
-
-    // MARK: - Redesign: stat line
-
-    private var statLineBox: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader("Stat line", trailing: nil)
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    statCell(String(format: "%.1f", agg.ppg), "PPG", Chalk.yellow)
-                    statCell(String(format: "%.1f", agg.rpg), "RPG", Chalk.sky)
-                    statCell(String(format: "%.1f", agg.apg), "APG", Chalk.green)
-                    statCell(String(format: "%.1f", agg.spg), "SPG", Chalk.chalkDim)
-                    statCell(String(format: "%.1f", agg.bpg), "BPG", Chalk.coral)
-                }
-                Divider().overlay(Chalk.chalk.opacity(0.12))
-                HStack(spacing: 0) {
-                    shootCell("FG", agg.fgPct, agg.fgMade, agg.fgAtt, Chalk.sky)
-                    shootCell("3PT", agg.tpPct, agg.tpMade, agg.tpAtt, Chalk.green)
-                    shootCell("FT", agg.ftPct, agg.ftMade, agg.ftAtt, Chalk.yellow)
-                }
-            }
-            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.18), lineWidth: 1.5))
-        }
-    }
-
-    private func statCell(_ value: String, _ label: String, _ color: Color) -> some View {
-        VStack(spacing: 3) {
-            Text(value).font(.system(size: 21, weight: .heavy)).monospacedDigit().foregroundColor(color)
-            Text(label).font(.system(size: 10)).foregroundColor(Chalk.dust)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-    }
-
-    private func shootCell(_ label: String, _ pct: Double, _ made: Int, _ att: Int, _ color: Color) -> some View {
-        VStack(spacing: 2) {
-            Text(String(format: "%.0f%%", pct)).font(.system(size: 16, weight: .heavy)).monospacedDigit().foregroundColor(color)
-            Text("\(made)/\(att)").font(.system(size: 10)).foregroundColor(Chalk.dust).monospacedDigit()
-            Text(label).font(.system(size: 10, weight: .semibold)).foregroundColor(Chalk.chalkDim)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
     }
 
     // MARK: - Redesign: detail disclosure (the existing week/month line chart, tucked away)
