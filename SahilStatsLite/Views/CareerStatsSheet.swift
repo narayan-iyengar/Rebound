@@ -88,13 +88,14 @@ struct CareerStatsSheet: View {
         let ctx = CIContext(options: nil)
         let base = CIImage(cgImage: cg)
 
-        let dark = CIColor(red: 0.11, green: 0.15, blue: 0.13)
-        let light = CIColor(red: 0.95, green: 0.94, blue: 0.89)
+        // Neutral warm duotone (no green cast): near-black shadows → cream highlights.
+        let dark = CIColor(red: 0.12, green: 0.11, blue: 0.10)
+        let light = CIColor(red: 0.96, green: 0.95, blue: 0.90)
         let duo = base
             .applyingFilter("CIPhotoEffectMono")
             .applyingFilter("CIColorControls", parameters: ["inputContrast": 1.12, "inputBrightness": 0.02])
             .applyingFilter("CIFalseColor", parameters: ["inputColor0": dark, "inputColor1": light])
-        let dimBg = duo.applyingFilter("CIColorControls", parameters: ["inputBrightness": -0.34])
+        let dimBg = duo.applyingFilter("CIColorControls", parameters: ["inputBrightness": -0.5, "inputContrast": 0.9])
 
         // Bright player over a dimmed background (crowd fades back; the full figure stays).
         var composed = duo
