@@ -86,8 +86,9 @@ struct CareerStatsSheet: View {
         let ctx = CIContext(options: nil)
         let base = CIImage(cgImage: cg)
 
-        // Person mask (may be nil if segmentation finds nobody).
+        // Person mask (may be nil if segmentation finds nobody) + the subject's exact pixel bounds.
         var maskCI: CIImage? = nil
+        var subjectRect: CGRect? = nil
         let req = VNGeneratePersonSegmentationRequest()
         req.qualityLevel = .accurate
         req.outputPixelFormat = kCVPixelFormatType_OneComponent8
@@ -97,6 +98,7 @@ struct CareerStatsSheet: View {
             mc = mc.transformed(by: CGAffineTransform(scaleX: base.extent.width / mc.extent.width,
                                                       y: base.extent.height / mc.extent.height))
             maskCI = mc
+            subjectRect = maskBounds(m, imageExtent: base.extent)
         }
 
         // Duotone: grayscale + a little contrast, then map shadows→board, highlights→chalk.
@@ -116,20 +118,43 @@ struct CareerStatsSheet: View {
             out = duo
         }
 
-        // Crop tight to the player so he fills the card instead of floating small.
+        // Crop to the subject's exact mask bounds (includes arms/ball), with a little margin.
         var cropRect = base.extent
-        let humanReq = VNDetectHumanRectanglesRequest()
-        if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([humanReq])) != nil,
-           let box = humanReq.results?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })?.boundingBox {
-            var r = VNImageRectForNormalizedRect(box, Int(base.extent.width), Int(base.extent.height))
-            // Widen a lot horizontally so extended arms / the ball aren't clipped — safe
-            // because the crowd is already masked out, so extra width is just transparent.
-            r = r.insetBy(dx: -r.width * 0.40, dy: -r.height * 0.12)
+        if var r = subjectRect {
+            r = r.insetBy(dx: -r.width * 0.06, dy: -r.height * 0.05)
             let clamped = r.intersection(base.extent)
             if !clamped.isNull, clamped.width > 40, clamped.height > 40 { cropRect = clamped }
         }
         guard let cgOut = ctx.createCGImage(out, from: cropRect) else { return nil }
         return UIImage(cgImage: cgOut)
+    }
+
+    /// Bounding box (in CIImage/bottom-left pixel coords) of the non-zero region of a
+    /// grayscale (OneComponent8) segmentation mask — the true extent of the person.
+    private static func maskBounds(_ mask: CVPixelBuffer, imageExtent: CGRect) -> CGRect? {
+        CVPixelBufferLockBaseAddress(mask, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
+        let w = CVPixelBufferGetWidth(mask), h = CVPixelBufferGetHeight(mask)
+        let rowBytes = CVPixelBufferGetBytesPerRow(mask)
+        guard let base = CVPixelBufferGetBaseAddress(mask) else { return nil }
+        let ptr = base.assumingMemoryBound(to: UInt8.self)
+        let threshold: UInt8 = 40
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            let row = ptr + y * rowBytes
+            for x in 0..<w where row[x] > threshold {
+                if x < minX { minX = x }; if x > maxX { maxX = x }
+                if y < minY { minY = y }; if y > maxY { maxY = y }
+            }
+        }
+        guard maxX >= minX, maxY >= minY else { return nil }
+        // Mask buffer is top-left origin; convert to bottom-left normalized, then to pixels.
+        let nx = CGFloat(minX) / CGFloat(w)
+        let ny = 1 - CGFloat(maxY + 1) / CGFloat(h)
+        let nw = CGFloat(maxX - minX + 1) / CGFloat(w)
+        let nh = CGFloat(maxY - minY + 1) / CGFloat(h)
+        return VNImageRectForNormalizedRect(CGRect(x: nx, y: ny, width: nw, height: nh),
+                                            Int(imageExtent.width), Int(imageExtent.height))
     }
 
     struct IDWrap: Identifiable { let id: String }
