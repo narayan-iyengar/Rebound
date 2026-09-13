@@ -25,7 +25,6 @@ struct CareerStatsSheet: View {
     @State private var seasonFilter: String? = nil
     @State private var teamFilter: String? = nil
     @State private var ageFilter: String? = nil
-    @State private var deckIndex = 0
     @State private var detailGame: IDWrap? = nil
     @AppStorage("careerCardShowTrend") private var showCardTrend = true
 
@@ -145,47 +144,6 @@ struct CareerStatsSheet: View {
         }
     }
 
-    // MARK: - Cards
-
-    struct CardModel: Identifiable {
-        let id: String
-        let title: String       // season name, or "Career"
-        let subtitle: String    // grade (season) or "All seasons" (career)
-        let games: [Game]
-        let isCareer: Bool
-    }
-
-    /// One card per TEAM (Lava, Elements, …) so a team's games live together across every
-    /// grade — that's the identity Sahil cares about. Teams with only a game or two fold
-    /// into a single "Guest" card. Career (overall) card is first when there's more than one.
-    private var cards: [CardModel] {
-        let g = filteredGames
-        guard !g.isEmpty else { return [] }
-        let threshold = 3
-        var byTeam: [String: [Game]] = [:]
-        for game in g {
-            let name = game.teamName.trimmingCharacters(in: .whitespaces)
-            byTeam[name.isEmpty ? "Team" : name, default: []].append(game)
-        }
-        var teamCards: [(name: String, games: [Game])] = []
-        var guest: [Game] = []
-        for (name, games) in byTeam {
-            if games.count >= threshold { teamCards.append((name, games)) } else { guest += games }
-        }
-        teamCards.sort { $0.games.count > $1.games.count }
-        var out: [CardModel] = teamCards.map {
-            CardModel(id: "t-\($0.name)", title: $0.name, subtitle: latestGrade($0.games), games: $0.games, isCareer: false)
-        }
-        if !guest.isEmpty {
-            out.append(CardModel(id: "t-guest", title: "Guest", subtitle: latestGrade(guest), games: guest, isCareer: false))
-        }
-        if out.count > 1 {
-            let career = CardModel(id: "__career", title: "Career", subtitle: "All-time", games: g, isCareer: true)
-            return [career] + out
-        }
-        return out
-    }
-
     // MARK: - Milestones (over the filtered set)
 
     private var careerHighGame: Game? {
@@ -238,7 +196,9 @@ struct CareerStatsSheet: View {
                         } else if filteredGames.isEmpty {
                             emptyCard("No games match", "Nothing for this filter. Try clearing one.")
                         } else {
-                            deck
+                            posterCard
+                            if showCardTrend { trendStrip }
+                            statTableSection
                             badgesSection
                         }
                     }
@@ -248,66 +208,182 @@ struct CareerStatsSheet: View {
             .chalkBoard()
             .navigationBarHidden(true)
             .sheet(item: $detailGame) { wrap in GameDetailSheet(gameId: wrap.id) }
-            .onChange(of: filteredGames.count) { _, _ in deckIndex = 0 }
         }
     }
 
-    // MARK: - Deck
+    // MARK: - Poster card (single identity card; stats live below it)
 
-    private var deck: some View {
-        let list = cards
-        return VStack(spacing: 10) {
-            TabView(selection: $deckIndex) {
-                ForEach(Array(list.enumerated()), id: \.element.id) { i, card in
-                    SeasonTradingCard(
-                        title: card.title,
-                        subtitle: card.subtitle,
-                        accent: card.isCareer ? Chalk.yellow : TeamPalette.color(for: card.title),
-                        teamLabel: card.title.uppercased(),
-                        agg: aggregate(card.games),
-                        rows: gradeRows(card.games),
-                        trend: trendValues(card.games),
-                        showTrend: showCardTrend,
-                        onTapHigh: { if let h = high(card.games) { detailGame = IDWrap(id: h.id) } },
-                        highLabel: high(card.games).map { "\($0.playerStats.points) vs \($0.opponent)" }
-                    )
-                    .padding(.horizontal, 4)
-                    .tag(i)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 452)
+    private var overall: Agg { aggregate(filteredGames) }
+    private var posterAccent: Color { teamFilter != nil ? TeamPalette.color(for: teamFilter!) : Chalk.yellow }
+    private var kicker: String { seasonFilter ?? latestGrade(filteredGames) }
 
-            // Custom page dots + swipe hint.
-            HStack(spacing: 6) {
-                ForEach(list.indices, id: \.self) { i in
-                    Circle()
-                        .fill(i == deckIndex ? Chalk.yellow : Chalk.dust.opacity(0.4))
-                        .frame(width: 7, height: 7)
+    private var posterCard: some View {
+        let a = overall
+        let accent = posterAccent
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                if let t = teamFilter {
+                    Text(t.uppercased()).font(.system(size: 11, weight: .heavy)).tracking(1).foregroundColor(accent)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(accent.opacity(0.16), in: Capsule())
+                        .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
                 }
+                Spacer()
+                rarityBadge(a.games, accent)
             }
-            if list.count > 1 {
-                Text("swipe · " + list.map { $0.title }.joined(separator: " · "))
-                    .font(.system(size: 11)).foregroundColor(Chalk.dust)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .padding(.horizontal)
+            Spacer()
+            Text(kicker.uppercased())
+                .font(.system(size: 12, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
+            Text("Sahil").font(.chalkHand(64)).foregroundColor(Chalk.chalk)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 52, height: 4).padding(.top, 8)
+            HStack(spacing: 8) {
+                Text("\(a.games) game\(a.games == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(Chalk.dust)
+                Text("·").foregroundColor(Chalk.dust)
+                HStack(spacing: 2) {
+                    Text("\(a.wins)").foregroundColor(Chalk.green)
+                    Text("–").foregroundColor(Chalk.dust)
+                    Text("\(a.losses)").foregroundColor(Chalk.coral)
+                }.font(.system(size: 12, weight: .bold)).monospacedDigit()
+            }
+            .padding(.top, 10)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 200, alignment: .leading)
+        .background(courtBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(foil(accent), lineWidth: 3))
+        .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
+    }
+
+    private func foil(_ accent: Color) -> LinearGradient {
+        LinearGradient(colors: [accent.opacity(0.55), .white.opacity(0.9), accent, .white.opacity(0.55), accent.opacity(0.7)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var courtBackground: some View {
+        ZStack {
+            LinearGradient(colors: [Chalk.board2, Chalk.board], startPoint: .top, endPoint: .bottom)
+            GeometryReader { g in
+                Path { p in
+                    let w = g.size.width, h = g.size.height
+                    p.addEllipse(in: CGRect(x: w * 0.5, y: h * 0.12, width: w * 0.55, height: h * 0.8))
+                }
+                .stroke(Chalk.chalk.opacity(0.05), lineWidth: 2)
             }
         }
     }
 
-    private func high(_ g: [Game]) -> Game? {
-        g.filter { $0.playerStats.points > 0 }.max { $0.playerStats.points < $1.playerStats.points }
+    private func rarityBadge(_ games: Int, _ accent: Color) -> some View {
+        let r: (Int, String) = games >= 30 ? (3, "FRANCHISE") : (games >= 10 ? (2, "VETERAN") : (1, "ROOKIE"))
+        return HStack(spacing: 4) {
+            HStack(spacing: 1) {
+                ForEach(0..<3, id: \.self) { i in
+                    Image(systemName: i < r.0 ? "star.fill" : "star").font(.system(size: 8))
+                        .foregroundColor(i < r.0 ? accent : Chalk.dust.opacity(0.4))
+                }
+            }
+            Text(r.1).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundColor(accent)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(accent.opacity(0.14), in: Capsule())
+        .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
     }
 
-    /// Smoothed per-game points for the card's quiet trend line.
+    // MARK: - Optional trend strip
+
+    @ViewBuilder
+    private var trendStrip: some View {
+        let vals = trendValues(filteredGames)
+        if vals.count > 1 {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("SCORING TREND").font(.system(size: 10, weight: .bold)).tracking(1).foregroundColor(Chalk.dust)
+                Sparkline(values: vals, color: posterAccent).frame(height: 40)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+        }
+    }
+
     private func trendValues(_ g: [Game]) -> [Double] {
         let pts = g.sorted { $0.date < $1.date }.map { Double($0.playerStats.points) }
         guard pts.count > 1 else { return pts }
         return pts.indices.map { i in
-            let lo = max(0, i - 2)
-            let slice = Array(pts[lo...i])
+            let lo = max(0, i - 2); let slice = Array(pts[lo...i])
             return slice.reduce(0, +) / Double(slice.count)
         }
+    }
+
+    // MARK: - Stat table (always visible, reflects filters)
+
+    private var statTableSection: some View {
+        let rows = gradeRows(filteredGames)
+        let a = overall
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Text("Stat line").font(.chalkScript(20)).foregroundColor(Chalk.chalk)
+                Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
+            }
+            VStack(spacing: 0) {
+                tableRow("", "GP", "PPG", "RPG", "APG", "FG", header: true)
+                ForEach(rows.indices, id: \.self) { i in
+                    let r = rows[i]
+                    tableRow(r.label, "\(r.agg.games)",
+                             String(format: "%.1f", r.agg.ppg),
+                             String(format: "%.1f", r.agg.rpg),
+                             String(format: "%.1f", r.agg.apg),
+                             "\(Int(r.agg.fgPct.rounded()))")
+                }
+                if rows.count > 1 {
+                    Rectangle().fill(Chalk.chalk.opacity(0.18)).frame(height: 1)
+                    tableRow("CAR", "\(a.games)",
+                             String(format: "%.1f", a.ppg),
+                             String(format: "%.1f", a.rpg),
+                             String(format: "%.1f", a.apg),
+                             "\(Int(a.fgPct.rounded()))", total: true)
+                }
+            }
+            .padding(.vertical, 4)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+
+            HStack(spacing: 0) {
+                splitCell("2P", a.twoPct, Chalk.sky)
+                splitCell("3P", a.tpPct, Chalk.yellow)
+                splitCell("FT", a.ftPct, Chalk.green)
+                splitCell("eFG", a.eFG, Chalk.chalkDim)
+                splitCell("TS", a.ts, Chalk.chalkDim)
+            }
+            .padding(.vertical, 8)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+        }
+    }
+
+    private func tableRow(_ c0: String, _ c1: String, _ c2: String, _ c3: String, _ c4: String, _ c5: String,
+                          header: Bool = false, total: Bool = false) -> some View {
+        let color: Color = header ? Chalk.dust : (total ? posterAccent : Chalk.chalk)
+        let weight: Font.Weight = (header || total) ? .heavy : .semibold
+        let size: CGFloat = header ? 10 : 13
+        return HStack(spacing: 0) {
+            Text(c0).font(.system(size: header ? 10 : 12, weight: .heavy)).foregroundColor(total ? posterAccent : Chalk.dust)
+                .frame(width: 44, alignment: .leading)
+            Group { Text(c1); Text(c2); Text(c3); Text(c4); Text(c5) }
+                .font(.system(size: size, weight: weight)).monospacedDigit().foregroundColor(color)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 14).padding(.vertical, header ? 6 : 7)
+    }
+
+    private func splitCell(_ label: String, _ pct: Double, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text("\(Int(pct.rounded()))%").font(.system(size: 15, weight: .heavy)).monospacedDigit().foregroundColor(color)
+            Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Badges
@@ -398,271 +474,6 @@ struct CareerStatsSheet: View {
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
     }
-}
-
-// MARK: - Trading card (front = marquee + stat strip, back = full line; tap to flip)
-
-private struct SeasonTradingCard: View {
-    let title: String
-    let subtitle: String
-    let accent: Color
-    let teamLabel: String
-    let agg: CareerStatsSheet.Agg
-    let rows: [(label: String, agg: CareerStatsSheet.Agg)]
-    let trend: [Double]
-    let showTrend: Bool
-    let onTapHigh: () -> Void
-    let highLabel: String?
-
-    @State private var flipped = false
-
-    var body: some View {
-        ZStack {
-            front.opacity(flipped ? 0 : 1)
-            back.opacity(flipped ? 1 : 0)
-                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
-        }
-        .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: flipped)
-        .onTapGesture { flipped.toggle() }
-    }
-
-    // MARK: - Premium chrome (foil frame, inner mat, depth + court watermark)
-
-    private var foilStroke: LinearGradient {
-        LinearGradient(colors: [accent.opacity(0.55), .white.opacity(0.9), accent,
-                                .white.opacity(0.55), accent.opacity(0.7)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    private var cardBackground: some View {
-        ZStack {
-            LinearGradient(colors: [Chalk.board2, Chalk.board], startPoint: .top, endPoint: .bottom)
-            Image(systemName: "basketball.fill")
-                .resizable().scaledToFit()
-                .foregroundColor(Chalk.chalk.opacity(0.04))
-                .frame(width: 250)
-                .rotationEffect(.degrees(-12))
-                .offset(x: 85, y: 90)
-        }
-    }
-
-    private func chrome<V: View>(_ content: V) -> some View {
-        content
-            .background(cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))       // inner mat
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(foilStroke, lineWidth: 3))                             // foil edge
-            .shadow(color: .black.opacity(0.45), radius: 12, x: 0, y: 6)
-    }
-
-    private func rarity(_ games: Int) -> (stars: Int, label: String) {
-        if games >= 30 { return (3, "FRANCHISE") }
-        if games >= 10 { return (2, "VETERAN") }
-        return (1, "ROOKIE")
-    }
-
-    private var emblem: some View {
-        ZStack {
-            Circle().fill(accent.opacity(0.18))
-            Circle().strokeBorder(accent, lineWidth: 2)
-            Text(String(teamLabel.prefix(1))).font(.system(size: 20, weight: .heavy)).foregroundColor(accent)
-        }
-        .frame(width: 44, height: 44)
-    }
-
-    private var rarityBadge: some View {
-        let r = rarity(agg.games)
-        return HStack(spacing: 4) {
-            HStack(spacing: 1) {
-                ForEach(0..<3, id: \.self) { i in
-                    Image(systemName: i < r.stars ? "star.fill" : "star")
-                        .font(.system(size: 8))
-                        .foregroundColor(i < r.stars ? accent : Chalk.dust.opacity(0.4))
-                }
-            }
-            Text(r.label).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundColor(accent)
-        }
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(accent.opacity(0.14), in: Capsule())
-        .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
-    }
-
-    private func namePlate(right: String) -> some View {
-        HStack {
-            Text(teamLabel).font(.system(size: 14, weight: .black)).tracking(1.5).foregroundColor(Chalk.board)
-            Spacer()
-            Text(right).font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.board.opacity(0.8))
-        }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(LinearGradient(colors: [accent, accent.opacity(0.8)], startPoint: .leading, endPoint: .trailing))
-        .overlay(Rectangle().fill(.white.opacity(0.25)).frame(height: 1), alignment: .top)  // top sheen
-    }
-
-    // MARK: Front
-
-    private var front: some View {
-        chrome(
-            VStack(spacing: 0) {
-                namePlate(right: subtitle)
-
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 10) {
-                        emblem
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Sahil").font(.chalkHand(30)).foregroundColor(Chalk.chalk)
-                            HStack(spacing: 6) {
-                                Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
-                                    .font(.system(size: 11)).foregroundColor(Chalk.dust)
-                                Text("·").font(.system(size: 11)).foregroundColor(Chalk.dust)
-                                HStack(spacing: 2) {
-                                    Text("\(agg.wins)").foregroundColor(Chalk.green)
-                                    Text("–").foregroundColor(Chalk.dust)
-                                    Text("\(agg.losses)").foregroundColor(Chalk.coral)
-                                }
-                                .font(.system(size: 11, weight: .bold)).monospacedDigit()
-                            }
-                        }
-                        Spacer()
-                        rarityBadge
-                    }
-                    .padding(.top, 16)
-
-                    if showTrend {
-                        Sparkline(values: trend, color: accent.opacity(0.55))
-                            .frame(height: 44).padding(.top, 16)
-                    }
-                }
-                .padding(.horizontal, 16)
-
-                Spacer(minLength: 0)
-
-                // Clean stat line — the front's content (full table lives on the back).
-                HStack(spacing: 0) {
-                    strip(String(format: "%.1f", agg.ppg), "PPG", accent)
-                    strip(String(format: "%.1f", agg.rpg), "RPG")
-                    strip(String(format: "%.1f", agg.apg), "APG")
-                    strip(String(format: "%.1f", agg.spg), "SPG")
-                    strip(String(format: "%.0f%%", agg.fgPct), "FG")
-                }
-                .background(Color.black.opacity(0.22))
-                .overlay(Rectangle().fill(Chalk.chalk.opacity(0.1)).frame(height: 1), alignment: .top)
-
-                HStack {
-                    Text("\(agg.totalPoints) total pts").font(.system(size: 10)).foregroundColor(Chalk.dust)
-                    Spacer()
-                    Text("tap to flip ›").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
-                }
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(Color.black.opacity(0.22))
-            }
-        )
-    }
-
-    private func strip(_ value: String, _ label: String, _ color: Color = Chalk.chalk) -> some View {
-        VStack(spacing: 2) {
-            Text(value).font(.system(size: 20, weight: .heavy)).monospacedDigit().foregroundColor(color)
-            Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
-        }
-        .frame(maxWidth: .infinity).padding(.vertical, 13)
-    }
-
-    // MARK: Back — full line
-
-    private var back: some View {
-        chrome(
-            VStack(alignment: .leading, spacing: 0) {
-                namePlate(right: "STAT LINE")
-
-                VStack(spacing: 12) {
-                    // Season-by-season table — the real card back.
-                    VStack(spacing: 0) {
-                        tableRow("", "GP", "PPG", "RPG", "APG", "FG", header: true)
-                        ForEach(rows.indices, id: \.self) { i in
-                            let r = rows[i]
-                            tableRow(r.label,
-                                     "\(r.agg.games)",
-                                     String(format: "%.1f", r.agg.ppg),
-                                     String(format: "%.1f", r.agg.rpg),
-                                     String(format: "%.1f", r.agg.apg),
-                                     "\(Int(r.agg.fgPct.rounded()))")
-                        }
-                        Rectangle().fill(Chalk.chalk.opacity(0.18)).frame(height: 1)
-                        tableRow("CAR",
-                                 "\(agg.games)",
-                                 String(format: "%.1f", agg.ppg),
-                                 String(format: "%.1f", agg.rpg),
-                                 String(format: "%.1f", agg.apg),
-                                 "\(Int(agg.fgPct.rounded()))",
-                                 total: true)
-                    }
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-
-                    // Shooting splits, compact.
-                    HStack(spacing: 0) {
-                        splitCell("2P", agg.twoPct, Chalk.sky)
-                        splitCell("3P", agg.tpPct, Chalk.yellow)
-                        splitCell("FT", agg.ftPct, Chalk.green)
-                        splitCell("eFG", agg.eFG, Chalk.chalk)
-                        splitCell("TS", agg.ts, Chalk.chalk)
-                    }
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-
-                    if let h = highLabel {
-                        Button(action: onTapHigh) {
-                            HStack(spacing: 6) {
-                                Text("⭐ Career high").font(.system(size: 12, weight: .semibold)).foregroundColor(Chalk.dust)
-                                Spacer()
-                                Text(h).font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.yellow)
-                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
-                            }
-                            .padding(10)
-                            .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(14)
-
-                Spacer(minLength: 0)
-
-                Text("‹ tap to flip back").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Color.black.opacity(0.22))
-            }
-        )
-    }
-
-    private func tableRow(_ c0: String, _ c1: String, _ c2: String, _ c3: String, _ c4: String, _ c5: String,
-                          header: Bool = false, total: Bool = false) -> some View {
-        let color: Color = header ? Chalk.dust : (total ? accent : Chalk.chalk)
-        let weight: Font.Weight = (header || total) ? .heavy : .semibold
-        let size: CGFloat = header ? 10 : 12
-        return HStack(spacing: 0) {
-            Text(c0).font(.system(size: header ? 10 : 12, weight: .heavy)).foregroundColor(total ? accent : Chalk.dust)
-                .frame(width: 42, alignment: .leading)
-            Group {
-                Text(c1); Text(c2); Text(c3); Text(c4); Text(c5)
-            }
-            .font(.system(size: size, weight: weight)).monospacedDigit().foregroundColor(color)
-            .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal, 12).padding(.vertical, header ? 5 : 6)
-    }
-
-    private func splitCell(_ label: String, _ pct: Double, _ color: Color) -> some View {
-        VStack(spacing: 2) {
-            Text("\(Int(pct.rounded()))%").font(.system(size: 14, weight: .heavy)).monospacedDigit().foregroundColor(color)
-            Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
 }
 
 // A tiny inline trend line for the card's quiet scoring arc.
