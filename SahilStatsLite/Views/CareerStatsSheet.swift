@@ -2,18 +2,20 @@
 //  CareerStatsSheet.swift
 //  SahilStatsLite
 //
-//  PURPOSE: Career stats as a swipeable DECK of basketball trading cards — one per
-//           season plus an all-time Career card. Each card: PPG marquee, record, a
-//           quiet scoring trend, and the stat-line strip on the front; tap to flip to
-//           the full line (shooting splits, eFG/TS) on the back. Below the deck: the
-//           milestone "achievement badges". Season / team / age filters scope it all.
-//  KEY TYPES: CareerStatsSheet, SeasonTradingCard
-//  DEPENDS ON: GamePersistenceManager
+//  PURPOSE: Career stats as a single big-type trading-card "poster" (name is the hero,
+//           team accent, grade/season kicker, record, rarity) with the stats ALWAYS
+//           visible below it: a season-by-season stat table (GP/PPG/RPG/APG/FG% + career
+//           total + shooting line), an adaptive scoring-trend chart (by week/month/season,
+//           toggle in the header), and achievement badges. Season / team / age filters
+//           scope everything.
+//  KEY TYPES: CareerStatsSheet
+//  DEPENDS ON: GamePersistenceManager, Charts
 //
 //  NOTE: Keep this header updated when modifying this file.
 //
 
 import SwiftUI
+import Charts
 
 struct CareerStatsSheet: View {
     @ObservedObject private var persistenceManager = GamePersistenceManager.shared
@@ -197,8 +199,8 @@ struct CareerStatsSheet: View {
                             emptyCard("No games match", "Nothing for this filter. Try clearing one.")
                         } else {
                             posterCard
-                            if showCardTrend { trendStrip }
                             statTableSection
+                            if showCardTrend { scoringTrendSection }
                             badgesSection
                         }
                     }
@@ -291,29 +293,87 @@ struct CareerStatsSheet: View {
         .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
     }
 
-    // MARK: - Optional trend strip
+    // MARK: - Scoring trend (adaptive buckets: week → month → season, so it never crowds)
 
-    @ViewBuilder
-    private var trendStrip: some View {
-        let vals = trendValues(filteredGames)
-        if vals.count > 1 {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("SCORING TREND").font(.system(size: 10, weight: .bold)).tracking(1).foregroundColor(Chalk.dust)
-                Sparkline(values: vals, color: posterAccent).frame(height: 40)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+    private struct Bucket: Identifiable { let id = UUID(); let label: String; let ppg: Double }
+
+    private var trendSpanDays: Int {
+        let g = filteredGames.sorted { $0.date < $1.date }
+        guard let f = g.first?.date, let l = g.last?.date else { return 0 }
+        return Calendar.current.dateComponents([.day], from: f, to: l).day ?? 0
+    }
+    private var trendUnit: String {
+        trendSpanDays < 70 ? "by week" : (trendSpanDays < 900 ? "by month" : "by season")
+    }
+
+    private func buckets(key: (Game) -> String, label: (Game) -> String) -> [Bucket] {
+        var groups: [String: [Game]] = [:]
+        var earliest: [String: Date] = [:]
+        for g in filteredGames {
+            let k = key(g)
+            groups[k, default: []].append(g)
+            if earliest[k] == nil || g.date < earliest[k]! { earliest[k] = g.date }
+        }
+        return groups.keys.sorted { earliest[$0]! < earliest[$1]! }.map { k in
+            let gs = groups[k]!
+            let anchor = gs.min { $0.date < $1.date }!
+            let ppg = Double(gs.reduce(0) { $0 + $1.playerStats.points }) / Double(gs.count)
+            return Bucket(label: label(anchor), ppg: ppg)
         }
     }
 
-    private func trendValues(_ g: [Game]) -> [Double] {
-        let pts = g.sorted { $0.date < $1.date }.map { Double($0.playerStats.points) }
-        guard pts.count > 1 else { return pts }
-        return pts.indices.map { i in
-            let lo = max(0, i - 2); let slice = Array(pts[lo...i])
-            return slice.reduce(0, +) / Double(slice.count)
+    private var trendBuckets: [Bucket] {
+        guard filteredGames.count > 1 else { return [] }
+        let cal = Calendar.current
+        let wf = DateFormatter(); wf.dateFormat = "M/d"
+        let mf = DateFormatter(); mf.dateFormat = "MMM yy"
+        if trendSpanDays < 70 {
+            return buckets(key: { "\(cal.component(.yearForWeekOfYear, from: $0.date))-\(String(format: "%02d", cal.component(.weekOfYear, from: $0.date)))" },
+                           label: { wf.string(from: $0.date) })
+        } else if trendSpanDays < 900 {
+            return buckets(key: { "\(cal.component(.year, from: $0.date))-\(String(format: "%02d", cal.component(.month, from: $0.date)))" },
+                           label: { mf.string(from: $0.date) })
+        } else {
+            return buckets(key: { $0.season }, label: { $0.season })
+        }
+    }
+
+    @ViewBuilder
+    private var scoringTrendSection: some View {
+        let data = trendBuckets
+        if data.count > 1 {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Text("Scoring trend").font(.chalkScript(20)).foregroundColor(Chalk.chalk)
+                    Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
+                    Text(trendUnit).font(.system(size: 11, weight: .medium)).foregroundColor(Chalk.dust)
+                }
+                Chart(data) { b in
+                    AreaMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
+                        .foregroundStyle(posterAccent.opacity(0.10)).interpolationMethod(.catmullRom)
+                    LineMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
+                        .foregroundStyle(posterAccent)
+                        .lineStyle(StrokeStyle(lineWidth: 2.8, lineJoin: .round)).interpolationMethod(.catmullRom)
+                    PointMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
+                        .foregroundStyle(posterAccent).symbolSize(24)
+                }
+                .frame(height: 170)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(Chalk.dust.opacity(0.2))
+                        AxisValueLabel().foregroundStyle(Chalk.dust)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                        AxisValueLabel().foregroundStyle(Chalk.dust)
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .padding(14)
+            .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
         }
     }
 
@@ -473,30 +533,5 @@ struct CareerStatsSheet: View {
         .frame(maxWidth: .infinity).padding(.vertical, 30)
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Chalk.chalk.opacity(0.2), lineWidth: 1.5))
-    }
-}
-
-// A tiny inline trend line for the card's quiet scoring arc.
-private struct Sparkline: View {
-    let values: [Double]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            if values.count > 1, let mn = values.min(), let mx = values.max() {
-                let range = max(mx - mn, 0.0001)
-                Path { p in
-                    for (i, v) in values.enumerated() {
-                        let x = geo.size.width * CGFloat(i) / CGFloat(values.count - 1)
-                        let y = geo.size.height * (1 - CGFloat((v - mn) / range))
-                        if i == 0 { p.move(to: CGPoint(x: x, y: y)) } else { p.addLine(to: CGPoint(x: x, y: y)) }
-                    }
-                }
-                .stroke(color, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
-            } else {
-                Rectangle().fill(color.opacity(0.4)).frame(height: 2)
-                    .frame(maxHeight: .infinity, alignment: .center)
-            }
-        }
     }
 }
