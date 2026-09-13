@@ -77,84 +77,62 @@ struct CareerStatsSheet: View {
         }
     }
 
-    /// Stylized cutout: segment Sahil out of the crowd, then map him to a clean two-tone
-    /// (duotone) chalk portrait — dark board shadows → cream highlights — on a transparent
-    /// ground. Reads as a screen-printed player portrait rather than noisy line-art. Falls
-    /// back to a full-frame duotone if no person is found.
+    /// Duotone player portrait for the card: map the photo to two-tone (dark board shadows →
+    /// cream highlights), DIM the crowd via the person mask (but never remove him — so a
+    /// motion-blurred leg the mask misses still shows, just darker), and crop to the full-body
+    /// human box at the card's aspect ratio so he fills the frame with nothing clipped.
+    private static let cardAspect: CGFloat = 116.0 / 148.0
+
     private static func chalkSketch(_ image: UIImage) -> UIImage? {
         guard let cg = image.cgImage else { return nil }
         let ctx = CIContext(options: nil)
         let base = CIImage(cgImage: cg)
 
-        // Person mask (may be nil if segmentation finds nobody) + the subject's exact pixel bounds.
-        var maskCI: CIImage? = nil
-        var subjectRect: CGRect? = nil
-        let req = VNGeneratePersonSegmentationRequest()
-        req.qualityLevel = .accurate
-        req.outputPixelFormat = kCVPixelFormatType_OneComponent8
-        if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([req])) != nil,
-           let m = req.results?.first?.pixelBuffer {
-            var mc = CIImage(cvPixelBuffer: m)
-            mc = mc.transformed(by: CGAffineTransform(scaleX: base.extent.width / mc.extent.width,
-                                                      y: base.extent.height / mc.extent.height))
-            maskCI = mc
-            subjectRect = maskBounds(m, imageExtent: base.extent)
-        }
-
-        // Duotone: grayscale + a little contrast, then map shadows→board, highlights→chalk.
         let dark = CIColor(red: 0.11, green: 0.15, blue: 0.13)
         let light = CIColor(red: 0.95, green: 0.94, blue: 0.89)
         let duo = base
             .applyingFilter("CIPhotoEffectMono")
-            .applyingFilter("CIColorControls", parameters: ["inputContrast": 1.15, "inputBrightness": 0.02])
+            .applyingFilter("CIColorControls", parameters: ["inputContrast": 1.12, "inputBrightness": 0.02])
             .applyingFilter("CIFalseColor", parameters: ["inputColor0": dark, "inputColor1": light])
+        let dimBg = duo.applyingFilter("CIColorControls", parameters: ["inputBrightness": -0.34])
 
-        let out: CIImage
-        if let maskCI {
-            out = CIFilter(name: "CIBlendWithMask", parameters: [
-                kCIInputImageKey: duo, kCIInputMaskImageKey: maskCI, kCIInputBackgroundImageKey: CIImage.empty()
-            ])?.outputImage ?? duo
-        } else {
-            out = duo
-        }
-
-        // Crop to the subject's exact mask bounds (includes arms/ball), with a little margin.
-        var cropRect = base.extent
-        if var r = subjectRect {
-            r = r.insetBy(dx: -r.width * 0.08, dy: -r.height * 0.10)
-            let clamped = r.intersection(base.extent)
-            if !clamped.isNull, clamped.width > 40, clamped.height > 40 { cropRect = clamped }
-        }
-        guard let cgOut = ctx.createCGImage(out, from: cropRect) else { return nil }
-        return UIImage(cgImage: cgOut)
-    }
-
-    /// Bounding box (in CIImage/bottom-left pixel coords) of the non-zero region of a
-    /// grayscale (OneComponent8) segmentation mask — the true extent of the person.
-    private static func maskBounds(_ mask: CVPixelBuffer, imageExtent: CGRect) -> CGRect? {
-        CVPixelBufferLockBaseAddress(mask, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
-        let w = CVPixelBufferGetWidth(mask), h = CVPixelBufferGetHeight(mask)
-        let rowBytes = CVPixelBufferGetBytesPerRow(mask)
-        guard let base = CVPixelBufferGetBaseAddress(mask) else { return nil }
-        let ptr = base.assumingMemoryBound(to: UInt8.self)
-        let threshold: UInt8 = 10   // low, so dim legs/feet still count toward the bounds
-        var minX = w, minY = h, maxX = -1, maxY = -1
-        for y in 0..<h {
-            let row = ptr + y * rowBytes
-            for x in 0..<w where row[x] > threshold {
-                if x < minX { minX = x }; if x > maxX { maxX = x }
-                if y < minY { minY = y }; if y > maxY { maxY = y }
+        // Bright player over a dimmed background (crowd fades back; the full figure stays).
+        var composed = duo
+        let seg = VNGeneratePersonSegmentationRequest()
+        seg.qualityLevel = .accurate
+        seg.outputPixelFormat = kCVPixelFormatType_OneComponent8
+        if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([seg])) != nil,
+           let m = seg.results?.first?.pixelBuffer {
+            var mc = CIImage(cvPixelBuffer: m)
+            mc = mc.transformed(by: CGAffineTransform(scaleX: base.extent.width / mc.extent.width,
+                                                      y: base.extent.height / mc.extent.height))
+            if let blended = CIFilter(name: "CIBlendWithMask", parameters: [
+                kCIInputImageKey: duo, kCIInputMaskImageKey: mc, kCIInputBackgroundImageKey: dimBg
+            ])?.outputImage {
+                composed = blended
             }
         }
-        guard maxX >= minX, maxY >= minY else { return nil }
-        // Mask buffer is top-left origin; convert to bottom-left normalized, then to pixels.
-        let nx = CGFloat(minX) / CGFloat(w)
-        let ny = 1 - CGFloat(maxY + 1) / CGFloat(h)
-        let nw = CGFloat(maxX - minX + 1) / CGFloat(w)
-        let nh = CGFloat(maxY - minY + 1) / CGFloat(h)
-        return VNImageRectForNormalizedRect(CGRect(x: nx, y: ny, width: nw, height: nh),
-                                            Int(imageExtent.width), Int(imageExtent.height))
+
+        // Crop to the full-body human box, expanded to the card aspect so .fill shows it all.
+        var cropRect = base.extent
+        let hr = VNDetectHumanRectanglesRequest()
+        hr.upperBodyOnly = false
+        if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([hr])) != nil,
+           let box = hr.results?.max(by: { $0.boundingBox.height < $1.boundingBox.height })?.boundingBox {
+            var r = VNImageRectForNormalizedRect(box, Int(base.extent.width), Int(base.extent.height))
+            r = r.insetBy(dx: -r.width * 0.12, dy: -r.height * 0.10)
+            var w = r.width, h = r.height
+            if w / h < cardAspect { w = h * cardAspect } else { h = w / cardAspect }
+            var rr = CGRect(x: r.midX - w / 2, y: r.midY - h / 2, width: w, height: h)
+            if rr.minX < 0 { rr.origin.x = 0 }
+            if rr.minY < 0 { rr.origin.y = 0 }
+            if rr.maxX > base.extent.width { rr.origin.x = base.extent.width - rr.width }
+            if rr.maxY > base.extent.height { rr.origin.y = base.extent.height - rr.height }
+            let clamped = rr.intersection(base.extent)
+            if !clamped.isNull, clamped.width > 40, clamped.height > 40 { cropRect = clamped }
+        }
+        guard let cgOut = ctx.createCGImage(composed, from: cropRect) else { return nil }
+        return UIImage(cgImage: cgOut)
     }
 
     struct IDWrap: Identifiable { let id: String }
@@ -398,10 +376,8 @@ struct CareerStatsSheet: View {
             PhotosPicker(selection: $photoItem, matching: .images) {
                 Group {
                     if let img = display {
-                        // Cutout has a transparent ground → fit the whole figure (no chopping);
-                        // the raw rectangular photo fills the frame.
-                        Image(uiImage: img).resizable()
-                            .aspectRatio(contentMode: sketchMode ? .fit : .fill)
+                        // Duotone crop is pre-matched to the card aspect, so fill shows it all.
+                        Image(uiImage: img).resizable().scaledToFill()
                     } else {
                         VStack(spacing: 6) {
                             Image(systemName: "person.crop.rectangle.badge.plus")
