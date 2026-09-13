@@ -16,6 +16,9 @@
 
 import SwiftUI
 import Charts
+import PhotosUI
+import UIKit
+import CoreImage
 
 struct CareerStatsSheet: View {
     @ObservedObject private var persistenceManager = GamePersistenceManager.shared
@@ -29,6 +32,56 @@ struct CareerStatsSheet: View {
     @State private var ageFilter: String? = nil
     @State private var detailGame: IDWrap? = nil
     @AppStorage("careerCardShowTrend") private var showCardTrend = true
+
+    // Player photo (shown on the poster card) + its chalk-sketch rendering.
+    @State private var photo: UIImage? = nil
+    @State private var sketch: UIImage? = nil
+    @State private var photoItem: PhotosPickerItem? = nil
+    @AppStorage("cardPhotoSketch") private var sketchMode = true   // show chalk sketch vs raw photo
+
+    // Scoring-trend bucket period.
+    enum TrendPeriod: String, CaseIterable, Identifiable { case week = "Week", month = "Month", year = "Year"; var id: String { rawValue } }
+    @State private var trendPeriod: TrendPeriod = .month
+
+    // MARK: - Photo storage + chalk-sketch rendering
+
+    private var photoURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("player_photo.jpg")
+    }
+
+    private func loadPhoto() {
+        guard photo == nil, let data = try? Data(contentsOf: photoURL), let img = UIImage(data: data) else { return }
+        photo = img
+        sketch = chalkSketch(img)
+    }
+
+    private func savePhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self), let img = UIImage(data: data) else { return }
+            try? data.write(to: photoURL)
+            let s = chalkSketch(img)
+            await MainActor.run { photo = img; sketch = s }
+        }
+    }
+
+    /// Turn a photo into a white chalk line-drawing on a transparent ground (so the board
+    /// shows through) — looks hand-drawn, matching the chalkboard theme.
+    private func chalkSketch(_ image: UIImage) -> UIImage? {
+        guard let ci = CIImage(image: image) else { return nil }
+        let ctx = CIContext(options: nil)
+        let mono = ci.applyingFilter("CIPhotoEffectMono")
+        let line = mono.applyingFilter("CILineOverlay", parameters: [
+            "inputNRNoiseLevel": 0.07, "inputNRSharpness": 0.71,
+            "inputEdgeIntensity": 1.0, "inputThreshold": 0.12, "inputContrast": 50.0
+        ])
+        // Line overlay = dark lines on white. Invert → light lines on dark, then mask the
+        // dark ground to transparent so only the (now white) strokes remain.
+        let masked = line.applyingFilter("CIColorInvert").applyingFilter("CIMaskToAlpha")
+        guard let cg = ctx.createCGImage(masked, from: masked.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
 
     struct IDWrap: Identifiable { let id: String }
 
@@ -210,6 +263,8 @@ struct CareerStatsSheet: View {
             .chalkBoard()
             .navigationBarHidden(true)
             .sheet(item: $detailGame) { wrap in GameDetailSheet(gameId: wrap.id) }
+            .task { loadPhoto() }
+            .onChange(of: photoItem) { _, item in savePhoto(item) }
         }
     }
 
@@ -222,33 +277,36 @@ struct CareerStatsSheet: View {
     private var posterCard: some View {
         let a = overall
         let accent = posterAccent
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack {
+        return HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 if let t = teamFilter {
                     Text(t.uppercased()).font(.system(size: 11, weight: .heavy)).tracking(1).foregroundColor(accent)
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(accent.opacity(0.16), in: Capsule())
                         .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
                 }
-                Spacer()
+                Spacer(minLength: 10)
+                Text(kicker.uppercased())
+                    .font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
+                Text("Sahil").font(.chalkHand(50)).foregroundColor(Chalk.chalk)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 40, height: 4)
+                    Text("\(a.games) game\(a.games == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(Chalk.dust)
+                    Text("·").foregroundColor(Chalk.dust)
+                    HStack(spacing: 2) {
+                        Text("\(a.wins)").foregroundColor(Chalk.green)
+                        Text("–").foregroundColor(Chalk.dust)
+                        Text("\(a.losses)").foregroundColor(Chalk.coral)
+                    }.font(.system(size: 12, weight: .bold)).monospacedDigit()
+                }
+                .padding(.top, 8)
+            }
+            Spacer(minLength: 0)
+            VStack(spacing: 6) {
+                photoView(accent)
                 rarityBadge(a.games, accent)
             }
-            Spacer(minLength: 12)
-            Text(kicker.uppercased())
-                .font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
-            Text("Sahil").font(.chalkHand(50)).foregroundColor(Chalk.chalk)
-                .lineLimit(1).minimumScaleFactor(0.5)
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 40, height: 4)
-                Text("\(a.games) game\(a.games == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(Chalk.dust)
-                Text("·").foregroundColor(Chalk.dust)
-                HStack(spacing: 2) {
-                    Text("\(a.wins)").foregroundColor(Chalk.green)
-                    Text("–").foregroundColor(Chalk.dust)
-                    Text("\(a.losses)").foregroundColor(Chalk.coral)
-                }.font(.system(size: 12, weight: .bold)).monospacedDigit()
-            }
-            .padding(.top, 8)
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
@@ -257,6 +315,49 @@ struct CareerStatsSheet: View {
         .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(foil(accent), lineWidth: 3))
         .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
+    }
+
+    @ViewBuilder
+    private func photoView(_ accent: Color) -> some View {
+        let display = sketchMode ? (sketch ?? photo) : photo
+        ZStack(alignment: .bottomTrailing) {
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Group {
+                    if let img = display {
+                        Image(uiImage: img).resizable().scaledToFill()
+                            .colorMultiply(sketchMode ? Chalk.chalk : .white)
+                    } else {
+                        VStack(spacing: 6) {
+                            Image(systemName: "person.crop.rectangle.badge.plus")
+                                .font(.system(size: 24)).foregroundColor(accent)
+                            Text("Add photo").font(.system(size: 10, weight: .semibold)).foregroundColor(Chalk.dust)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(accent.opacity(0.10))
+                    }
+                }
+                .frame(width: 92, height: 118)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(accent.opacity(display == nil ? 0.4 : 0.6),
+                                  style: StrokeStyle(lineWidth: 1.5, dash: display == nil ? [4] : [])))
+                .animation(.easeInOut(duration: 0.35), value: sketchMode)
+            }
+            .buttonStyle(.plain)
+
+            // Toggle chalk sketch vs raw photo (only once a photo exists).
+            if photo != nil {
+                Button { sketchMode.toggle() } label: {
+                    Image(systemName: sketchMode ? "photo" : "scribble.variable")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Chalk.board)
+                        .padding(5)
+                        .background(accent, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .padding(5)
+            }
+        }
     }
 
     private func foil(_ accent: Color) -> LinearGradient {
@@ -297,15 +398,6 @@ struct CareerStatsSheet: View {
 
     private struct Bucket: Identifiable { let id = UUID(); let label: String; let ppg: Double }
 
-    private var trendSpanDays: Int {
-        let g = filteredGames.sorted { $0.date < $1.date }
-        guard let f = g.first?.date, let l = g.last?.date else { return 0 }
-        return Calendar.current.dateComponents([.day], from: f, to: l).day ?? 0
-    }
-    private var trendUnit: String {
-        trendSpanDays < 70 ? "by week" : (trendSpanDays < 900 ? "by month" : "by season")
-    }
-
     private func buckets(key: (Game) -> String, label: (Game) -> String) -> [Bucket] {
         var groups: [String: [Game]] = [:]
         var earliest: [String: Date] = [:]
@@ -325,16 +417,18 @@ struct CareerStatsSheet: View {
     private var trendBuckets: [Bucket] {
         guard filteredGames.count > 1 else { return [] }
         let cal = Calendar.current
-        let wf = DateFormatter(); wf.dateFormat = "M/d"
-        let mf = DateFormatter(); mf.dateFormat = "MMM yy"
-        if trendSpanDays < 70 {
+        switch trendPeriod {
+        case .week:
+            let wf = DateFormatter(); wf.dateFormat = "M/d"
             return buckets(key: { "\(cal.component(.yearForWeekOfYear, from: $0.date))-\(String(format: "%02d", cal.component(.weekOfYear, from: $0.date)))" },
                            label: { wf.string(from: $0.date) })
-        } else if trendSpanDays < 900 {
+        case .month:
+            let mf = DateFormatter(); mf.dateFormat = "MMM yy"
             return buckets(key: { "\(cal.component(.year, from: $0.date))-\(String(format: "%02d", cal.component(.month, from: $0.date)))" },
                            label: { mf.string(from: $0.date) })
-        } else {
-            return buckets(key: { $0.season }, label: { $0.season })
+        case .year:
+            return buckets(key: { "\(academicYear($0.date))" },
+                           label: { gradeShort(gradeNumber(on: $0.date)) })
         }
     }
 
@@ -345,8 +439,21 @@ struct CareerStatsSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
                     Text("Scoring trend").font(.chalkScript(20)).foregroundColor(Chalk.chalk)
-                    Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
-                    Text(trendUnit).font(.system(size: 11, weight: .medium)).foregroundColor(Chalk.dust)
+                    Spacer()
+                    HStack(spacing: 0) {
+                        ForEach(TrendPeriod.allCases) { p in
+                            Button { trendPeriod = p } label: {
+                                Text(p.rawValue)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(trendPeriod == p ? posterAccent : Color.clear, in: Capsule())
+                                    .foregroundColor(trendPeriod == p ? Chalk.board : Chalk.dust)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(3)
+                    .background(Chalk.board.opacity(0.5), in: Capsule())
                 }
                 Chart {
                     ForEach(Array(data.enumerated()), id: \.offset) { i, b in
