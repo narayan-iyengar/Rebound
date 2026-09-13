@@ -48,20 +48,20 @@ enum ShotSpot: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Normalized position on the half court (x 0…1, y 0=baseline/hoop … 1=half court).
+    /// Normalized position on the half court (x, y each 0…1 of the map's frame).
     var pos: CGPoint {
         switch self {
-        case .rim:            return CGPoint(x: 0.50, y: 0.05)
-        case .leftBaseline2:  return CGPoint(x: 0.27, y: 0.06)
-        case .rightBaseline2: return CGPoint(x: 0.73, y: 0.06)
-        case .leftElbow2:     return CGPoint(x: 0.35, y: 0.30)
-        case .rightElbow2:    return CGPoint(x: 0.65, y: 0.30)
-        case .leftCorner3:    return CGPoint(x: 0.07, y: 0.05)
-        case .rightCorner3:   return CGPoint(x: 0.93, y: 0.05)
-        case .leftWing3:      return CGPoint(x: 0.13, y: 0.44)
-        case .rightWing3:     return CGPoint(x: 0.87, y: 0.44)
-        case .top3:           return CGPoint(x: 0.50, y: 0.66)
-        case .ft:             return CGPoint(x: 0.50, y: 0.34)
+        case .rim:            return CGPoint(x: 0.50, y: 0.17)
+        case .leftBaseline2:  return CGPoint(x: 0.30, y: 0.14)
+        case .rightBaseline2: return CGPoint(x: 0.70, y: 0.14)
+        case .leftElbow2:     return CGPoint(x: 0.38, y: 0.34)
+        case .rightElbow2:    return CGPoint(x: 0.62, y: 0.34)
+        case .leftCorner3:    return CGPoint(x: 0.09, y: 0.13)
+        case .rightCorner3:   return CGPoint(x: 0.91, y: 0.13)
+        case .leftWing3:      return CGPoint(x: 0.14, y: 0.46)
+        case .rightWing3:     return CGPoint(x: 0.86, y: 0.46)
+        case .top3:           return CGPoint(x: 0.50, y: 0.62)
+        case .ft:             return CGPoint(x: 0.50, y: 0.30)
         }
     }
 }
@@ -327,24 +327,31 @@ private struct ShotMap: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
+            let topY = h * 0.06
+            let hoop = CGPoint(x: w * 0.5, y: topY + h * 0.05)
+            let ftY = topY + h * 0.30
+            let keyW = w * 0.24
+            let R = w * 0.42                 // 3-point radius (in x)
             ZStack {
                 Path { p in
-                    p.move(to: CGPoint(x: w * 0.06, y: h * 0.08)); p.addLine(to: CGPoint(x: w * 0.94, y: h * 0.08))   // baseline
-                    p.addRect(CGRect(x: w * 0.40, y: h * 0.08, width: w * 0.20, height: h * 0.30))                     // key
-                    p.addEllipse(in: CGRect(x: w * 0.40, y: h * 0.28, width: w * 0.20, height: h * 0.20))              // ft circle
+                    // baseline + backboard
+                    p.move(to: CGPoint(x: w * 0.05, y: topY)); p.addLine(to: CGPoint(x: w * 0.95, y: topY))
+                    p.move(to: CGPoint(x: w * 0.41, y: topY + 4)); p.addLine(to: CGPoint(x: w * 0.59, y: topY + 4))
+                    // key + free-throw circle
+                    p.addRect(CGRect(x: hoop.x - keyW / 2, y: topY, width: keyW, height: ftY - topY))
+                    p.addEllipse(in: CGRect(x: hoop.x - keyW / 2, y: ftY - keyW / 2, width: keyW, height: keyW))
+                    // restricted-area arc under the hoop
+                    p.addArc(center: hoop, radius: w * 0.05, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
+                    // three-point line: two corner segments + a circular arc centered on the hoop
+                    p.move(to: CGPoint(x: hoop.x - R, y: topY)); p.addLine(to: CGPoint(x: hoop.x - R, y: hoop.y))
+                    p.move(to: CGPoint(x: hoop.x + R, y: topY)); p.addLine(to: CGPoint(x: hoop.x + R, y: hoop.y))
+                    p.addArc(center: hoop, radius: R, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
                 }
                 .stroke(Chalk.dust.opacity(0.4), lineWidth: 1.3)
-                Path { p in
-                    p.move(to: CGPoint(x: w * 0.11, y: h * 0.08)); p.addLine(to: CGPoint(x: w * 0.11, y: h * 0.30))
-                    p.addQuadCurve(to: CGPoint(x: w * 0.89, y: h * 0.30), control: CGPoint(x: w * 0.5, y: h * 1.02))
-                    p.addLine(to: CGPoint(x: w * 0.89, y: h * 0.08))
-                }
-                .stroke(Chalk.dust.opacity(0.4), lineWidth: 1.3)
-                Circle().stroke(Chalk.coral, lineWidth: 2).frame(width: 9, height: 9).position(x: w * 0.5, y: h * 0.115)
+                Circle().stroke(Chalk.coral, lineWidth: 2).frame(width: 9, height: 9).position(hoop)
 
                 ForEach(Array(ShotSpot.allCases.enumerated()), id: \.element) { idx, spot in
-                    dot(spot, delay: Double(idx) * 0.13,
-                        at: CGPoint(x: spot.pos.x * w, y: h * 0.08 + spot.pos.y * h * 0.9))
+                    dot(spot, delay: Double(idx) * 0.13, at: CGPoint(x: spot.pos.x * w, y: spot.pos.y * h))
                 }
             }
         }
