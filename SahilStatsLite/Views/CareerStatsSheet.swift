@@ -27,6 +27,7 @@ struct CareerStatsSheet: View {
     @State private var ageFilter: String? = nil
     @State private var deckIndex = 0
     @State private var detailGame: IDWrap? = nil
+    @AppStorage("careerCardShowTrend") private var showCardTrend = true
 
     struct IDWrap: Identifiable { let id: String }
 
@@ -132,26 +133,32 @@ struct CareerStatsSheet: View {
         return counts.max { $0.value < $1.value }?.key ?? "Lava"
     }
 
+    /// Academic year a date falls in (school year starts in August).
+    private func academicYear(_ date: Date) -> Int {
+        let cal = Calendar.current
+        let m = cal.component(.month, from: date), y = cal.component(.year, from: date)
+        return m >= 8 ? y : y - 1
+    }
+
+    /// One card per GRADE (school year), not per season — a handful of collectible cards
+    /// instead of 3-a-year. Career (overall) card is first, then grades newest→oldest.
     private var cards: [CardModel] {
         let g = filteredGames
         guard !g.isEmpty else { return [] }
-        // One card per season, newest first.
-        var bySeason: [String: [Game]] = [:]
-        var latest: [String: Date] = [:]
-        for game in g {
-            bySeason[game.season, default: []].append(game)
-            if latest[game.season] == nil || game.date > latest[game.season]! { latest[game.season] = game.date }
+        var byYear: [Int: [Game]] = [:]
+        for game in g { byYear[academicYear(game.date), default: []].append(game) }
+        let gradeCards: [CardModel] = byYear.keys.sorted(by: >).map { yr in
+            let games = byYear[yr]!
+            let rep = games.max { $0.date < $1.date }!.date
+            let span = String(format: "'%02d–'%02d", yr % 100, (yr + 1) % 100)
+            return CardModel(id: "y\(yr)", title: gradeLabel(on: rep), subtitle: span, games: games, isCareer: false)
         }
-        var out: [CardModel] = bySeason.keys.sorted { latest[$0]! > latest[$1]! }.map { s in
-            let games = bySeason[s]!
-            let repDate = games.max { $0.date < $1.date }!.date
-            return CardModel(id: s, title: s, subtitle: gradeLabel(on: repDate), games: games, isCareer: false)
+        // Overall card first when there's more than one grade to compare.
+        if gradeCards.count > 1 {
+            let career = CardModel(id: "__career", title: "Career", subtitle: "All-time", games: g, isCareer: true)
+            return [career] + gradeCards
         }
-        // All-time Career card at the end (only when there's more than one season).
-        if out.count > 1 || seasonFilter != nil {
-            out.append(CardModel(id: "__career", title: "Career", subtitle: "All seasons", games: g, isCareer: true))
-        }
-        return out
+        return gradeCards
     }
 
     // MARK: - Milestones (over the filtered set)
@@ -181,9 +188,14 @@ struct CareerStatsSheet: View {
     var body: some View {
         navWrap {
             VStack(spacing: 0) {
-                HStack {
+                HStack(spacing: 14) {
                     Text("Career Stats").font(.chalkScript(30)).foregroundColor(Chalk.chalk)
                     Spacer()
+                    Button { showCardTrend.toggle() } label: {
+                        Image(systemName: showCardTrend ? "waveform.path.ecg" : "waveform.path.ecg.rectangle")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(showCardTrend ? Chalk.yellow : Chalk.dust)
+                    }
                     if !embedded {
                         Button { dismiss() } label: {
                             Text("Done").font(.system(size: 17, weight: .semibold)).foregroundColor(Chalk.chalk)
@@ -229,6 +241,7 @@ struct CareerStatsSheet: View {
                         teamLabel: card.isCareer ? "ALL TEAMS" : dominantTeam(card.games).uppercased(),
                         agg: aggregate(card.games),
                         trend: trendValues(card.games),
+                        showTrend: showCardTrend,
                         onTapHigh: { if let h = high(card.games) { detailGame = IDWrap(id: h.id) } },
                         highLabel: high(card.games).map { "\($0.playerStats.points) vs \($0.opponent)" }
                     )
@@ -248,7 +261,7 @@ struct CareerStatsSheet: View {
                 }
             }
             if list.count > 1 {
-                Text("swipe · " + list.map { $0.isCareer ? "Career" : shortSeason($0.title) }.joined(separator: " · "))
+                Text("swipe · " + list.map { $0.title }.joined(separator: " · "))
                     .font(.system(size: 11)).foregroundColor(Chalk.dust)
                     .lineLimit(1).minimumScaleFactor(0.7)
                     .padding(.horizontal)
@@ -269,12 +282,6 @@ struct CareerStatsSheet: View {
             let slice = Array(pts[lo...i])
             return slice.reduce(0, +) / Double(slice.count)
         }
-    }
-
-    private func shortSeason(_ s: String) -> String {
-        let parts = s.split(separator: " ")
-        guard parts.count == 2, let yr = parts.last, yr.count == 4 else { return s }
-        return "\(parts[0]) '\(yr.suffix(2))"
     }
 
     // MARK: - Badges
@@ -376,6 +383,7 @@ private struct SeasonTradingCard: View {
     let teamLabel: String
     let agg: CareerStatsSheet.Agg
     let trend: [Double]
+    let showTrend: Bool
     let onTapHigh: () -> Void
     let highLabel: String?
 
@@ -431,10 +439,14 @@ private struct SeasonTradingCard: View {
                 }
                 .padding(.top, 2)
 
-                // Quiet scoring trend.
-                Sparkline(values: trend, color: accent.opacity(0.55))
-                    .frame(height: 30)
-                    .padding(.vertical, 8)
+                // Quiet scoring trend (optional).
+                if showTrend {
+                    Sparkline(values: trend, color: accent.opacity(0.55))
+                        .frame(height: 30)
+                        .padding(.vertical, 8)
+                } else {
+                    Spacer().frame(height: 12)
+                }
             }
             .padding(.horizontal, 16)
 
