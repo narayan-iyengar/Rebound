@@ -115,7 +115,18 @@ struct CareerStatsSheet: View {
         } else {
             out = duo
         }
-        guard let cgOut = ctx.createCGImage(out, from: base.extent) else { return nil }
+
+        // Crop tight to the player so he fills the card instead of floating small.
+        var cropRect = base.extent
+        let humanReq = VNDetectHumanRectanglesRequest()
+        if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([humanReq])) != nil,
+           let box = humanReq.results?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })?.boundingBox {
+            var r = VNImageRectForNormalizedRect(box, Int(base.extent.width), Int(base.extent.height))
+            r = r.insetBy(dx: -r.width * 0.14, dy: -r.height * 0.10)   // a little headroom
+            let clamped = r.intersection(base.extent)
+            if !clamped.isNull, clamped.width > 40, clamped.height > 40 { cropRect = clamped }
+        }
+        guard let cgOut = ctx.createCGImage(out, from: cropRect) else { return nil }
         return UIImage(cgImage: cgOut)
     }
 
@@ -485,19 +496,16 @@ struct CareerStatsSheet: View {
         if data.count > 1 {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Menu {
-                        ForEach(TrendStat.allCases) { s in
-                            Button { trendStat = s } label: {
-                                if trendStat == s { Label(s.rawValue, systemImage: "checkmark") } else { Text(s.rawValue) }
-                            }
-                        }
+                    Button {
+                        let all = TrendStat.allCases
+                        if let i = all.firstIndex(of: trendStat) { trendStat = all[(i + 1) % all.count] }
                     } label: {
                         HStack(spacing: 5) {
-                            Text(trendStat.rawValue).font(.chalkScript(20)).foregroundColor(Chalk.chalk)
-                            Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
+                            Text(trendStat.rawValue).font(.chalkScript(22)).foregroundColor(Chalk.chalk)
+                            Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
                         }
                     }
-                    Text("trend").font(.chalkScript(20)).foregroundColor(Chalk.dust)
+                    .buttonStyle(.plain)
                     Spacer()
                     Button {
                         let all = TrendPeriod.allCases
