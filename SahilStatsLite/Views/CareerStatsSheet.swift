@@ -121,7 +121,7 @@ struct CareerStatsSheet: View {
         // Crop to the subject's exact mask bounds (includes arms/ball), with a little margin.
         var cropRect = base.extent
         if var r = subjectRect {
-            r = r.insetBy(dx: -r.width * 0.06, dy: -r.height * 0.05)
+            r = r.insetBy(dx: -r.width * 0.08, dy: -r.height * 0.10)
             let clamped = r.intersection(base.extent)
             if !clamped.isNull, clamped.width > 40, clamped.height > 40 { cropRect = clamped }
         }
