@@ -88,17 +88,14 @@ struct CareerStatsSheet: View {
         let ctx = CIContext(options: nil)
         let base = CIImage(cgImage: cg)
 
-        // Neutral warm duotone (no green cast): near-black shadows → cream highlights.
-        let dark = CIColor(red: 0.12, green: 0.11, blue: 0.10)
-        let light = CIColor(red: 0.96, green: 0.95, blue: 0.90)
-        let duo = base
+        // Clean grayscale (no color cast) — a black-and-white player photo.
+        let gray = base
             .applyingFilter("CIPhotoEffectMono")
-            .applyingFilter("CIColorControls", parameters: ["inputContrast": 1.12, "inputBrightness": 0.02])
-            .applyingFilter("CIFalseColor", parameters: ["inputColor0": dark, "inputColor1": light])
-        let dimBg = duo.applyingFilter("CIColorControls", parameters: ["inputBrightness": -0.5, "inputContrast": 0.9])
+            .applyingFilter("CIColorControls", parameters: ["inputContrast": 1.06, "inputBrightness": 0.0])
+        let dimBg = gray.applyingFilter("CIColorControls", parameters: ["inputBrightness": -0.5, "inputContrast": 0.9])
 
         // Bright player over a dimmed background (crowd fades back; the full figure stays).
-        var composed = duo
+        var composed = gray
         let seg = VNGeneratePersonSegmentationRequest()
         seg.qualityLevel = .accurate
         seg.outputPixelFormat = kCVPixelFormatType_OneComponent8
@@ -108,7 +105,7 @@ struct CareerStatsSheet: View {
             mc = mc.transformed(by: CGAffineTransform(scaleX: base.extent.width / mc.extent.width,
                                                       y: base.extent.height / mc.extent.height))
             if let blended = CIFilter(name: "CIBlendWithMask", parameters: [
-                kCIInputImageKey: duo, kCIInputMaskImageKey: mc, kCIInputBackgroundImageKey: dimBg
+                kCIInputImageKey: gray, kCIInputMaskImageKey: mc, kCIInputBackgroundImageKey: dimBg
             ])?.outputImage {
                 composed = blended
             }
