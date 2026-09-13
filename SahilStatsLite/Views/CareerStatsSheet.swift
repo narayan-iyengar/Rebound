@@ -122,11 +122,27 @@ struct CareerStatsSheet: View {
         }
     }
 
-    /// Grade span a set of games covers, e.g. "3rd grade" or "2nd–4th grade".
-    private func gradeSpan(_ g: [Game]) -> String {
-        let grades = g.map { gradeNumber(on: $0.date) }
-        guard let lo = grades.min(), let hi = grades.max() else { return "" }
-        return lo == hi ? "\(gradeShort(lo)) grade" : "\(gradeShort(lo))–\(gradeShort(hi)) grade"
+    /// Academic year a date falls in (school year starts in August).
+    private func academicYear(_ date: Date) -> Int {
+        let cal = Calendar.current
+        let m = cal.component(.month, from: date), y = cal.component(.year, from: date)
+        return m >= 8 ? y : y - 1
+    }
+
+    /// Most recent grade in a set of games, e.g. "4th grade".
+    private func latestGrade(_ g: [Game]) -> String {
+        guard let d = g.map({ $0.date }).max() else { return "" }
+        return "\(gradeShort(gradeNumber(on: d))) grade"
+    }
+
+    /// Season-by-season (grade) rows for the card back — the real trading-card stat table.
+    func gradeRows(_ games: [Game]) -> [(label: String, agg: Agg)] {
+        var byYear: [Int: [Game]] = [:]
+        for g in games { byYear[academicYear(g.date), default: []].append(g) }
+        return byYear.keys.sorted(by: >).map { yr in
+            let gs = byYear[yr]!
+            return (gradeShort(gradeNumber(on: gs.first!.date)), aggregate(gs))
+        }
     }
 
     // MARK: - Cards
@@ -158,13 +174,13 @@ struct CareerStatsSheet: View {
         }
         teamCards.sort { $0.games.count > $1.games.count }
         var out: [CardModel] = teamCards.map {
-            CardModel(id: "t-\($0.name)", title: $0.name, subtitle: gradeSpan($0.games), games: $0.games, isCareer: false)
+            CardModel(id: "t-\($0.name)", title: $0.name, subtitle: latestGrade($0.games), games: $0.games, isCareer: false)
         }
         if !guest.isEmpty {
-            out.append(CardModel(id: "t-guest", title: "Guest", subtitle: gradeSpan(guest), games: guest, isCareer: false))
+            out.append(CardModel(id: "t-guest", title: "Guest", subtitle: latestGrade(guest), games: guest, isCareer: false))
         }
         if out.count > 1 {
-            let career = CardModel(id: "__career", title: "Career", subtitle: gradeSpan(g), games: g, isCareer: true)
+            let career = CardModel(id: "__career", title: "Career", subtitle: "All-time", games: g, isCareer: true)
             return [career] + out
         }
         return out
@@ -249,6 +265,7 @@ struct CareerStatsSheet: View {
                         accent: card.isCareer ? Chalk.yellow : TeamPalette.color(for: card.title),
                         teamLabel: card.title.uppercased(),
                         agg: aggregate(card.games),
+                        rows: gradeRows(card.games),
                         trend: trendValues(card.games),
                         showTrend: showCardTrend,
                         onTapHigh: { if let h = high(card.games) { detailGame = IDWrap(id: h.id) } },
@@ -391,6 +408,7 @@ private struct SeasonTradingCard: View {
     let accent: Color
     let teamLabel: String
     let agg: CareerStatsSheet.Agg
+    let rows: [(label: String, agg: CareerStatsSheet.Agg)]
     let trend: [Double]
     let showTrend: Bool
     let onTapHigh: () -> Void
@@ -569,20 +587,41 @@ private struct SeasonTradingCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 namePlate(right: "STAT LINE")
 
-                VStack(spacing: 14) {
-                    Text("\(title) · \(subtitle)").font(.system(size: 13, weight: .semibold)).foregroundColor(Chalk.chalkDim)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    shootBar("2PT", agg.twoPct, agg.twoMade, agg.twoAtt, Chalk.sky)
-                    shootBar("3PT", agg.tpPct, agg.tpMade, agg.tpAtt, Chalk.yellow)
-                    shootBar("FT", agg.ftPct, agg.ftMade, agg.ftAtt, Chalk.green)
-
-                    HStack(spacing: 10) {
-                        mini(String(format: "%.0f%%", agg.eFG), "eFG")
-                        mini(String(format: "%.0f%%", agg.ts), "TS")
-                        mini(String(format: "%.1f", agg.ppg), "PPG")
-                        mini("\(agg.totalPoints)", "pts")
+                VStack(spacing: 12) {
+                    // Season-by-season table — the real card back.
+                    VStack(spacing: 0) {
+                        tableRow("", "GP", "PPG", "RPG", "APG", "FG", header: true)
+                        ForEach(rows.indices, id: \.self) { i in
+                            let r = rows[i]
+                            tableRow(r.label,
+                                     "\(r.agg.games)",
+                                     String(format: "%.1f", r.agg.ppg),
+                                     String(format: "%.1f", r.agg.rpg),
+                                     String(format: "%.1f", r.agg.apg),
+                                     "\(Int(r.agg.fgPct.rounded()))")
+                        }
+                        Rectangle().fill(Chalk.chalk.opacity(0.18)).frame(height: 1)
+                        tableRow("CAR",
+                                 "\(agg.games)",
+                                 String(format: "%.1f", agg.ppg),
+                                 String(format: "%.1f", agg.rpg),
+                                 String(format: "%.1f", agg.apg),
+                                 "\(Int(agg.fgPct.rounded()))",
+                                 total: true)
                     }
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+
+                    // Shooting splits, compact.
+                    HStack(spacing: 0) {
+                        splitCell("2P", agg.twoPct, Chalk.sky)
+                        splitCell("3P", agg.tpPct, Chalk.yellow)
+                        splitCell("FT", agg.ftPct, Chalk.green)
+                        splitCell("eFG", agg.eFG, Chalk.chalk)
+                        splitCell("TS", agg.ts, Chalk.chalk)
+                    }
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
 
                     if let h = highLabel {
                         Button(action: onTapHigh) {
@@ -598,7 +637,7 @@ private struct SeasonTradingCard: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(16)
+                .padding(14)
 
                 Spacer(minLength: 0)
 
@@ -610,30 +649,31 @@ private struct SeasonTradingCard: View {
         )
     }
 
-    private func shootBar(_ label: String, _ pct: Double, _ made: Int, _ att: Int, _ color: Color) -> some View {
-        VStack(spacing: 4) {
-            HStack {
-                Text(label).font(.system(size: 12, weight: .semibold)).foregroundColor(color)
-                Spacer()
-                Text("\(made)/\(att) · \(Int(pct.rounded()))%").font(.system(size: 11)).monospacedDigit().foregroundColor(Chalk.dust)
+    private func tableRow(_ c0: String, _ c1: String, _ c2: String, _ c3: String, _ c4: String, _ c5: String,
+                          header: Bool = false, total: Bool = false) -> some View {
+        let color: Color = header ? Chalk.dust : (total ? accent : Chalk.chalk)
+        let weight: Font.Weight = (header || total) ? .heavy : .semibold
+        let size: CGFloat = header ? 10 : 12
+        return HStack(spacing: 0) {
+            Text(c0).font(.system(size: header ? 10 : 12, weight: .heavy)).foregroundColor(total ? accent : Chalk.dust)
+                .frame(width: 42, alignment: .leading)
+            Group {
+                Text(c1); Text(c2); Text(c3); Text(c4); Text(c5)
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.black.opacity(0.3)).frame(height: 8)
-                    Capsule().fill(color).frame(width: max(4, geo.size.width * CGFloat(min(pct, 100) / 100)), height: 8)
-                }
-            }
-            .frame(height: 8)
+            .font(.system(size: size, weight: weight)).monospacedDigit().foregroundColor(color)
+            .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, 12).padding(.vertical, header ? 5 : 6)
     }
 
-    private func mini(_ value: String, _ label: String) -> some View {
+    private func splitCell(_ label: String, _ pct: Double, _ color: Color) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(.system(size: 16, weight: .heavy)).monospacedDigit().foregroundColor(Chalk.crisp)
+            Text("\(Int(pct.rounded()))%").font(.system(size: 14, weight: .heavy)).monospacedDigit().foregroundColor(color)
             Text(label).font(.system(size: 9)).foregroundColor(Chalk.dust)
         }
         .frame(maxWidth: .infinity)
     }
+
 }
 
 // A tiny inline trend line for the card's quiet scoring arc.
