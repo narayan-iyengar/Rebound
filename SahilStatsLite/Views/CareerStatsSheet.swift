@@ -77,41 +77,46 @@ struct CareerStatsSheet: View {
         }
     }
 
-    /// Turn a photo into a white chalk line-drawing on a transparent ground (so the board
-    /// shows through) — looks hand-drawn, matching the chalkboard theme.
-    /// Isolate the person (drops the crowd/background) so the stylization has a clean subject.
-    private static func personCutout(_ image: UIImage) -> CIImage? {
+    /// Stylized cutout: segment Sahil out of the crowd, then map him to a clean two-tone
+    /// (duotone) chalk portrait — dark board shadows → cream highlights — on a transparent
+    /// ground. Reads as a screen-printed player portrait rather than noisy line-art. Falls
+    /// back to a full-frame duotone if no person is found.
+    private static func chalkSketch(_ image: UIImage) -> UIImage? {
         guard let cg = image.cgImage else { return nil }
+        let ctx = CIContext(options: nil)
+        let base = CIImage(cgImage: cg)
+
+        // Person mask (may be nil if segmentation finds nobody).
+        var maskCI: CIImage? = nil
         let req = VNGeneratePersonSegmentationRequest()
         req.qualityLevel = .accurate
         req.outputPixelFormat = kCVPixelFormatType_OneComponent8
-        let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-        guard (try? handler.perform([req])) != nil, let mask = req.results?.first?.pixelBuffer else { return nil }
-        let base = CIImage(cgImage: cg)
-        var maskCI = CIImage(cvPixelBuffer: mask)
-        let sx = base.extent.width / maskCI.extent.width
-        let sy = base.extent.height / maskCI.extent.height
-        maskCI = maskCI.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
-        return CIFilter(name: "CIBlendWithMask", parameters: [
-            kCIInputImageKey: base, kCIInputMaskImageKey: maskCI, kCIInputBackgroundImageKey: CIImage.empty()
-        ])?.outputImage
-    }
+        if (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([req])) != nil,
+           let m = req.results?.first?.pixelBuffer {
+            var mc = CIImage(cvPixelBuffer: m)
+            mc = mc.transformed(by: CGAffineTransform(scaleX: base.extent.width / mc.extent.width,
+                                                      y: base.extent.height / mc.extent.height))
+            maskCI = mc
+        }
 
-    /// Chalk portrait: cut out Sahil (no crowd), then soft edge-work → white strokes on a
-    /// transparent ground so it reads as a hand-drawn chalk figure on the board. Falls back
-    /// to the whole frame if segmentation finds no person.
-    private static func chalkSketch(_ image: UIImage) -> UIImage? {
-        let ctx = CIContext(options: nil)
-        let subject = personCutout(image) ?? CIImage(image: image)
-        guard let base = subject else { return nil }
-        let cropped = base.cropped(to: base.extent.isInfinite ? (CIImage(image: image)?.extent ?? .zero) : base.extent)
-        let mono = cropped
-            .applyingFilter("CINoiseReduction", parameters: ["inputNoiseLevel": 0.2, "inputSharpness": 0.4])
+        // Duotone: grayscale + a little contrast, then map shadows→board, highlights→chalk.
+        let dark = CIColor(red: 0.11, green: 0.15, blue: 0.13)
+        let light = CIColor(red: 0.95, green: 0.94, blue: 0.89)
+        let duo = base
             .applyingFilter("CIPhotoEffectMono")
-        let edges = mono.applyingFilter("CIEdgeWork", parameters: ["inputRadius": 1.6])
-        let masked = edges.applyingFilter("CIMaskToAlpha")
-        guard let cg = ctx.createCGImage(masked, from: masked.extent) else { return nil }
-        return UIImage(cgImage: cg)
+            .applyingFilter("CIColorControls", parameters: ["inputContrast": 1.15, "inputBrightness": 0.02])
+            .applyingFilter("CIFalseColor", parameters: ["inputColor0": dark, "inputColor1": light])
+
+        let out: CIImage
+        if let maskCI {
+            out = CIFilter(name: "CIBlendWithMask", parameters: [
+                kCIInputImageKey: duo, kCIInputMaskImageKey: maskCI, kCIInputBackgroundImageKey: CIImage.empty()
+            ])?.outputImage ?? duo
+        } else {
+            out = duo
+        }
+        guard let cgOut = ctx.createCGImage(out, from: base.extent) else { return nil }
+        return UIImage(cgImage: cgOut)
     }
 
     struct IDWrap: Identifiable { let id: String }
@@ -340,7 +345,7 @@ struct CareerStatsSheet: View {
             }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 172, alignment: .leading)
         .background(courtBackground)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
@@ -356,18 +361,17 @@ struct CareerStatsSheet: View {
                 Group {
                     if let img = display {
                         Image(uiImage: img).resizable().scaledToFill()
-                            .colorMultiply(sketchMode ? Chalk.chalk : .white)
                     } else {
                         VStack(spacing: 6) {
                             Image(systemName: "person.crop.rectangle.badge.plus")
-                                .font(.system(size: 24)).foregroundColor(accent)
-                            Text("Add photo").font(.system(size: 10, weight: .semibold)).foregroundColor(Chalk.dust)
+                                .font(.system(size: 28)).foregroundColor(accent)
+                            Text("Add photo").font(.system(size: 11, weight: .semibold)).foregroundColor(Chalk.dust)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(accent.opacity(0.10))
                     }
                 }
-                .frame(width: 92, height: 118)
+                .frame(width: 116, height: 148)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(accent.opacity(display == nil ? 0.4 : 0.6),
