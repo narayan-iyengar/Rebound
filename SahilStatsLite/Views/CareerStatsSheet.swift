@@ -39,9 +39,16 @@ struct CareerStatsSheet: View {
     @State private var photoItem: PhotosPickerItem? = nil
     @AppStorage("cardPhotoSketch") private var sketchMode = true   // show chalk sketch vs raw photo
 
-    // Scoring-trend bucket period.
+    // Scoring-trend bucket period + which stat is trended.
     enum TrendPeriod: String, CaseIterable, Identifiable { case week = "Week", month = "Month", year = "Year"; var id: String { rawValue } }
     @State private var trendPeriod: TrendPeriod = .month
+
+    enum TrendStat: String, CaseIterable, Identifiable {
+        case points = "Points", rebounds = "Rebounds", assists = "Assists", steals = "Steals", fg = "FG%"
+        var id: String { rawValue }
+        var isPct: Bool { self == .fg }
+    }
+    @State private var trendStat: TrendStat = .points
 
     // MARK: - Photo storage + chalk-sketch rendering
 
@@ -71,14 +78,14 @@ struct CareerStatsSheet: View {
     private func chalkSketch(_ image: UIImage) -> UIImage? {
         guard let ci = CIImage(image: image) else { return nil }
         let ctx = CIContext(options: nil)
-        let mono = ci.applyingFilter("CIPhotoEffectMono")
-        let line = mono.applyingFilter("CILineOverlay", parameters: [
-            "inputNRNoiseLevel": 0.07, "inputNRSharpness": 0.71,
-            "inputEdgeIntensity": 1.0, "inputThreshold": 0.12, "inputContrast": 50.0
-        ])
-        // Line overlay = dark lines on white. Invert → light lines on dark, then mask the
-        // dark ground to transparent so only the (now white) strokes remain.
-        let masked = line.applyingFilter("CIColorInvert").applyingFilter("CIMaskToAlpha")
+        // Denoise hard first so a busy crowd background doesn't turn to grain, then a soft
+        // edge-work pass gives clean white "chalk" strokes on black; mask black → transparent.
+        let denoised = ci
+            .applyingFilter("CINoiseReduction", parameters: ["inputNoiseLevel": 0.25, "inputSharpness": 0.4])
+            .applyingFilter("CIMedianFilter")
+        let mono = denoised.applyingFilter("CIPhotoEffectMono")
+        let edges = mono.applyingFilter("CIEdgeWork", parameters: ["inputRadius": 2.2])
+        let masked = edges.applyingFilter("CIMaskToAlpha")
         guard let cg = ctx.createCGImage(masked, from: masked.extent) else { return nil }
         return UIImage(cgImage: cg)
     }
@@ -398,6 +405,19 @@ struct CareerStatsSheet: View {
 
     private struct Bucket: Identifiable { let id = UUID(); let label: String; let ppg: Double }
 
+    private func bucketValue(_ gs: [Game]) -> Double {
+        switch trendStat {
+        case .points:   return Double(gs.reduce(0) { $0 + $1.playerStats.points }) / Double(gs.count)
+        case .rebounds: return Double(gs.reduce(0) { $0 + $1.playerStats.rebounds }) / Double(gs.count)
+        case .assists:  return Double(gs.reduce(0) { $0 + $1.playerStats.assists }) / Double(gs.count)
+        case .steals:   return Double(gs.reduce(0) { $0 + $1.playerStats.steals }) / Double(gs.count)
+        case .fg:
+            let m = gs.reduce(0) { $0 + $1.playerStats.totalFGMade }
+            let a = gs.reduce(0) { $0 + $1.playerStats.totalFGAttempted }
+            return a > 0 ? Double(m) / Double(a) * 100 : 0
+        }
+    }
+
     private func buckets(key: (Game) -> String, label: (Game) -> String) -> [Bucket] {
         var groups: [String: [Game]] = [:]
         var earliest: [String: Date] = [:]
@@ -409,8 +429,7 @@ struct CareerStatsSheet: View {
         return groups.keys.sorted { earliest[$0]! < earliest[$1]! }.map { k in
             let gs = groups[k]!
             let anchor = gs.min { $0.date < $1.date }!
-            let ppg = Double(gs.reduce(0) { $0 + $1.playerStats.points }) / Double(gs.count)
-            return Bucket(label: label(anchor), ppg: ppg)
+            return Bucket(label: label(anchor), ppg: bucketValue(gs))
         }
     }
 
@@ -438,7 +457,19 @@ struct CareerStatsSheet: View {
         if data.count > 1 {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Text("Scoring trend").font(.chalkScript(20)).foregroundColor(Chalk.chalk)
+                    Menu {
+                        ForEach(TrendStat.allCases) { s in
+                            Button { trendStat = s } label: {
+                                if trendStat == s { Label(s.rawValue, systemImage: "checkmark") } else { Text(s.rawValue) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(trendStat.rawValue).font(.chalkScript(20)).foregroundColor(Chalk.chalk)
+                            Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
+                        }
+                    }
+                    Text("trend").font(.chalkScript(20)).foregroundColor(Chalk.dust)
                     Spacer()
                     HStack(spacing: 0) {
                         ForEach(TrendPeriod.allCases) { p in
