@@ -233,13 +233,13 @@ struct CareerStatsSheet: View {
                 Spacer()
                 rarityBadge(a.games, accent)
             }
-            Spacer()
+            Spacer(minLength: 12)
             Text(kicker.uppercased())
-                .font(.system(size: 12, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
-            Text("Sahil").font(.chalkHand(64)).foregroundColor(Chalk.chalk)
+                .font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Chalk.dust)
+            Text("Sahil").font(.chalkHand(50)).foregroundColor(Chalk.chalk)
                 .lineLimit(1).minimumScaleFactor(0.5)
-            RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 52, height: 4).padding(.top, 8)
             HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 40, height: 4)
                 Text("\(a.games) game\(a.games == 1 ? "" : "s")").font(.system(size: 12)).foregroundColor(Chalk.dust)
                 Text("·").foregroundColor(Chalk.dust)
                 HStack(spacing: 2) {
@@ -248,10 +248,10 @@ struct CareerStatsSheet: View {
                     Text("\(a.losses)").foregroundColor(Chalk.coral)
                 }.font(.system(size: 12, weight: .bold)).monospacedDigit()
             }
-            .padding(.top, 10)
+            .padding(.top, 8)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 200, alignment: .leading)
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
         .background(courtBackground)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
@@ -348,14 +348,16 @@ struct CareerStatsSheet: View {
                     Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
                     Text(trendUnit).font(.system(size: 11, weight: .medium)).foregroundColor(Chalk.dust)
                 }
-                Chart(data) { b in
-                    AreaMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
-                        .foregroundStyle(posterAccent.opacity(0.10)).interpolationMethod(.catmullRom)
-                    LineMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
-                        .foregroundStyle(posterAccent)
-                        .lineStyle(StrokeStyle(lineWidth: 2.8, lineJoin: .round)).interpolationMethod(.catmullRom)
-                    PointMark(x: .value("Period", b.label), y: .value("PPG", b.ppg))
-                        .foregroundStyle(posterAccent).symbolSize(24)
+                Chart {
+                    ForEach(Array(data.enumerated()), id: \.offset) { i, b in
+                        AreaMark(x: .value("Period", i), y: .value("PPG", b.ppg))
+                            .foregroundStyle(posterAccent.opacity(0.10)).interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Period", i), y: .value("PPG", b.ppg))
+                            .foregroundStyle(posterAccent)
+                            .lineStyle(StrokeStyle(lineWidth: 2.8, lineJoin: .round)).interpolationMethod(.catmullRom)
+                        PointMark(x: .value("Period", i), y: .value("PPG", b.ppg))
+                            .foregroundStyle(posterAccent).symbolSize(22)
+                    }
                 }
                 .frame(height: 170)
                 .chartYAxis {
@@ -365,8 +367,11 @@ struct CareerStatsSheet: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                        AxisValueLabel().foregroundStyle(Chalk.dust)
+                    // ~5 evenly-spaced labels so months never squish, no matter how many buckets.
+                    AxisMarks(values: Array(Swift.stride(from: 0, to: data.count, by: max(1, (data.count - 1) / 4)))) { v in
+                        if let i = v.as(Int.self), i >= 0, i < data.count {
+                            AxisValueLabel { Text(data[i].label).font(.system(size: 10)).foregroundColor(Chalk.dust) }
+                        }
                     }
                 }
                 .padding(.top, 4)
