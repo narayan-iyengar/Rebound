@@ -409,81 +409,149 @@ private struct SeasonTradingCard: View {
         .onTapGesture { flipped.toggle() }
     }
 
+    // MARK: - Premium chrome (foil frame, inner mat, depth + court watermark)
+
+    private var foilStroke: LinearGradient {
+        LinearGradient(colors: [accent.opacity(0.55), .white.opacity(0.9), accent,
+                                .white.opacity(0.55), accent.opacity(0.7)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var cardBackground: some View {
+        ZStack {
+            LinearGradient(colors: [Chalk.board2, Chalk.board], startPoint: .top, endPoint: .bottom)
+            Image(systemName: "basketball.fill")
+                .resizable().scaledToFit()
+                .foregroundColor(Chalk.chalk.opacity(0.04))
+                .frame(width: 250)
+                .rotationEffect(.degrees(-12))
+                .offset(x: 85, y: 90)
+        }
+    }
+
+    private func chrome<V: View>(_ content: V) -> some View {
+        content
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .inset(by: 7).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))       // inner mat
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(foilStroke, lineWidth: 3))                             // foil edge
+            .shadow(color: .black.opacity(0.45), radius: 12, x: 0, y: 6)
+    }
+
+    private func rarity(_ games: Int) -> (stars: Int, label: String) {
+        if games >= 30 { return (3, "FRANCHISE") }
+        if games >= 10 { return (2, "VETERAN") }
+        return (1, "ROOKIE")
+    }
+
+    private var emblem: some View {
+        ZStack {
+            Circle().fill(accent.opacity(0.18))
+            Circle().strokeBorder(accent, lineWidth: 2)
+            Text(String(teamLabel.prefix(1))).font(.system(size: 20, weight: .heavy)).foregroundColor(accent)
+        }
+        .frame(width: 44, height: 44)
+    }
+
+    private var rarityBadge: some View {
+        let r = rarity(agg.games)
+        return HStack(spacing: 4) {
+            HStack(spacing: 1) {
+                ForEach(0..<3, id: \.self) { i in
+                    Image(systemName: i < r.stars ? "star.fill" : "star")
+                        .font(.system(size: 8))
+                        .foregroundColor(i < r.stars ? accent : Chalk.dust.opacity(0.4))
+                }
+            }
+            Text(r.label).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundColor(accent)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(accent.opacity(0.14), in: Capsule())
+        .overlay(Capsule().stroke(accent.opacity(0.4), lineWidth: 1))
+    }
+
+    private func namePlate(right: String) -> some View {
+        HStack {
+            Text(teamLabel).font(.system(size: 14, weight: .black)).tracking(1.5).foregroundColor(Chalk.board)
+            Spacer()
+            Text(right).font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.board.opacity(0.8))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(LinearGradient(colors: [accent, accent.opacity(0.8)], startPoint: .leading, endPoint: .trailing))
+        .overlay(Rectangle().fill(.white.opacity(0.25)).frame(height: 1), alignment: .top)  // top sheen
+    }
+
     // MARK: Front
 
     private var front: some View {
-        VStack(spacing: 0) {
-            // Team-color header band: team name + grade span.
-            HStack {
-                Text(teamLabel).font(.system(size: 13, weight: .heavy)).tracking(1).foregroundColor(Chalk.board)
-                Spacer()
-                Text(subtitle).font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.board.opacity(0.85))
-            }
-            .padding(.horizontal, 14).padding(.vertical, 9)
-            .background(accent)
+        chrome(
+            VStack(spacing: 0) {
+                namePlate(right: subtitle)
 
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Sahil").font(.chalkHand(34)).foregroundColor(Chalk.chalk)
-                    Spacer()
-                    Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
-                        .font(.system(size: 12, weight: .medium)).foregroundColor(Chalk.dust)
-                }
-                .padding(.top, 12)
-
-                // PPG marquee + record.
-                HStack(alignment: .lastTextBaseline, spacing: 10) {
-                    Text(String(format: "%.1f", agg.ppg))
-                        .font(.system(size: 60, weight: .heavy)).monospacedDigit().foregroundColor(accent)
-                    Text("PPG").font(.system(size: 15, weight: .bold)).foregroundColor(Chalk.chalkDim)
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 1) {
-                        HStack(spacing: 2) {
-                            Text("\(agg.wins)").foregroundColor(Chalk.green)
-                            Text("–").foregroundColor(Chalk.dust)
-                            Text("\(agg.losses)").foregroundColor(Chalk.coral)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 10) {
+                        emblem
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Sahil").font(.chalkHand(30)).foregroundColor(Chalk.chalk)
+                            Text("\(agg.games) game\(agg.games == 1 ? "" : "s")")
+                                .font(.system(size: 11)).foregroundColor(Chalk.dust)
                         }
-                        .font(.system(size: 24, weight: .heavy)).monospacedDigit()
-                        Text("record").font(.system(size: 10)).foregroundColor(Chalk.dust)
+                        Spacer()
+                        rarityBadge
+                    }
+                    .padding(.top, 14)
+
+                    HStack(alignment: .lastTextBaseline, spacing: 10) {
+                        Text(String(format: "%.1f", agg.ppg))
+                            .font(.system(size: 56, weight: .heavy)).monospacedDigit()
+                            .foregroundColor(accent)
+                            .shadow(color: accent.opacity(0.35), radius: 8)
+                        Text("PPG").font(.system(size: 15, weight: .bold)).foregroundColor(Chalk.chalkDim)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 1) {
+                            HStack(spacing: 2) {
+                                Text("\(agg.wins)").foregroundColor(Chalk.green)
+                                Text("–").foregroundColor(Chalk.dust)
+                                Text("\(agg.losses)").foregroundColor(Chalk.coral)
+                            }
+                            .font(.system(size: 24, weight: .heavy)).monospacedDigit()
+                            Text("record").font(.system(size: 10)).foregroundColor(Chalk.dust)
+                        }
+                    }
+                    .padding(.top, 8)
+
+                    if showTrend {
+                        Sparkline(values: trend, color: accent.opacity(0.55))
+                            .frame(height: 28).padding(.vertical, 8)
+                    } else {
+                        Spacer().frame(height: 12)
                     }
                 }
-                .padding(.top, 2)
+                .padding(.horizontal, 16)
 
-                // Quiet scoring trend (optional).
-                if showTrend {
-                    Sparkline(values: trend, color: accent.opacity(0.55))
-                        .frame(height: 30)
-                        .padding(.vertical, 8)
-                } else {
-                    Spacer().frame(height: 12)
+                Spacer(minLength: 0)
+
+                HStack(spacing: 0) {
+                    strip(String(format: "%.1f", agg.rpg), "RPG")
+                    strip(String(format: "%.1f", agg.apg), "APG")
+                    strip(String(format: "%.1f", agg.spg), "SPG")
+                    strip(String(format: "%.1f", agg.bpg), "BPG")
+                    strip(String(format: "%.0f%%", agg.fgPct), "FG")
                 }
-            }
-            .padding(.horizontal, 16)
+                .background(Color.black.opacity(0.22))
+                .overlay(Rectangle().fill(Chalk.chalk.opacity(0.1)).frame(height: 1), alignment: .top)
 
-            Spacer(minLength: 0)
-
-            // Stat-line strip.
-            HStack(spacing: 0) {
-                strip(String(format: "%.1f", agg.rpg), "RPG")
-                strip(String(format: "%.1f", agg.apg), "APG")
-                strip(String(format: "%.1f", agg.spg), "SPG")
-                strip(String(format: "%.1f", agg.bpg), "BPG")
-                strip(String(format: "%.0f%%", agg.fgPct), "FG")
+                HStack {
+                    Text("\(agg.totalPoints) total pts").font(.system(size: 10)).foregroundColor(Chalk.dust)
+                    Spacer()
+                    Text("tap to flip ›").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(Color.black.opacity(0.22))
             }
-            .background(Chalk.board.opacity(0.5))
-
-            HStack {
-                Text("\(agg.totalPoints) total pts")
-                    .font(.system(size: 10)).foregroundColor(Chalk.dust)
-                Spacer()
-                Text("★ tap to flip").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(Chalk.board.opacity(0.5))
-        }
-        .background(Chalk.board2)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(accent, lineWidth: 2))
+        )
     }
 
     private func strip(_ value: String, _ label: String) -> some View {
@@ -497,56 +565,49 @@ private struct SeasonTradingCard: View {
     // MARK: Back — full line
 
     private var back: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(teamLabel).font(.system(size: 13, weight: .heavy)).tracking(1).foregroundColor(Chalk.board)
-                Spacer()
-                Text("STAT LINE").font(.system(size: 11, weight: .bold)).foregroundColor(Chalk.board.opacity(0.85))
-            }
-            .padding(.horizontal, 14).padding(.vertical, 9)
-            .background(accent)
+        chrome(
+            VStack(alignment: .leading, spacing: 0) {
+                namePlate(right: "STAT LINE")
 
-            VStack(spacing: 14) {
-                Text("\(title) · \(subtitle)").font(.system(size: 13, weight: .semibold)).foregroundColor(Chalk.chalkDim)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 14) {
+                    Text("\(title) · \(subtitle)").font(.system(size: 13, weight: .semibold)).foregroundColor(Chalk.chalkDim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                shootBar("2PT", agg.twoPct, agg.twoMade, agg.twoAtt, Chalk.sky)
-                shootBar("3PT", agg.tpPct, agg.tpMade, agg.tpAtt, Chalk.yellow)
-                shootBar("FT", agg.ftPct, agg.ftMade, agg.ftAtt, Chalk.green)
+                    shootBar("2PT", agg.twoPct, agg.twoMade, agg.twoAtt, Chalk.sky)
+                    shootBar("3PT", agg.tpPct, agg.tpMade, agg.tpAtt, Chalk.yellow)
+                    shootBar("FT", agg.ftPct, agg.ftMade, agg.ftAtt, Chalk.green)
 
-                HStack(spacing: 10) {
-                    mini(String(format: "%.0f%%", agg.eFG), "eFG")
-                    mini(String(format: "%.0f%%", agg.ts), "TS")
-                    mini(String(format: "%.1f", agg.ppg), "PPG")
-                    mini("\(agg.totalPoints)", "pts")
-                }
-
-                if let h = highLabel {
-                    Button(action: onTapHigh) {
-                        HStack(spacing: 6) {
-                            Text("⭐ Career high").font(.system(size: 12, weight: .semibold)).foregroundColor(Chalk.dust)
-                            Spacer()
-                            Text(h).font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.yellow)
-                            Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
-                        }
-                        .padding(10)
-                        .background(Chalk.board.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                    HStack(spacing: 10) {
+                        mini(String(format: "%.0f%%", agg.eFG), "eFG")
+                        mini(String(format: "%.0f%%", agg.ts), "TS")
+                        mini(String(format: "%.1f", agg.ppg), "PPG")
+                        mini("\(agg.totalPoints)", "pts")
                     }
-                    .buttonStyle(.plain)
+
+                    if let h = highLabel {
+                        Button(action: onTapHigh) {
+                            HStack(spacing: 6) {
+                                Text("⭐ Career high").font(.system(size: 12, weight: .semibold)).foregroundColor(Chalk.dust)
+                                Spacer()
+                                Text(h).font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.yellow)
+                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundColor(Chalk.dust)
+                            }
+                            .padding(10)
+                            .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .padding(16)
+
+                Spacer(minLength: 0)
+
+                Text("‹ tap to flip back").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Color.black.opacity(0.22))
             }
-            .padding(16)
-
-            Spacer(minLength: 0)
-
-            Text("★ tap to flip back").font(.system(size: 10, weight: .bold)).foregroundColor(accent)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(Chalk.board.opacity(0.5))
-        }
-        .background(Chalk.board2)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(accent, lineWidth: 2))
+        )
     }
 
     private func shootBar(_ label: String, _ pct: Double, _ made: Int, _ att: Int, _ color: Color) -> some View {
