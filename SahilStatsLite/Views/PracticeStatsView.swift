@@ -20,15 +20,31 @@ import Combine
 
 // MARK: - Model
 
-enum ShotRange { case two, three, ft }
+enum ShotRange {
+    case two, three, ft
+    /// Dots are color-coded by shot type.
+    var tint: Color {
+        switch self {
+        case .two:   return Chalk.yellow
+        case .three: return Chalk.sky
+        case .ft:    return Chalk.green
+        }
+    }
+    var label: String {
+        switch self { case .two: return "2PT"; case .three: return "3PT"; case .ft: return "FT" }
+    }
+}
 
 enum ShotSpot: String, CaseIterable, Codable, Identifiable {
+    // Layups
+    case leftLayup = "Left-hand layup"
+    case rightLayup = "Right-hand layup"
     // 2-pointers
-    case rim = "Layup / rim"
     case leftBaseline2 = "Left baseline"
     case rightBaseline2 = "Right baseline"
     case leftElbow2 = "Left elbow"
     case rightElbow2 = "Right elbow"
+    case foulLine2 = "Foul-line jumper"
     // 3-pointers
     case leftCorner3 = "Left corner 3"
     case rightCorner3 = "Right corner 3"
@@ -42,7 +58,7 @@ enum ShotSpot: String, CaseIterable, Codable, Identifiable {
 
     var range: ShotRange {
         switch self {
-        case .rim, .leftBaseline2, .rightBaseline2, .leftElbow2, .rightElbow2: return .two
+        case .leftLayup, .rightLayup, .leftBaseline2, .rightBaseline2, .leftElbow2, .rightElbow2, .foulLine2: return .two
         case .leftCorner3, .rightCorner3, .leftWing3, .rightWing3, .top3: return .three
         case .ft: return .ft
         }
@@ -51,17 +67,19 @@ enum ShotSpot: String, CaseIterable, Codable, Identifiable {
     /// Normalized position on the half court (x, y each 0…1 of the map's frame).
     var pos: CGPoint {
         switch self {
-        case .rim:            return CGPoint(x: 0.50, y: 0.17)
+        case .leftLayup:      return CGPoint(x: 0.40, y: 0.17)
+        case .rightLayup:     return CGPoint(x: 0.60, y: 0.17)
         case .leftBaseline2:  return CGPoint(x: 0.30, y: 0.14)
         case .rightBaseline2: return CGPoint(x: 0.70, y: 0.14)
-        case .leftElbow2:     return CGPoint(x: 0.38, y: 0.34)
-        case .rightElbow2:    return CGPoint(x: 0.62, y: 0.34)
+        case .leftElbow2:     return CGPoint(x: 0.38, y: 0.42)
+        case .rightElbow2:    return CGPoint(x: 0.62, y: 0.42)
+        case .foulLine2:      return CGPoint(x: 0.50, y: 0.46)
         case .leftCorner3:    return CGPoint(x: 0.09, y: 0.13)
         case .rightCorner3:   return CGPoint(x: 0.91, y: 0.13)
         case .leftWing3:      return CGPoint(x: 0.14, y: 0.46)
         case .rightWing3:     return CGPoint(x: 0.86, y: 0.46)
         case .top3:           return CGPoint(x: 0.50, y: 0.62)
-        case .ft:             return CGPoint(x: 0.50, y: 0.30)
+        case .ft:             return CGPoint(x: 0.50, y: 0.46)
         }
     }
 }
@@ -199,7 +217,9 @@ struct PracticeStatsView: View {
                              set: { entryDate = $0?.date })) { wrap in
             ShootingEntrySheet(date: wrap.date)
         }
-        .sheet(item: $trendSpot) { spot in ShotTrendSheet(spot: spot) }
+        .sheet(item: $trendSpot) { spot in
+            ShotTrendSheet(spots: spot == .ft ? [.ft, .foulLine2] : [spot])
+        }
     }
 
     private struct IdentifiableDate: Identifiable { let date: Date; var id: String { PracticeShootingStore.dateKey(date) } }
@@ -260,7 +280,6 @@ struct PracticeStatsView: View {
             HStack(spacing: 10) {
                 Text("Shot map").font(.chalkScript(20)).foregroundColor(Chalk.chalk)
                 Rectangle().fill(Chalk.chalk.opacity(0.12)).frame(height: 1)
-                Text("tap a spot").font(.system(size: 11)).foregroundColor(Chalk.dust)
             }
             ShotMap(store: store) { spot in trendSpot = spot }
                 .frame(height: 260)
@@ -306,6 +325,7 @@ struct PracticeStatsView: View {
     private var monthTitle: String { let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f.string(from: month) }
     private func pctText(_ p: Double?) -> String { p.map { "\(Int($0.rounded()))%" } ?? "—" }
 
+
     private var monthDays: [Date?] {
         let cal = Calendar.current
         guard let interval = cal.dateInterval(of: .month, for: month),
@@ -329,41 +349,82 @@ private struct ShotMap: View {
             let w = geo.size.width, h = geo.size.height
             let topY = h * 0.06
             let hoop = CGPoint(x: w * 0.5, y: topY + h * 0.05)
-            let ftY = topY + h * 0.30
-            let keyW = w * 0.24
+            let ftC = CGPoint(x: w * 0.5, y: topY + h * 0.40)
+            let keyW = w * 0.24, ftR = keyW / 2
             let R = w * 0.42                 // 3-point radius (in x)
+            let ink = Chalk.dust.opacity(0.45)
             ZStack {
+                // baseline, backboard, three-point corner segments
                 Path { p in
-                    // baseline + backboard
                     p.move(to: CGPoint(x: w * 0.05, y: topY)); p.addLine(to: CGPoint(x: w * 0.95, y: topY))
                     p.move(to: CGPoint(x: w * 0.41, y: topY + 4)); p.addLine(to: CGPoint(x: w * 0.59, y: topY + 4))
-                    // key + free-throw circle
-                    p.addRect(CGRect(x: hoop.x - keyW / 2, y: topY, width: keyW, height: ftY - topY))
-                    p.addEllipse(in: CGRect(x: hoop.x - keyW / 2, y: ftY - keyW / 2, width: keyW, height: keyW))
-                    // restricted-area arc under the hoop
-                    p.addArc(center: hoop, radius: w * 0.05, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
-                    // three-point line: two corner segments + a circular arc centered on the hoop
                     p.move(to: CGPoint(x: hoop.x - R, y: topY)); p.addLine(to: CGPoint(x: hoop.x - R, y: hoop.y))
                     p.move(to: CGPoint(x: hoop.x + R, y: topY)); p.addLine(to: CGPoint(x: hoop.x + R, y: hoop.y))
-                    p.addArc(center: hoop, radius: R, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
-                }
-                .stroke(Chalk.dust.opacity(0.4), lineWidth: 1.3)
-                Circle().stroke(Chalk.coral, lineWidth: 2).frame(width: 9, height: 9).position(hoop)
+                }.stroke(ink, lineWidth: 1.4)
+                // key (paint)
+                Path { p in p.addRect(CGRect(x: hoop.x - keyW / 2, y: topY, width: keyW, height: ftC.y - topY)) }
+                    .stroke(ink, lineWidth: 1.4)
+                // FT circle — solid front half (toward the hoop), dashed back half
+                Path { p in p.addArc(center: ftC, radius: ftR, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false) }
+                    .stroke(ink, lineWidth: 1.4)
+                Path { p in p.addArc(center: ftC, radius: ftR, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false) }
+                    .stroke(ink, style: StrokeStyle(lineWidth: 1.4, dash: [4, 4]))
+                // restricted-area arc under the hoop
+                Path { p in p.addArc(center: hoop, radius: w * 0.05, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false) }
+                    .stroke(ink, lineWidth: 1.4)
+                // three-point arc
+                Path { p in p.addArc(center: hoop, radius: R, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false) }
+                    .stroke(ink, lineWidth: 1.4)
+                // hoop
+                Circle().stroke(Chalk.coral, lineWidth: 2.5).frame(width: 11, height: 11).position(hoop)
 
                 ForEach(Array(ShotSpot.allCases.enumerated()), id: \.element) { idx, spot in
-                    dot(spot, delay: Double(idx) * 0.13, at: CGPoint(x: spot.pos.x * w, y: spot.pos.y * h))
+                    if spot != .foulLine2 {   // FT dot doubles as the foul-line spot
+                        dot(spot, delay: Double(idx) * 0.13, at: Self.point(spot, w, h))
+                    }
                 }
             }
         }
     }
 
+    /// Places each spot from the same geometry that draws the court, so dots sit on the lines.
+    static func point(_ spot: ShotSpot, _ w: CGFloat, _ h: CGFloat) -> CGPoint {
+        let topY = h * 0.06
+        let hoop = CGPoint(x: w * 0.5, y: topY + h * 0.05)
+        let R = w * 0.42
+        let keyHalf = w * 0.12
+        let ftY = topY + h * 0.40
+        func arc(_ deg: Double) -> CGPoint {
+            let r = deg * .pi / 180
+            return CGPoint(x: hoop.x + R * cos(r), y: hoop.y + R * sin(r))
+        }
+        switch spot {
+        case .leftLayup:      return CGPoint(x: hoop.x - w * 0.10, y: hoop.y + h * 0.055)
+        case .rightLayup:     return CGPoint(x: hoop.x + w * 0.10, y: hoop.y + h * 0.055)
+        case .leftBaseline2:  return CGPoint(x: w * 0.30, y: topY + h * 0.05)
+        case .rightBaseline2: return CGPoint(x: w * 0.70, y: topY + h * 0.05)
+        case .leftElbow2:     return CGPoint(x: hoop.x - keyHalf, y: ftY)
+        case .rightElbow2:    return CGPoint(x: hoop.x + keyHalf, y: ftY)
+        case .leftCorner3:    return CGPoint(x: hoop.x - R, y: topY + h * 0.055)
+        case .rightCorner3:   return CGPoint(x: hoop.x + R, y: topY + h * 0.055)
+        case .leftWing3:      return arc(145)
+        case .rightWing3:     return arc(35)
+        case .top3:           return arc(90)
+        case .foulLine2, .ft: return CGPoint(x: hoop.x, y: ftY + h * 0.02)
+        }
+    }
+
     private func dot(_ spot: ShotSpot, delay: Double, at pt: CGPoint) -> some View {
         let pct = store.pct(spot)
-        let color = pctColor(pct)
+        let color = (spot == .leftLayup || spot == .rightLayup) ? Chalk.coral : spot.range.tint
+        let combined = (spot == .ft)   // this dot covers both FT and the foul-line 2
         return Button { onTap(spot) } label: {
             ZStack {
                 Circle().fill(color.opacity(0.22)).frame(width: 26, height: 26).modifier(Pulse(delay: delay))
                 Circle().fill(color).frame(width: 13, height: 13)
+                if combined {
+                    Circle().stroke(Chalk.yellow, lineWidth: 2).frame(width: 20, height: 20)
+                }
                 if let pct {
                     Text("\(Int(pct.rounded()))")
                         .font(.system(size: 8, weight: .heavy)).foregroundColor(Chalk.board)
@@ -397,13 +458,15 @@ private struct ShootingEntrySheet: View {
     @State private var made: [ShotSpot: Int] = [:]
     @State private var att: [ShotSpot: Int] = [:]
 
-    private let twos: [ShotSpot] = [.rim, .leftBaseline2, .rightBaseline2, .leftElbow2, .rightElbow2]
+    private let layups: [ShotSpot] = [.leftLayup, .rightLayup]
+    private let twos: [ShotSpot] = [.leftBaseline2, .rightBaseline2, .leftElbow2, .rightElbow2, .foulLine2]
     private let threes: [ShotSpot] = [.leftCorner3, .rightCorner3, .leftWing3, .rightWing3, .top3]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    section("LAYUPS", layups)
                     section("2-POINTERS", twos)
                     section("3-POINTERS", threes)
                     section("FREE THROW", [.ft])
@@ -455,48 +518,55 @@ private struct ShootingEntrySheet: View {
 // MARK: - Trend sheet
 
 private struct ShotTrendSheet: View {
-    let spot: ShotSpot
+    let spots: [ShotSpot]
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = PracticeShootingStore.shared
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                let t = store.total(spot)
-                HStack(alignment: .lastTextBaseline, spacing: 10) {
-                    Text(store.pct(spot).map { "\(Int($0.rounded()))%" } ?? "—")
-                        .font(.system(size: 46, weight: .heavy)).foregroundColor(pctColor(store.pct(spot)))
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(spot.rawValue).font(.system(size: 15, weight: .semibold)).foregroundColor(Chalk.chalk)
-                        Text("\(t.made) / \(t.att) all-time").font(.system(size: 12)).foregroundColor(Chalk.dust)
-                    }
-                    Spacer()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    ForEach(spots) { spot in spotBlock(spot) }
                 }
-                let data = store.trend(spot)
-                if data.count > 1 {
-                    Chart {
-                        ForEach(Array(data.enumerated()), id: \.offset) { i, pt in
-                            LineMark(x: .value("Session", i), y: .value("%", pt.pct))
-                                .foregroundStyle(pctColor(store.pct(spot)))
-                                .lineStyle(StrokeStyle(lineWidth: 2.6, lineJoin: .round)).interpolationMethod(.catmullRom)
-                            PointMark(x: .value("Session", i), y: .value("%", pt.pct))
-                                .foregroundStyle(pctColor(store.pct(spot))).symbolSize(24)
-                        }
-                    }
-                    .frame(height: 200)
-                    .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(Chalk.dust.opacity(0.2)); AxisValueLabel().foregroundStyle(Chalk.dust) } }
-                    .chartXAxis(.hidden)
-                    Text("% per session (oldest → newest)").font(.system(size: 11)).foregroundColor(Chalk.dust)
-                } else {
-                    Text("Log a few sessions from this spot and its trend shows up here.")
-                        .font(.system(size: 14)).foregroundColor(Chalk.dust).padding(.top, 20)
+                .padding().frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .chalkBoard()
+            .navigationTitle(spots.count > 1 ? "Foul line" : "Trend").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+
+    @ViewBuilder private func spotBlock(_ spot: ShotSpot) -> some View {
+        let t = store.total(spot)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .lastTextBaseline, spacing: 10) {
+                Text(store.pct(spot).map { "\(Int($0.rounded()))%" } ?? "—")
+                    .font(.system(size: 46, weight: .heavy)).foregroundColor(pctColor(store.pct(spot)))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(spot.rawValue).font(.system(size: 15, weight: .semibold)).foregroundColor(Chalk.chalk)
+                    Text("\(t.made) / \(t.att) all-time").font(.system(size: 12)).foregroundColor(Chalk.dust)
                 }
                 Spacer()
             }
-            .padding().frame(maxWidth: .infinity, alignment: .leading)
-            .chalkBoard()
-            .navigationTitle("Trend").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            let data = store.trend(spot)
+            if data.count > 1 {
+                Chart {
+                    ForEach(Array(data.enumerated()), id: \.offset) { i, pt in
+                        LineMark(x: .value("Session", i), y: .value("%", pt.pct))
+                            .foregroundStyle(pctColor(store.pct(spot)))
+                            .lineStyle(StrokeStyle(lineWidth: 2.6, lineJoin: .round)).interpolationMethod(.catmullRom)
+                        PointMark(x: .value("Session", i), y: .value("%", pt.pct))
+                            .foregroundStyle(pctColor(store.pct(spot))).symbolSize(24)
+                    }
+                }
+                .frame(height: 180)
+                .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(Chalk.dust.opacity(0.2)); AxisValueLabel().foregroundStyle(Chalk.dust) } }
+                .chartXAxis(.hidden)
+                Text("% per session (oldest → newest)").font(.system(size: 11)).foregroundColor(Chalk.dust)
+            } else {
+                Text("Log a few sessions from this spot and its trend shows up here.")
+                    .font(.system(size: 14)).foregroundColor(Chalk.dust)
+            }
         }
     }
 }
