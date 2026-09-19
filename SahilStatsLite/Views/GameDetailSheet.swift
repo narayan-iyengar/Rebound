@@ -12,6 +12,7 @@
 
 import SwiftUI
 import PhotosUI
+import Photos
 import UniformTypeIdentifiers
 
 /// File-URL-based transferable for video import. Avoids loading the entire
@@ -50,6 +51,8 @@ struct GameDetailSheet: View {
     // Video picker state
     @State private var selectedVideoItem: PhotosPickerItem?
     @State private var isImportingVideo = false
+    @State private var importProgress: Double = 0     // 0…1 while streaming from Photos/iCloud
+    @State private var importError: String?
 
     // Fetch live game object to ensure updates reflect immediately
     var game: Game {
@@ -138,11 +141,9 @@ struct GameDetailSheet: View {
                                 // importVideo() resets youtubeStatus to .local, which
                                 // exposes the Upload button on the next render.
                                 if isImportingVideo {
-                                    ProgressView("Importing replacement…")
-                                        .tint(Chalk.chalk)
-                                        .foregroundColor(Chalk.dust)
+                                    importingIndicator
                                 } else {
-                                    PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
+                                    PhotosPicker(selection: $selectedVideoItem, matching: .videos, photoLibrary: .shared()) {
                                         Label("Re-upload with a different video", systemImage: "arrow.triangle.2.circlepath")
                                             .font(.system(size: 12))
                                             .foregroundColor(Chalk.sky)
@@ -202,11 +203,9 @@ struct GameDetailSheet: View {
                                 // server-side processing). Pick from Photos, replace the
                                 // game's videoURL, then the Upload button above retries.
                                 if isImportingVideo {
-                                    ProgressView("Importing replacement…")
-                                        .tint(Chalk.chalk)
-                                        .foregroundColor(Chalk.dust)
+                                    importingIndicator
                                 } else {
-                                    PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
+                                    PhotosPicker(selection: $selectedVideoItem, matching: .videos, photoLibrary: .shared()) {
                                         Label("Use a different video from Photos", systemImage: "arrow.triangle.2.circlepath")
                                             .font(.system(size: 12))
                                             .foregroundColor(Chalk.sky)
@@ -231,11 +230,9 @@ struct GameDetailSheet: View {
                                         .foregroundColor(Chalk.dust)
 
                                     if isImportingVideo {
-                                        ProgressView("Importing...")
-                                            .tint(Chalk.chalk)
-                                            .foregroundColor(Chalk.dust)
+                                        importingIndicator
                                     } else {
-                                        PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
+                                        PhotosPicker(selection: $selectedVideoItem, matching: .videos, photoLibrary: .shared()) {
                                             Label("Select Video from Photos", systemImage: "photo.on.rectangle")
                                                 .font(.system(size: 15, weight: .medium))
                                                 .foregroundColor(Chalk.chalk)
@@ -256,6 +253,14 @@ struct GameDetailSheet: View {
                         }
                     }
                     .padding(.horizontal)
+
+                    if let importError {
+                        Text(importError)
+                            .font(.system(size: 12))
+                            .foregroundColor(Chalk.coral)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
 
                     // Video & Clips — watch the full game (local file) + this game's clips.
                     videoAndClipsSection
@@ -381,45 +386,126 @@ struct GameDetailSheet: View {
         }
     }
 
+    @ViewBuilder private var importingIndicator: some View {
+        VStack(spacing: 6) {
+            if importProgress > 0 {
+                ProgressView(value: importProgress) {
+                    Text("Importing… \(Int(importProgress * 100))%")
+                        .font(.system(size: 12)).foregroundColor(Chalk.dust)
+                }
+                .tint(Chalk.sky)
+            } else {
+                ProgressView("Importing…").tint(Chalk.chalk).foregroundColor(Chalk.dust)
+                Text("Large iCloud videos download first — this can take a minute.")
+                    .font(.system(size: 10)).foregroundColor(Chalk.dust)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
     private func importVideo(from item: PhotosPickerItem) {
         isImportingVideo = true
+        importProgress = 0
+        importError = nil
         selectedVideoItem = nil  // reset so re-picking the same video works
 
-        Task {
-            defer { Task { @MainActor in isImportingVideo = false } }
-            do {
-                // File-based transfer: no in-memory buffer. For a 4K 41-min game
-                // this used to allocate 3–5 GB of RAM via Data.self and either
-                // hang or get killed by the OS.
-                guard let imported = try await item.loadTransferable(type: ImportedVideoFile.self) else {
-                    debugPrint("Picker returned nil video file")
+        let filename = "imported_\(game.id).mov"
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let destinationURL = documentsPath.appendingPathComponent(filename)
+
+        // Preferred path: pull the ORIGINAL file straight from the Photos library via
+        // PHAssetResourceManager. Unlike PhotosUI's loadTransferable — which shows no
+        // progress and can appear frozen forever while an iCloud-stored video downloads —
+        // this streams with a progress handler and `isNetworkAccessAllowed` so big
+        // iCloud videos actually come down (and the user sees it happening).
+        if let assetId = item.itemIdentifier {
+            Task {
+                let status = await ensurePhotosReadAccess()
+                guard status else {
+                    await finishImport(error: "Photos access is needed to import. Enable it in Settings › Privacy › Photos.")
                     return
                 }
+                guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject else {
+                    // Fall back if we can't resolve the asset (e.g. shared library quirk)
+                    importViaTransferable(item, to: destinationURL); return
+                }
+                importViaPHAsset(asset, to: destinationURL)
+            }
+        } else {
+            importViaTransferable(item, to: destinationURL)
+        }
+    }
 
-                // Move into Documents under the game's stable filename
-                let filename = "imported_\(game.id).mov"
-                let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let destinationURL = documentsPath.appendingPathComponent(filename)
+    private func ensurePhotosReadAccess() async -> Bool {
+        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if current == .authorized || current == .limited { return true }
+        let granted = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        return granted == .authorized || granted == .limited
+    }
 
+    private func importViaPHAsset(_ asset: PHAsset, to destinationURL: URL) {
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let videoResource = resources.first(where: { $0.type == .video })
+                ?? resources.first(where: { $0.type == .fullSizeVideo })
+                ?? resources.first else {
+            Task { await finishImport(error: "No video data found for that item.") }
+            return
+        }
+        try? FileManager.default.removeItem(at: destinationURL)
+
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = true            // download from iCloud if needed
+        options.progressHandler = { p in
+            Task { @MainActor in self.importProgress = p }
+        }
+        PHAssetResourceManager.default().writeData(for: videoResource, toFile: destinationURL, options: options) { error in
+            Task { @MainActor in
+                if let error = error {
+                    await self.finishImport(error: "Import failed: \(error.localizedDescription)")
+                } else {
+                    self.applyImportedVideo(at: destinationURL)
+                    await self.finishImport(error: nil)
+                }
+            }
+        }
+    }
+
+    // Fallback for items with no Photos identifier (rare): the original file-based
+    // transfer. Still no progress, but it won't be silent about failure anymore.
+    private func importViaTransferable(_ item: PhotosPickerItem, to destinationURL: URL) {
+        Task {
+            do {
+                guard let imported = try await item.loadTransferable(type: ImportedVideoFile.self) else {
+                    await finishImport(error: "Couldn't read that video. If it's stored in iCloud, open it once in Photos to download it, then retry.")
+                    return
+                }
                 if FileManager.default.fileExists(atPath: destinationURL.path) {
                     try FileManager.default.removeItem(at: destinationURL)
                 }
                 try FileManager.default.moveItem(at: imported.url, to: destinationURL)
-
-                await MainActor.run {
-                    var updatedGame = game
-                    updatedGame.videoURL = destinationURL
-                    updatedGame.youtubeStatus = .local
-                    // Clear stale YouTube video ID so the next upload registers
-                    // a fresh one (otherwise UI keeps linking to the broken video)
-                    updatedGame.youtubeVideoId = nil
-                    persistenceManager.saveGame(updatedGame)
-                    debugPrint("Video imported successfully: \(destinationURL.path)")
-                }
+                await MainActor.run { applyImportedVideo(at: destinationURL) }
+                await finishImport(error: nil)
             } catch {
-                debugPrint("Failed to import video: \(error)")
+                await finishImport(error: "Import failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    @MainActor private func applyImportedVideo(at destinationURL: URL) {
+        var updatedGame = game
+        updatedGame.videoURL = destinationURL
+        updatedGame.youtubeStatus = .local
+        // Clear stale YouTube video ID so the next upload registers a fresh one.
+        updatedGame.youtubeVideoId = nil
+        persistenceManager.saveGame(updatedGame)
+        debugPrint("📹 Video imported: \(destinationURL.lastPathComponent)")
+    }
+
+    @MainActor private func finishImport(error: String?) {
+        isImportingVideo = false
+        importProgress = 0
+        importError = error
+        if let error { debugPrint("📹 Import error: \(error)") }
     }
 
     private func localFileSize(at url: URL) -> String? {

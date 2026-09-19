@@ -35,6 +35,18 @@ struct WatchScoringView: View {
         self.layout = layout
     }
 
+    // Period advance is deliberate (never auto): tapping the period chip asks first,
+    // so a stray tap can't skip a quarter.
+    @State private var showAdvanceConfirm = false
+
+    private var nextPeriodLabel: String {
+        let regs = connectivity.regularPeriods
+        if let i = regs.firstIndex(of: connectivity.period) {
+            return i + 1 < regs.count ? regs[i + 1] : "Overtime"
+        }
+        return connectivity.period.hasPrefix("OT") ? "more OT (+1:00)" : "next period"
+    }
+
     private var clockMinutes: String {
         String(connectivity.remainingSeconds / 60)
     }
@@ -136,6 +148,16 @@ struct WatchScoringView: View {
             if connectivity.isEnding {
                 endingSpinner
             }
+        }
+        .confirmationDialog(
+            "Advance to \(nextPeriodLabel)?",
+            isPresented: $showAdvanceConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Advance to \(nextPeriodLabel)") { connectivity.advancePeriod() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The clock won't advance on its own — adjust it after if needed.")
         }
         .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
             if connectivity.isClockRunning {
@@ -252,15 +274,19 @@ struct WatchScoringView: View {
             Spacer()
 
             Button {
-                connectivity.advancePeriod()
+                showAdvanceConfirm = true
             } label: {
-                Text(connectivity.period)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(WChalk.chalk.opacity(0.5))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
-                    .background(WChalk.chalk.opacity(0.08))
-                    .cornerRadius(6)
+                HStack(spacing: 3) {
+                    Text(connectivity.period)
+                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "chevron.forward")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                .foregroundColor(WChalk.chalk.opacity(0.85))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(WChalk.chalk.opacity(0.12))
+                .cornerRadius(6)
             }
             .buttonStyle(.plain)
         }
@@ -285,15 +311,19 @@ struct WatchScoringView: View {
 
     private var periodButton: some View {
         Button {
-            connectivity.advancePeriod()
+            showAdvanceConfirm = true
         } label: {
-            Text(connectivity.period)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(WChalk.chalk.opacity(0.5))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(WChalk.chalk.opacity(0.08))
-                .cornerRadius(8)
+            HStack(spacing: 4) {
+                Text(connectivity.period)
+                    .font(.system(size: 10, weight: .semibold))
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundColor(WChalk.chalk.opacity(0.85))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(WChalk.chalk.opacity(0.12))
+            .cornerRadius(8)
         }
         .buttonStyle(.plain)
     }
