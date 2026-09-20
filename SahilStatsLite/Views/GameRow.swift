@@ -89,6 +89,18 @@ struct GameRow: View {
                 Text(game.date, style: .date)
                     .font(.system(size: 12))
                     .foregroundColor(Chalk.dust)
+
+                // Video available (recorded/imported locally or on YouTube).
+                if game.videoURL != nil || game.youtubeStatus == .uploaded || game.youtubeVideoId != nil {
+                    HStack(spacing: 3) {
+                        Image(systemName: "play.rectangle.fill").font(.system(size: 9))
+                        Text("Full game").font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundColor(Chalk.coral)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Chalk.coral.opacity(0.14), in: Capsule())
+                    .padding(.top, 1)
+                }
             }
 
             Spacer()

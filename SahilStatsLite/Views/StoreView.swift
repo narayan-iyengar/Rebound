@@ -17,9 +17,23 @@ import SwiftUI
 import AVKit
 import AVFoundation
 
+/// A weekend/tournament cluster of sessions — same team, within 2 days — mirroring the
+/// game log so the Store reads identically.
+private struct ClipCluster: Identifiable {
+    let id: String
+    let team: String
+    let isPractice: Bool
+    let groups: [HighlightGroup]
+    var endDate: Date { groups.map(\.date).max() ?? Date() }
+    var startDate: Date { groups.map(\.date).min() ?? Date() }
+    var isSingle: Bool { groups.count == 1 }
+}
+
 struct StoreView: View {
     @ObservedObject private var store = HighlightStore.shared
     @State private var playing: Highlight?
+    @State private var fullGame: PlayerItem?
+    @State private var expandedClusters: Set<String> = []
 
     // Multi-select
     @State private var selecting = false
@@ -36,22 +50,81 @@ struct StoreView: View {
 
     /// Clip sessions grouped into adaptive time sections (This Week / This Month / month /
     /// year), newest first — same philosophy as the game log.
-    private var sections: [(title: String, collapsed: Bool, groups: [HighlightGroup])] {
-        var result: [(title: String, collapsed: Bool, groups: [HighlightGroup])] = []
-        for group in store.grouped {   // already newest-first
-            let info = AdaptiveTimeSection.info(for: group.date)
+    private var sections: [(title: String, collapsed: Bool, clusters: [ClipCluster])] {
+        let cal = Calendar.current
+        var clusters: [ClipCluster] = []
+        // Games clustered per team into ≤2-day windows (same algorithm as the game log).
+        let byTeam = Dictionary(grouping: allGameGroups) { $0.homeTeam }
+        for (team, groups) in byTeam {
+            let sorted = groups.sorted { $0.date > $1.date }
+            var bucket: [HighlightGroup] = []
+            for g in sorted {
+                if let last = bucket.last,
+                   let gap = cal.dateComponents([.day], from: cal.startOfDay(for: g.date),
+                                                to: cal.startOfDay(for: last.date)).day, gap <= 2 {
+                    bucket.append(g)
+                } else {
+                    if !bucket.isEmpty { clusters.append(ClipCluster(id: bucket[0].id, team: team, isPractice: false, groups: bucket)) }
+                    bucket = [g]
+                }
+            }
+            if !bucket.isEmpty { clusters.append(ClipCluster(id: bucket[0].id, team: team, isPractice: false, groups: bucket)) }
+        }
+        for p in store.grouped where p.isPractice {
+            clusters.append(ClipCluster(id: p.id, team: "Practice", isPractice: true, groups: [p]))
+        }
+        clusters.sort { $0.endDate > $1.endDate }
+
+        var result: [(title: String, collapsed: Bool, clusters: [ClipCluster])] = []
+        for c in clusters {
+            let info = AdaptiveTimeSection.info(for: c.endDate)
             if var last = result.last, last.title == info.title {
-                last.groups.append(group)
-                result[result.count - 1] = last
+                last.clusters.append(c); result[result.count - 1] = last
             } else {
-                result.append((info.title, info.collapsed, [group]))
+                result.append((info.title, info.collapsed, [c]))
             }
         }
         return result
     }
 
+    /// Non-practice clip groups + synthesized groups for games that have a full-game video
+    /// but no clips, so every recorded/imported game shows here with its links.
+    private var allGameGroups: [HighlightGroup] {
+        var groups = store.grouped.filter { !$0.isPractice }
+        let existing = Set(groups.map(\.id))
+        for game in GamePersistenceManager.shared.savedGames where !existing.contains(game.id) {
+            if localVideoURL(game) != nil || game.youtubeVideoId != nil {
+                groups.append(HighlightGroup(id: game.id, homeTeam: game.teamName, awayTeam: game.opponent,
+                                             date: game.date, isPractice: false, label: nil, clips: []))
+            }
+        }
+        return groups
+    }
+
     private func isExpanded(_ title: String, collapsed: Bool) -> Bool {
         collapsed ? expandedSections.contains(title) : true
+    }
+
+    private func game(for group: HighlightGroup) -> Game? {
+        guard !group.isPractice else { return nil }
+        return GamePersistenceManager.shared.savedGames.first { $0.id == group.id }
+    }
+
+    private func games(_ cluster: ClipCluster) -> [Game] {
+        cluster.groups.compactMap { grp in GamePersistenceManager.shared.savedGames.first { $0.id == grp.id } }
+    }
+
+    private func record(_ clusters: [ClipCluster]) -> (w: Int, l: Int) {
+        let gs = clusters.flatMap { games($0) }
+        return (gs.filter(\.isWin).count, gs.filter(\.isLoss).count)
+    }
+
+    private func localVideoURL(_ game: Game) -> URL? {
+        guard let url = game.videoURL else { return nil }
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        let doc = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(url.lastPathComponent)
+        return FileManager.default.fileExists(atPath: doc.path) ? doc : nil
     }
 
     /// Final result of the game a clip session belongs to (nil for practice / unlinked clips).
@@ -67,15 +140,21 @@ struct StoreView: View {
             VStack(alignment: .leading, spacing: 26) {
                 header
 
-                if store.highlights.isEmpty {
+                if sections.isEmpty {
                     emptyState
                 } else {
                     ForEach(sections, id: \.title) { section in
                         sectionHeader(title: section.title, collapsed: section.collapsed,
-                                      sessionCount: section.groups.count)
+                                      clusters: section.clusters)
                         if isExpanded(section.title, collapsed: section.collapsed) {
-                            ForEach(section.groups) { group in
-                                gameSection(group)
+                            ForEach(section.clusters) { cluster in
+                                if cluster.isSingle {
+                                    gameSection(cluster.groups[0])
+                                } else if selecting {
+                                    ForEach(cluster.groups.sorted { $0.date < $1.date }) { gameSection($0) }
+                                } else {
+                                    clusterCard(cluster)
+                                }
                             }
                         }
                     }
@@ -92,6 +171,9 @@ struct StoreView: View {
         }
         .fullScreenCover(item: $playing) { clip in
             VideoPlayerSheet(url: clip.url, caption: clip.isPractice ? "Practice" : clip.scoreLine)
+        }
+        .fullScreenCover(item: $fullGame) { item in
+            VideoPlayerSheet(url: item.url, caption: item.caption)
         }
         .alert("Tag", isPresented: $showTagEditor) {
             TextField("e.g. Rec Center · shooting", text: $labelDraft)
@@ -169,8 +251,9 @@ struct StoreView: View {
 
     // MARK: - Time section header
 
-    private func sectionHeader(title: String, collapsed: Bool, sessionCount: Int) -> some View {
-        Button {
+    private func sectionHeader(title: String, collapsed: Bool, clusters: [ClipCluster]) -> some View {
+        let rec = record(clusters)
+        return Button {
             guard collapsed else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
                 if expandedSections.contains(title) { expandedSections.remove(title) }
@@ -188,52 +271,163 @@ struct StoreView: View {
                         .foregroundColor(Chalk.dust)
                 }
                 Spacer()
-                Text("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Chalk.dust)
+                if rec.w + rec.l > 0 {
+                    Text("\(rec.w)–\(rec.l)")
+                        .font(.system(size: 13, weight: .bold)).monospacedDigit()
+                        .foregroundColor(Chalk.yellow)
+                } else {
+                    Text("\(clusters.count) session\(clusters.count == 1 ? "" : "s")")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Chalk.dust)
+                }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Game section
+    // MARK: - Weekend/tournament cluster (outer box) → per-game inner boxes
+
+    @ViewBuilder
+    private func clusterCard(_ cluster: ClipCluster) -> some View {
+        let expanded = expandedClusters.contains(cluster.id)
+        let color = TeamPalette.color(for: cluster.team)
+        let gs = games(cluster)
+        let clipCount = cluster.groups.reduce(0) { $0 + $1.clips.count }
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if expanded { expandedClusters.remove(cluster.id) } else { expandedClusters.insert(cluster.id) }
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 7) {
+                                Text(dateRangeText(cluster))
+                                    .font(.system(size: 16, weight: .bold)).foregroundColor(Chalk.chalk)
+                                teamChip(cluster.team)
+                            }
+                            Text("\(cluster.groups.count) games · \(clipCount) clip\(clipCount == 1 ? "" : "s")")
+                                .font(.system(size: 11)).foregroundColor(Chalk.dust)
+                        }
+                        Spacer()
+                        if !gs.isEmpty {
+                            Text("\(gs.filter(\.isWin).count)–\(gs.filter(\.isLoss).count)")
+                                .font(.system(size: 16, weight: .bold)).monospacedDigit().foregroundColor(Chalk.crisp)
+                        }
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12, weight: .bold)).foregroundColor(Chalk.dust).padding(.leading, 2)
+                    }
+                    if !expanded, !gs.isEmpty { winLossStrip(gs) }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                ForEach(cluster.groups.sorted { $0.date < $1.date }) { group in
+                    gameSection(group)
+                }
+            }
+        }
+        .padding(12)
+        .background(Chalk.board2.opacity(0.45), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(color.opacity(0.3), lineWidth: 1.5))
+    }
+
+    private func winLossStrip(_ games: [Game]) -> some View {
+        HStack(spacing: 6) {
+            ForEach(games.sorted { $0.date < $1.date }) { game in
+                HStack(spacing: 5) {
+                    Text(game.isWin ? "W" : "L").font(.system(size: 12, weight: .heavy))
+                    Text(game.scoreString).font(.system(size: 12, weight: .bold)).monospacedDigit()
+                }
+                .foregroundColor(Chalk.board)
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(game.isWin ? Chalk.green : Chalk.coral, in: RoundedRectangle(cornerRadius: 7))
+                .fixedSize()
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func dateRangeText(_ cluster: ClipCluster) -> String {
+        let f = DateFormatter(); f.dateFormat = "MMM d"
+        let s = f.string(from: cluster.startDate), e = f.string(from: cluster.endDate)
+        return s == e ? s : "\(s) – \(e)"
+    }
+
+    // MARK: - Game section (inner box)
 
     private func gameSection(_ group: HighlightGroup) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
                 if selecting { toggleGroup(group) }
             } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // Same typography as the game log's GameRow: W/L circle, opponent-first
+                // (system font, not chalk script), team in sky, date — so the two read alike.
+                HStack(spacing: 10) {
                     if selecting {
                         Image(systemName: groupAllSelected(group) ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 16))
                             .foregroundColor(groupAllSelected(group) ? Chalk.yellow : Chalk.dust)
                     }
-                    Text(group.matchup)
-                        .font(.chalkScript(26))
-                        .foregroundColor(Chalk.chalk)
-                        .lineLimit(1)
-                    if !group.isPractice, !group.homeTeam.isEmpty {
-                        teamChip(group.homeTeam)
+                    if let g = game(for: group) {
+                        let badgeColor = g.isWin ? Chalk.green : Chalk.coral
+                        Text(g.resultString)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(badgeColor)
+                            .frame(width: 30, height: 30)
+                            .overlay(Circle().strokeBorder(badgeColor.opacity(0.6), lineWidth: 1.5))
                     }
-                    if let r = result(for: group) {
-                        Text(r.letter)
-                            .font(.system(size: 12, weight: .heavy))
-                            .foregroundColor(Chalk.board)
-                            .frame(width: 22, height: 22)
-                            .background(r.color, in: RoundedRectangle(cornerRadius: 6))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.isPractice ? "Practice" : "vs \(group.awayTeam)")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(Chalk.chalk)
+                            .lineLimit(1)
+                        if !group.isPractice, !group.homeTeam.isEmpty {
+                            Text(group.homeTeam)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(Chalk.sky)
+                        }
+                        Text(Self.sessionDate(group.date))
+                            .font(.system(size: 12))
+                            .foregroundColor(Chalk.dust)
                     }
                     Spacer()
-                    Text(Self.sessionDate(group.date))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Chalk.dust)
+                    if let g = game(for: group) {
+                        Text(g.scoreString)
+                            .font(.system(size: 20, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundColor(Chalk.crisp)
+                    }
                 }
             }
             .buttonStyle(.plain)
             .disabled(!selecting)
 
             if !selecting { tagChip(group) }
+
+            // Full-game links (local recording + YouTube), same media the game log exposes.
+            if !selecting, let g = game(for: group) {
+                let local = localVideoURL(g)
+                if local != nil || g.youtubeVideoId != nil {
+                    HStack(spacing: 8) {
+                        if let local {
+                            mediaChip(icon: "play.circle.fill", label: "Full game", color: Chalk.chalk) {
+                                fullGame = PlayerItem(url: local, caption: group.matchup)
+                            }
+                        }
+                        if let vid = g.youtubeVideoId {
+                            mediaChip(icon: "play.rectangle.fill", label: "YouTube", color: Chalk.coral) {
+                                if let url = URL(string: "https://youtu.be/\(vid)") { UIApplication.shared.open(url) }
+                            }
+                        }
+                        Spacer()
+                    }
+                }
+            }
 
             ForEach(group.clips) { clip in
                 ClipCard(clip: clip, selecting: selecting, isSelected: selected.contains(clip.id))
@@ -264,6 +458,21 @@ struct StoreView: View {
                     }
             }
         }
+        .chalkCard()
+    }
+
+    private func mediaChip(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12))
+                Text(label).font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Chalk.board, in: Capsule())
+            .overlay(Capsule().stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // Team chip — same color rules as the game log (Lava yellow, others auto-hashed).

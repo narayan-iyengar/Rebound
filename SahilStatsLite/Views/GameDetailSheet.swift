@@ -267,7 +267,7 @@ struct GameDetailSheet: View {
 
                     // Player Stats
                     VStack(spacing: 16) {
-                        Text("Player Stats")
+                        Text("Sahil's Stats")
                             .font(.chalkScript(22))
                             .foregroundColor(Chalk.chalk)
 
@@ -319,7 +319,7 @@ struct GameDetailSheet: View {
         let clips = highlightStore.clips(forGameId: game.id)
         let localVideo = resolveVideoURL(for: game)
 
-        if localVideo != nil || !clips.isEmpty {
+        if localVideo != nil || game.youtubeVideoId != nil || !clips.isEmpty {
             VStack(spacing: 14) {
                 Text("Video & Clips")
                     .font(.chalkScript(22))
@@ -341,8 +341,28 @@ struct GameDetailSheet: View {
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                } else if game.youtubeStatus == .uploaded {
-                    Text("Full game is on YouTube (link above).")
+                }
+
+                // Watch on YouTube — shown right here (not just the uploaded banner) so it's
+                // next to the local "Watch full game". Needs a saved youtubeVideoId.
+                if let vid = game.youtubeVideoId {
+                    Button {
+                        if let url = URL(string: "https://youtu.be/\(vid)") { UIApplication.shared.open(url) }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "play.rectangle.fill").font(.system(size: 22))
+                            Text("Watch on YouTube").font(.system(size: 15, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(Chalk.coral)
+                        .padding()
+                        .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Chalk.coral.opacity(0.2), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                } else if localVideo == nil, game.youtubeStatus == .uploaded {
+                    Text("Uploaded to YouTube — re-upload once to restore the watch link.")
                         .font(.system(size: 12))
                         .foregroundColor(Chalk.dust)
                 }
@@ -565,6 +585,9 @@ struct GameDetailSheet: View {
             if youtubeService.lastError == nil {
                 var finishedGame = game
                 finishedGame.youtubeStatus = .uploaded
+                // Save the YouTube video id so the 'Watch on YouTube' link appears.
+                // (Without this it stayed nil and the link never showed.)
+                finishedGame.youtubeVideoId = youtubeService.completedVideoID ?? game.youtubeVideoId
                 persistenceManager.saveGame(finishedGame)
             } else {
                 var failedGame = game

@@ -173,7 +173,7 @@ struct ManualGameEntryView: View {
     private var statsSection: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Player Stats")
+                Text("Sahil's Stats")
                     .font(.chalkScript(22))
                     .foregroundColor(Chalk.chalk)
 

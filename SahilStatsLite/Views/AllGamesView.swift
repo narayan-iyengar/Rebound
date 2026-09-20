@@ -429,7 +429,7 @@ struct AllGamesView: View {
     private func multiClusterCard(_ cluster: GameCluster) -> some View {
         let expanded = expandedClusters.contains(cluster.id)
         let color = teamColor(cluster.team)
-        return VStack(spacing: 0) {
+        return VStack(spacing: 10) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if expanded { expandedClusters.remove(cluster.id) }
@@ -461,24 +461,21 @@ struct AllGamesView: View {
                     }
                     if !expanded { winLossStrip(cluster) }
                 }
-                .padding(12)
-                .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(color.opacity(0.25), lineWidth: 1.5))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if expanded {
-                VStack(spacing: 8) {
-                    // Oldest → newest, matching how the weekend actually played out.
-                    ForEach(cluster.games.sorted { $0.date < $1.date }) { game in
-                        singleGameRow(game)
-                    }
+                // Oldest → newest, matching how the weekend actually played out. Each game
+                // is its own card, nested inside this one tournament box.
+                ForEach(cluster.games.sorted { $0.date < $1.date }) { game in
+                    singleGameRow(game)
                 }
-                .padding(.top, 8)
             }
         }
+        .padding(12)
+        .background(Chalk.board2.opacity(0.45), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(color.opacity(0.3), lineWidth: 1.5))
     }
 
     // Chronological "form guide": one colored score tile per game. The tile color IS the
