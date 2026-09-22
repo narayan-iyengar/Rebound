@@ -166,6 +166,18 @@ private actor SkynetProcessor {
     // teleport-jumps from a bad frame.
     private let maxCenterStepPerFrame: CGFloat = 0.08
 
+    // MARK: - Momentum dead-zone (ported from the operator-follow spike, 2026-09-21)
+    // Kills mid-court "hunting": when the action isn't clearly moving one way (settled
+    // half-court), WIDEN the deadband and hold; when there's clear directional momentum
+    // (transition/fast break), tighten the deadband and LEAD slightly ahead. All tunable
+    // on-device at the next game — validate before trusting (load-bearing §17 code).
+    private var centerMomentumX: CGFloat = 0        // smoothed pan velocity of the accepted center
+    private let momLo: CGFloat = 0.006              // |vel/frame| below this = settled (hold)
+    private let momHi: CGFloat = 0.020              // above this = full transition (lead)
+    private let baseDeadband: CGFloat = 0.03        // existing move threshold (unchanged at transition)
+    private let settledDeadbandMult: CGFloat = 2.2  // deadband grows up to this ×base when settled
+    private let leadFramesGain: CGFloat = 4.0       // frames of momentum to lead by on a clear break
+
     /// Entry point for each camera frame. Returns nil if throttled or already processing.
     /// Takes UnsafeSendableBuffer so CVPixelBuffer never crosses the actor boundary directly.
     func tryCompute(_ wrapper: UnsafeSendableBuffer) -> SkynetResult? {
@@ -198,6 +210,7 @@ private actor SkynetProcessor {
         lastFrameTime = 0
         isProcessing = false
         stablePlayerCount = 0
+        centerMomentumX = 0
     }
 
     // MARK: - Core Computation
@@ -277,6 +290,14 @@ private actor SkynetProcessor {
                 debugPrint("🛡️ [Skynet] HOLD — occlusion/low-reliability (players \(onCourtCount) vs stable \(stablePlayerCount), rel \(String(format: "%.2f", deepTracker.averageReliability)))")
             }
         } else {
+            // MOMENTUM DEAD-ZONE + LEAD (operator-follow port). leadFactor is 0 when the
+            // action is settled (no clear direction) and ramps to 1 on a clear break.
+            let momMag: CGFloat = abs(centerMomentumX)
+            let leadFactor: CGFloat = max(0, min(1, (momMag - momLo) / (momHi - momLo)))
+            // Lead the PAN ahead of the play only when momentum is clearly directional.
+            // (Y stays on the player cluster — we're pan-primary, per the existing design.)
+            rawActionCenter.x = max(0.05, min(0.95, rawActionCenter.x + centerMomentumX * leadFramesGain * leadFactor))
+
             // Velocity-cap the move so a single noisy frame can't yank the gimbal.
             let dx: CGFloat = rawActionCenter.x - currentCenter.x
             let dy: CGFloat = rawActionCenter.y - currentCenter.y
@@ -288,9 +309,14 @@ private actor SkynetProcessor {
                 let cappedY: CGFloat = currentCenter.y + dy * s
                 capped = CGPoint(x: cappedX, y: cappedY)
             }
-            if distance > 0.03 {
+            // Adaptive deadband: WIDE when settled (kills mid-court hunting), normal on a break.
+            let deadband: CGFloat = baseDeadband * (1 + (1 - leadFactor) * (settledDeadbandMult - 1))
+            if distance > deadband {
                 newActionCenter = capped
                 bgActionCenter = capped
+                centerMomentumX = 0.85 * centerMomentumX + 0.15 * (capped.x - currentCenter.x)  // learn momentum from accepted moves
+            } else {
+                centerMomentumX *= 0.9   // holding — let momentum decay so lead fades
             }
             // Update the stable baseline only on healthy frames.
             stablePlayerCount = onCourtCount
@@ -301,7 +327,13 @@ private actor SkynetProcessor {
         smoothZoomController.isTimeoutMode = isTimeout
 
         let reliability = deepTracker.averageReliability
-        var recommendedZoom = deepTracker.calculateZoom(minZoom: 1.0, maxZoom: 1.3)
+        var recommendedZoom = deepTracker.calculateZoom(minZoom: 1.0, maxZoom: 1.35)
+        // SPREAD ZOOM (operator-follow port): when players are spread across the frame, cap
+        // the zoom-in so the whole action stays in view; only tighten when they cluster.
+        // Only ever zooms OUT vs the tracker's pick — safe for the gimbal. Tune caps at the game.
+        let spreadW: CGFloat = deepTracker.getGroupBoundingBox(filterPlayers: true).width
+        let spreadCap: CGFloat = spreadW > 0.5 ? 1.0 : (spreadW > 0.3 ? 1.15 : 1.35)
+        recommendedZoom = min(recommendedZoom, spreadCap)
         if isTimeout || players.isEmpty { recommendedZoom = 1.0 }
 
         let smoothedZoom = smoothZoomController.update(target: Double(recommendedZoom), confidence: reliability)
