@@ -7,8 +7,15 @@
 
 ## Canonical Design Docs
 
-**Auto-Score / ball tracking / shot detection roadmap:**
-👉 [`docs/SKYNET_AUTOSCORE_DESIGN.md`](docs/SKYNET_AUTOSCORE_DESIGN.md) — canonical, versioned, carries its own history (§13 rejected alternatives, §14 revision log, §15 LLM-as-a-judge audit history). Any Auto-Score work MUST read this first. Any change MUST append to §14, not overwrite silently. This is the Other Memory.
+**Two docs, clear split (the vision morphs; the tech doc doesn't):**
+
+**🧭 Vision / strategy north-star:**
+👉 [`autoscore_spike/ROADMAP.md`](../../autoscore_spike/ROADMAP.md) — the "small Harvey for basketball" plan: phases, data flywheel, honest caveats, open questions. This is the *evolving* doc — edit it freely as the vision morphs. **Put vision changes HERE, don't spawn a new doc.**
+
+**⚙️ Technical canonical:**
+👉 [`docs/SKYNET_AUTOSCORE_DESIGN.md`](docs/SKYNET_AUTOSCORE_DESIGN.md) — canonical, versioned, carries its own history (§13 rejected alternatives, §14 revision log, §15 LLM-as-a-judge audit history). Any Auto-Score work MUST read this first. Any change MUST append to §14, not overwrite silently. This is the Other Memory (append-only, changes slowly).
+
+*If the two disagree: ROADMAP wins on what/why/priority; the design doc wins on how it's built.*
 
 ---
 

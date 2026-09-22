@@ -1,5 +1,7 @@
 # SahilStatsLite
 
+> 📎 **Where the current thinking lives:** vision & roadmap → [`autoscore_spike/ROADMAP.md`](../../autoscore_spike/ROADMAP.md) · technical design → [`docs/SKYNET_AUTOSCORE_DESIGN.md`](docs/SKYNET_AUTOSCORE_DESIGN.md) · build status → [`claude.md`](claude.md). This README is the project intro.
+
 Auto-tracking basketball camera + live scoreboard + YouTube streaming for AAU youth basketball. Built for one kid, one parent, one phone.
 
 > A parent watching their kid's game shouldn't babysit an app.

@@ -1,3 +1,6 @@
+> ⚠️ **LEGACY / HISTORICAL SNAPSHOT (2026-05-03, build v314).** Kept for reference only — not current.
+> Current vision → [`autoscore_spike/ROADMAP.md`](../../autoscore_spike/ROADMAP.md) · Current tech → [`docs/SKYNET_AUTOSCORE_DESIGN.md`](docs/SKYNET_AUTOSCORE_DESIGN.md) · Current build status → [`claude.md`](claude.md)
+
 # Rebound — Handoff Notes (2026-05-03)
 
 Current build: **v314 Release**. App rebranded from SahilStatsLite to **Rebound**.

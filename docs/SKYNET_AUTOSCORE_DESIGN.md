@@ -10,6 +10,8 @@
 
 **Vision:** Rebound is the only consumer product that automates scoring in real youth basketball games from a single phone on a gimbal, in the chaos of an AAU gym with three courts running at once.
 
+> **Vision & strategy north-star lives in [`autoscore_spike/ROADMAP.md`](../../../autoscore_spike/ROADMAP.md)** (separate, deliberately *evolving* doc — the vision morphs there). **This doc is the *technical* canonical** (append-only, §14 protocol). If the two ever disagree: ROADMAP wins on *what/why/priority*; this doc wins on *how it's built*.
+
 **Status:** design doc, not built yet · unblocked to start Phase 1
 **Canonical URL:** `docs/SKYNET_AUTOSCORE_DESIGN.md` (this file)
 **Authors:** Claude Sonnet 4.6 (architect); Claude Sonnet 4.6 (LLM-as-a-judge verifier)
