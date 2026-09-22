@@ -6,8 +6,9 @@
 //           Shooting: a month calendar to log at-home shooting (made/attempts per SPOT
 //           in a day-entry sheet — 5 two-point spots, 5 three-point spots, plus the free
 //           throw), a half-court shot map with a pulsing dot per spot colored hot/cold by
-//           all-time %, and a per-spot trend sheet. Workout + Clips are stubs (Clips
-//           launches the existing practice recorder).
+//           all-time %, and a per-spot trend sheet. Clips: records a practice clip AND
+//           lists every saved practice clip (grouped by session, tap-to-play) — this is
+//           where practice clips live now that the Store tab is gone. Workout is a stub.
 //  KEY TYPES: PracticeStatsView, PracticeShootingStore, ShotSpot, ShotDay
 //  DEPENDS ON: AppState (Clips), Charts
 //
@@ -170,6 +171,7 @@ private func pctColor(_ pct: Double?) -> Color {
 struct PracticeStatsView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var store = PracticeShootingStore.shared
+    @ObservedObject private var highlightStore = HighlightStore.shared
 
     enum Mode: String, CaseIterable, Identifiable { case shooting = "Shooting", workout = "Workout", clips = "Clips"; var id: String { rawValue } }
     @State private var mode: Mode = .shooting
@@ -177,6 +179,7 @@ struct PracticeStatsView: View {
     @State private var month = Date()
     @State private var entryDate: Date? = nil
     @State private var trendSpot: ShotSpot? = nil
+    @State private var clipToPlay: PlayerItem? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -220,6 +223,13 @@ struct PracticeStatsView: View {
         .sheet(item: $trendSpot) { spot in
             ShotTrendSheet(spots: spot == .ft ? [.ft, .foulLine2] : [spot])
         }
+        .fullScreenCover(item: $clipToPlay) { item in
+            VideoPlayerSheet(url: item.url, caption: item.caption)
+        }
+    }
+
+    private var practiceGroups: [HighlightGroup] {
+        highlightStore.grouped.filter { $0.isPractice }
     }
 
     private struct IdentifiableDate: Identifiable { let date: Date; var id: String { PracticeShootingStore.dateKey(date) } }
@@ -298,15 +308,61 @@ struct PracticeStatsView: View {
     }
 
     private var clipsContent: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "film.stack").font(.system(size: 44)).foregroundColor(Chalk.coral.opacity(0.85))
-            Text("Practice clips").font(.chalkScript(26)).foregroundColor(Chalk.chalk)
-            Text("Record and save highlight clips while he practices — same clip button, no game needed.")
-                .font(.system(size: 14)).foregroundColor(Chalk.dust).multilineTextAlignment(.center).padding(.horizontal, 16)
-            ChalkButton(title: "Start recording", icon: "record.circle", color: Chalk.coral, filled: true) { appState.startPractice() }
-                .padding(.top, 4)
+        VStack(spacing: 16) {
+            ChalkButton(title: "Record a practice clip", icon: "record.circle", color: Chalk.coral, filled: true) {
+                appState.startPractice()
+            }
+
+            if practiceGroups.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "film.stack").font(.system(size: 40)).foregroundColor(Chalk.coral.opacity(0.85))
+                    Text("No practice clips yet").font(.chalkScript(24)).foregroundColor(Chalk.chalk)
+                    Text("Tap record above to bank a highlight while he works out — same clip button, no game needed.")
+                        .font(.system(size: 14)).foregroundColor(Chalk.dust)
+                        .multilineTextAlignment(.center).padding(.horizontal, 16)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 24)
+                .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
+            } else {
+                ForEach(practiceGroups) { group in practiceSessionCard(group) }
+            }
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 30)
+    }
+
+    /// One practice session: date + a horizontal strip of tap-to-play clip thumbnails.
+    private func practiceSessionCard(_ group: HighlightGroup) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(group.date.formatted(.dateTime.month(.abbreviated).day()))
+                    .font(.system(size: 15, weight: .semibold)).foregroundColor(Chalk.chalk)
+                if let label = group.label, !label.isEmpty {
+                    Text(label).font(.system(size: 12)).foregroundColor(Chalk.sky).lineLimit(1)
+                }
+                Spacer()
+                Text("\(group.clips.count) clip\(group.clips.count == 1 ? "" : "s")")
+                    .font(.system(size: 11)).foregroundColor(Chalk.dust)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(group.clips) { clip in
+                        Button {
+                            clipToPlay = PlayerItem(url: clip.url, caption: "Practice")
+                        } label: {
+                            ClipThumbnail(url: clip.url)
+                                .frame(width: 132, height: 74)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 26)).foregroundColor(.white.opacity(0.9)).shadow(radius: 3))
+                                .overlay(RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(14)
         .background(Chalk.board2, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Chalk.chalk.opacity(0.15), lineWidth: 1))
     }

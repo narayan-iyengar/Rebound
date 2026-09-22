@@ -60,7 +60,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8B4AE4952F2057DD005F206B"
             BuildableName = "SahilStatsLiteWatch Watch App.app"
-            BlueprintName = "SahilStatsLiteWatch Watch App"
             ReferencedContainer = "container:SahilStatsLite.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -77,7 +76,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8B4AE4952F2057DD005F206B"
             BuildableName = "SahilStatsLiteWatch Watch App.app"
-            BlueprintName = "SahilStatsLiteWatch Watch App"
             ReferencedContainer = "container:SahilStatsLite.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

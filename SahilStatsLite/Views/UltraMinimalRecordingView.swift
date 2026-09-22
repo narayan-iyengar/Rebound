@@ -1728,8 +1728,16 @@ struct UltraMinimalRecordingView: View {
 
                     // 1. Save to Photos (WAIT for completion)
                     debugPrint("📹 Starting save to Photos...")
-                    photosSaved = await saveVideoToPhotosAsync(url: url)
+                    let photoAssetId = await saveVideoToPhotosAsync(url: url)
+                    photosSaved = photoAssetId != nil
                     debugPrint("📹 Photos save: \(photosSaved ? "SUCCESS" : "FAILED")")
+                    // Persist the Photos asset id so the log can auto-restore this game's
+                    // video from Photos if the local Documents copy is ever purged.
+                    if let photoAssetId, let gameId = appState.currentGame?.id,
+                       var g = persistenceManager.savedGames.first(where: { $0.id == gameId }) {
+                        g.photoAssetId = photoAssetId
+                        await MainActor.run { persistenceManager.saveGame(g) }
+                    }
                     if !photosSaved {
                         await MainActor.run {
                             appState.photosSaveFailureMessage = "Video saved to the app but NOT to Photos. Check Photos permissions in Settings. Local copy is preserved — upload it from Game Log."
@@ -1768,30 +1776,34 @@ struct UltraMinimalRecordingView: View {
         }
     }
 
-    private func saveVideoToPhotosAsync(url: URL) async -> Bool {
+    /// Saves the recording to Photos and returns its Photos localIdentifier (nil on failure),
+    /// which we persist on the game so the log can auto-restore the file from Photos later.
+    private func saveVideoToPhotosAsync(url: URL) async -> String? {
         // First check if file exists
         guard FileManager.default.fileExists(atPath: url.path) else {
             debugPrint("📹 Video file doesn't exist at: \(url.path)")
-            return false
+            return nil
         }
 
         return await withCheckedContinuation { continuation in
             PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
                 guard status == .authorized || status == .limited else {
                     debugPrint("📹 Photo library access denied: \(status.rawValue)")
-                    continuation.resume(returning: false)
+                    continuation.resume(returning: nil)
                     return
                 }
 
+                var placeholder: PHObjectPlaceholder?
                 PHPhotoLibrary.shared().performChanges {
-                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    let req = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    placeholder = req?.placeholderForCreatedAsset
                 } completionHandler: { success, error in
                     if success {
-                        debugPrint("📹 Video saved to Photos successfully")
+                        debugPrint("📹 Video saved to Photos (asset \(placeholder?.localIdentifier ?? "?"))")
                     } else if let error = error {
                         debugPrint("📹 Failed to save video: \(error.localizedDescription)")
                     }
-                    continuation.resume(returning: success)
+                    continuation.resume(returning: success ? placeholder?.localIdentifier : nil)
                 }
             }
         }

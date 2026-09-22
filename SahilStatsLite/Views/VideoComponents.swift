@@ -101,8 +101,33 @@ struct VideoPlayerSheet: View {
                 .padding(.bottom, 28)
             }
         }
-        .onAppear { player = AVPlayer(url: url) }
+        .onAppear {
+            activatePlaybackAudio()
+            let p = AVPlayer(url: url)
+            p.isMuted = false
+            player = p
+        }
         .onDisappear { player?.pause() }
+        // Recording/clip-buffering can leave the shared session in a record mode, and
+        // route/interruption changes can hand it away mid-play (audio plays for a second,
+        // then goes silent). Reclaim .playback whenever that happens and keep playing.
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
+            activatePlaybackAudio()
+            player?.play()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in
+            activatePlaybackAudio()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.mediaServicesWereResetNotification)) { _ in
+            activatePlaybackAudio()
+            player?.play()
+        }
+    }
+
+    private func activatePlaybackAudio() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback)
+        try? session.setActive(true)
     }
 }
 

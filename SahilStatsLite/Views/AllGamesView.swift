@@ -57,6 +57,8 @@ struct AllGamesView: View {
     @State private var selectedGameForDetail: Game? = nil
     @State private var gameToDelete: Game? = nil
     @State private var showDeleteConfirmation = false
+    @State private var playerItem: PlayerItem? = nil     // in-app full-game playback from a row
+    @State private var reconciledFailedUploads = false    // one YouTube reconcile per appearance session
 
     // Filters
     @State private var selectedFilter: GameFilter = .all
@@ -180,6 +182,33 @@ struct AllGamesView: View {
 
     private func teamColor(_ name: String) -> Color { TeamPalette.color(for: name) }
 
+    /// Self-heal false upload failures without opening each game. A background upload can
+    /// succeed on YouTube but land back as ".failed" (id never captured if the app was
+    /// backgrounded during the final handoff). Once per appearance, ask YouTube whether each
+    /// such game's title is actually up; if so, flip it to uploaded with the real id. Only
+    /// touches ".failed" games with no id (normally zero or a handful), so it's quota-cheap.
+    private func reconcileFailedUploads() async {
+        guard !reconciledFailedUploads else { return }
+        reconciledFailedUploads = true
+        let candidates = persistenceManager.savedGames.filter {
+            $0.youtubeStatus == .failed && $0.youtubeVideoId == nil
+        }
+        guard !candidates.isEmpty else { return }
+        for g in candidates {
+            let title = "\(g.teamName) vs \(g.opponent) - \(g.date.formatted(date: .abbreviated, time: .omitted))"
+            if let vid = await YouTubeService.shared.findUploadedVideoId(title: title) {
+                await MainActor.run {
+                    // Re-read the live game in case it changed while we searched.
+                    guard var live = persistenceManager.savedGames.first(where: { $0.id == g.id }) else { return }
+                    live.youtubeVideoId = vid
+                    live.youtubeStatus = .uploaded
+                    persistenceManager.saveGame(live)
+                    debugPrint("📺 [reconcile] \(g.opponent) was actually uploaded — \(vid)")
+                }
+            }
+        }
+    }
+
     /// When shown as a page in the home pager (not a sheet): no nav wrapper, no Done.
     var embedded: Bool = false
 
@@ -192,7 +221,7 @@ struct AllGamesView: View {
         navWrap {
             VStack(spacing: 0) {
                 HStack {
-                    Text("All Games")
+                    Text("Games")
                         .font(.chalkScript(30))
                         .foregroundColor(Chalk.chalk)
                     Spacer()
@@ -281,6 +310,10 @@ struct AllGamesView: View {
             .sheet(item: $selectedGameForDetail) { game in
                 GameDetailSheet(gameId: game.id)
             }
+            .fullScreenCover(item: $playerItem) { item in
+                VideoPlayerSheet(url: item.url, caption: item.caption)
+            }
+            .task { await reconcileFailedUploads() }
             .alert("Delete Game?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) { gameToDelete = nil }
                 Button("Delete", role: .destructive) {
@@ -421,8 +454,9 @@ struct AllGamesView: View {
     }
 
     private func singleGameRow(_ game: Game) -> some View {
-        Button { selectedGameForDetail = game } label: { GameRow(game: game) }
-            .buttonStyle(.plain)
+        GameRow(game: game,
+                onPlayLocal: { url in playerItem = PlayerItem(url: url, caption: game.scoreString) },
+                onOpen: { selectedGameForDetail = game })
             .contextMenu { gameContextMenu(game) }
     }
 

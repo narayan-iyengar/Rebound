@@ -132,10 +132,11 @@ class OverlayRenderer: @unchecked Sendable {
         context.setFillColor(CGColor(red: 0.3, green: 0.3, blue: 0.35, alpha: 1.0))
         context.fill(CGRect(x: dividerX, y: bugY + 6 * scale, width: 1 * scale, height: totalHeight - 12 * scale))
 
-        // Period (top right section)
+        // Period (top right section) — game-state DATA, so crisp system font like the clock
+        // (the hand font went soft/blurry at this small size). Uppercased for a clean board.
         let periodRect = CGRect(x: dividerX + 6 * scale, y: homeRowY, width: timeWidth - 12 * scale, height: rowHeight)
-        drawText(s.period, in: periodRect, context: context,
-                 fontSize: 13 * scale, color: UIColor(white: 0.85, alpha: 1.0), bold: true, alignment: .center, chalk: true)
+        drawText(s.period.uppercased(), in: periodRect, context: context,
+                 fontSize: 14 * scale, color: UIColor(white: 0.85, alpha: 1.0), bold: true, alignment: .center)
 
         // === AWAY TEAM ROW (BOTTOM) ===
         let awayRowY = bugY + rowHeight

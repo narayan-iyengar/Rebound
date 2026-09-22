@@ -2,10 +2,12 @@
 //  GameRow.swift
 //  SahilStatsLite
 //
-//  PURPOSE: Game log row component showing result indicator, opponent, team name,
-//           date, score, YouTube status, and Sahil's points.
+//  PURPOSE: Game log row — a VISUAL row: a tap-to-play court thumbnail on the left
+//           (plays the local file, or opens YouTube when the local copy is freed), then
+//           result + matchup + team · date and a compact score · pts · clips meta line.
+//           Tapping the thumbnail plays; tapping the text opens the game detail.
 //  KEY TYPES: GameRow
-//  DEPENDS ON: Game
+//  DEPENDS ON: Game, HighlightStore, ClipThumbnail, VideoPlayerSheet
 //
 //  NOTE: Keep this header updated when modifying this file.
 //
@@ -64,79 +66,165 @@ enum AdaptiveTimeSection {
 
 struct GameRow: View {
     let game: Game
+    /// Play the local file in an in-app player (owner presents the sheet).
+    var onPlayLocal: ((URL) -> Void)? = nil
+    /// Open the game detail page (stats, clips, management).
+    var onOpen: (() -> Void)? = nil
+
+    private var localVideo: URL? { Self.resolveLocal(game) }
+    private var playable: Bool { localVideo != nil || game.youtubeVideoId != nil }
+    private var clipCount: Int { HighlightStore.shared.clips(forGameId: game.id).count }
+    private var badgeColor: Color { game.isWin ? Chalk.green : Chalk.coral }
 
     var body: some View {
-        HStack {
-            // Result badge — matches the W/L totals up top: Win = green, Loss = coral.
-            let badgeColor = game.isWin ? Chalk.green : Chalk.coral
-            Text(game.resultString)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(badgeColor)
-                .frame(width: 30, height: 30)
-                .overlay(Circle().strokeBorder(badgeColor.opacity(0.6), lineWidth: 1.5))
+        HStack(spacing: 12) {
+            thumbnail
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("vs \(game.opponent)")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Chalk.chalk)
-
-                if !game.teamName.isEmpty {
-                    Text(game.teamName)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(Chalk.sky)
+            Button { onOpen?() } label: {
+                HStack(spacing: 6) {
+                    info
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Chalk.dust)
                 }
-
-                Text(game.date, style: .date)
-                    .font(.system(size: 12))
-                    .foregroundColor(Chalk.dust)
-
-                // Video available (recorded/imported locally or on YouTube).
-                if game.videoURL != nil || game.youtubeStatus == .uploaded || game.youtubeVideoId != nil {
-                    HStack(spacing: 3) {
-                        Image(systemName: "play.rectangle.fill").font(.system(size: 9))
-                        Text("Full game").font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundColor(Chalk.coral)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Chalk.coral.opacity(0.14), in: Capsule())
-                    .padding(.top, 1)
-                }
+                .contentShape(Rectangle())
             }
-
-            Spacer()
-
-            // Score and points (crisp data)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(game.scoreString)
-                    .font(.system(size: 20, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundColor(Chalk.crisp)
-
-                HStack(spacing: 4) {
-                    if game.youtubeStatus == .uploading {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    } else if game.youtubeStatus == .uploaded {
-                        Image(systemName: "checkmark.icloud.fill")
-                            .font(.caption2)
-                            .foregroundColor(Chalk.green)
-                    } else if game.youtubeStatus == .failed {
-                        Image(systemName: "exclamationmark.icloud.fill")
-                            .font(.caption2)
-                            .foregroundColor(Chalk.coral)
-                    }
-
-                    Text("\(game.playerStats.points) pts")
-                        .font(.system(size: 13, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundColor(Chalk.yellow)
-                }
-            }
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(Chalk.dust)
+            .buttonStyle(.plain)
         }
         .chalkCard()
+    }
+
+    // MARK: Thumbnail (tap to play)
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        ZStack {
+            if let localVideo {
+                ClipThumbnail(url: localVideo)
+            } else if playable || game.youtubeStatus == .uploaded {
+                LinearGradient(colors: [Chalk.board, Chalk.board2],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            } else {
+                Chalk.board2
+            }
+
+            if playable {
+                Color.black.opacity(0.18)
+                Circle().fill(.white.opacity(0.92)).frame(width: 38, height: 38)
+                    .overlay(Image(systemName: "play.fill").font(.system(size: 15))
+                        .foregroundColor(.black.opacity(0.85)).offset(x: 1))
+                if let d = durationText {
+                    VStack { Spacer(); HStack { Spacer()
+                        Text(d).font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 4))
+                    } }.padding(5)
+                }
+                // Corner hint when the only source is YouTube (local copy freed).
+                if localVideo == nil, game.youtubeVideoId != nil {
+                    VStack { HStack { Spacer()
+                        Image(systemName: "play.rectangle.fill").font(.system(size: 12)).foregroundColor(.white.opacity(0.9))
+                    } ; Spacer() }.padding(5)
+                }
+            } else {
+                Image(systemName: "film").font(.system(size: 20)).foregroundColor(Chalk.dust.opacity(0.5))
+            }
+        }
+        .frame(width: 124, height: 74)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Chalk.chalk.opacity(0.12), lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .onTapGesture { play() }
+    }
+
+    // MARK: Info
+
+    private var info: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(game.resultString)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(badgeColor)
+                    .frame(width: 26, height: 26)
+                    .overlay(Circle().strokeBorder(badgeColor.opacity(0.6), lineWidth: 1.5))
+                Text("vs \(game.opponent)")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(Chalk.chalk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            Text(subLine)
+                .font(.system(size: 14))
+                .foregroundColor(Chalk.dust)
+                .lineLimit(1)
+
+            HStack(spacing: 8) {
+                Text(game.scoreString)
+                    .font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                    .foregroundColor(Chalk.crisp)
+                dot
+                Text("\(game.playerStats.points) pts")
+                    .font(.system(size: 15, weight: .medium)).monospacedDigit()
+                    .foregroundColor(Chalk.yellow)
+                if clipCount > 0 {
+                    dot
+                    HStack(spacing: 3) {
+                        Image(systemName: "scissors").font(.system(size: 12))
+                        Text("\(clipCount)").font(.system(size: 15, weight: .medium)).monospacedDigit()
+                    }
+                    .foregroundColor(Chalk.dust)
+                }
+                if game.youtubeStatus == .uploading {
+                    dot
+                    HStack(spacing: 4) {
+                        ProgressView().scaleEffect(0.6).tint(Chalk.sky)
+                        Text("Uploading").font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(Chalk.sky)
+                } else if game.youtubeStatus == .uploaded {
+                    Image(systemName: "checkmark.icloud.fill").font(.system(size: 14)).foregroundColor(Chalk.green)
+                } else if game.youtubeStatus == .failed {
+                    Image(systemName: "exclamationmark.icloud.fill").font(.system(size: 14)).foregroundColor(Chalk.coral)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private var dot: some View {
+        Text("·").font(.system(size: 14)).foregroundColor(Chalk.dust.opacity(0.7))
+    }
+
+    private var subLine: String {
+        let d = game.date.formatted(.dateTime.month(.abbreviated).day())
+        return game.teamName.isEmpty ? d : "\(game.teamName) · \(d)"
+    }
+
+    private var durationText: String? {
+        guard let dur = game.videoDuration, dur > 0 else { return nil }
+        let s = Int(dur.rounded()); let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
+    }
+
+    private func play() {
+        if let localVideo {
+            onPlayLocal?(localVideo)
+        } else if let vid = game.youtubeVideoId, let u = URL(string: "https://youtu.be/\(vid)") {
+            UIApplication.shared.open(u)
+        } else {
+            onOpen?()
+        }
+    }
+
+    /// Resolve the on-disk video, tolerating a moved Documents container (same as the detail sheet).
+    static func resolveLocal(_ game: Game) -> URL? {
+        guard let url = game.videoURL else { return nil }
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let alt = docs.appendingPathComponent(url.lastPathComponent)
+        return FileManager.default.fileExists(atPath: alt.path) ? alt : nil
     }
 }

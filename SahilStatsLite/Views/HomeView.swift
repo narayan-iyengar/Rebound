@@ -25,7 +25,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showUpcomingGames = false
 
-    // Home-screen-style paging: Game Setup · Career Stats · Game Log · Store · Settings
+    // Home-screen-style paging: Home · Stats · Practice · Games · Settings
     @State private var page = 0
 
     // Undo toast state
@@ -40,8 +40,7 @@ struct HomeView: View {
             boardPage(CareerStatsSheet(embedded: true)).tag(1)
             boardPage(PracticeStatsView()).tag(2)
             boardPage(AllGamesView(embedded: true)).tag(3)
-            boardPage(StoreView()).tag(4)
-            boardPage(SettingsView(embedded: true).chalkBoard()).tag(5)
+            boardPage(SettingsView(embedded: true).chalkBoard()).tag(4)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .background(Chalk.board.ignoresSafeArea())
@@ -109,11 +108,10 @@ struct HomeView: View {
     /// can see what you're swiping toward (instead of anonymous dots/chevrons).
     static func pageIcon(_ index: Int) -> String {
         switch index {
-        case 0: return "basketball.fill"      // Game Setup / home
+        case 0: return "basketball.fill"      // Home / setup
         case 1: return "chart.bar.fill"       // Career Stats
         case 2: return "figure.basketball"    // Practice
-        case 3: return "list.bullet.clipboard" // Game Log
-        case 4: return "film.stack"           // Store
+        case 3: return "list.bullet.clipboard" // Games (log + clips)
         default: return "gearshape.fill"      // Settings
         }
     }
@@ -124,8 +122,7 @@ struct HomeView: View {
         case 0: return "Home"
         case 1: return "Stats"
         case 2: return "Practice"
-        case 3: return "Log"
-        case 4: return "Store"
+        case 3: return "Games"
         default: return "Settings"
         }
     }
@@ -134,10 +131,15 @@ struct HomeView: View {
     /// icon+label pill, the others recede to subtle icon hints. Every page stays one tap away.
     private var pageBar: some View {
         HStack(spacing: 6) {
-            ForEach(0..<6, id: \.self) { i in
+            ForEach(0..<5, id: \.self) { i in
                 let active = (i == page)
                 Button {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) { page = i }
+                    // Jump straight to the tapped page. A .page-style TabView animates its
+                    // selection by scrolling THROUGH every page in between (tab 1→5 flickers
+                    // past 2,3,4). Disabling the transaction's animation snaps directly;
+                    // swipes still animate one page at a time as normal.
+                    var t = Transaction(); t.disablesAnimations = true
+                    withTransaction(t) { page = i }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: Self.pageIcon(i))

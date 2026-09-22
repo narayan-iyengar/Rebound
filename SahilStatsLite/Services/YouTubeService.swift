@@ -278,6 +278,27 @@ class YouTubeService: NSObject, ObservableObject {
     }
 
     /// Delete a video from YouTube (used to remove inferior stream recording after 4K upload).
+    /// Recover a previously-uploaded video's id by searching the user's own uploads by title.
+    /// For games uploaded before we started persisting youtubeVideoId → restores their
+    /// "Watch on YouTube" link without a re-upload.
+    func findUploadedVideoId(title: String) async -> String? {
+        guard let token = try? await getFreshAccessToken() else { return nil }
+        let q = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title
+        guard let url = URL(string: "https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&maxResults=10&q=\(q)") else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]] else { return nil }
+        func videoId(_ item: [String: Any]) -> String? { (item["id"] as? [String: Any])?["videoId"] as? String }
+        // Prefer an exact title match, else the top result.
+        for item in items {
+            if let snip = item["snippet"] as? [String: Any], (snip["title"] as? String) == title,
+               let vid = videoId(item) { return vid }
+        }
+        return items.first.flatMap(videoId)
+    }
+
     func deleteVideo(videoId: String) async {
         guard let token = try? await getFreshAccessToken() else { return }
         var req = URLRequest(url: URL(string: "https://www.googleapis.com/youtube/v3/videos?id=\(videoId)")!)

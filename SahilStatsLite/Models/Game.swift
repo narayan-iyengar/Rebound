@@ -88,6 +88,10 @@ struct Game: Identifiable, Codable {
     // Video
     var videoURL: URL?
     var videoDuration: TimeInterval?
+    /// Photos library localIdentifier of the saved recording. Lets us auto-restore the
+    /// local file from Photos when the Documents copy is missing (e.g. storage pressure
+    /// after several big games), so the game log links without a manual Photos pick.
+    var photoAssetId: String?
 
     // Score timeline for overlay
     var scoreEvents: [ScoreEvent] = []
