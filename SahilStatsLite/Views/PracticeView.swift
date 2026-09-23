@@ -110,6 +110,12 @@ struct PracticeView: View {
             }
         }
         .onDisappear {
+            // If a clip is still recording its forward window, CUT it so it finalizes and
+            // saves (pre-roll + whatever forward footage we have) — otherwise the disarm
+            // below would discard the in-flight clip and it'd look like it "wasn't saved".
+            // stopClip() is a no-op if nothing is exporting; ordering on the clip queue
+            // guarantees this finalize runs before disarm's teardown.
+            recordingManager.stopClip()
             recordingManager.stopClipBuffering()
             recordingManager.stopSession()
             recordingManager.isPracticeSession = false

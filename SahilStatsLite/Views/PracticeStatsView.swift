@@ -180,6 +180,7 @@ struct PracticeStatsView: View {
     @State private var entryDate: Date? = nil
     @State private var trendSpot: ShotSpot? = nil
     @State private var clipToPlay: PlayerItem? = nil
+    @State private var clipToDelete: Highlight? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -225,6 +226,23 @@ struct PracticeStatsView: View {
         }
         .fullScreenCover(item: $clipToPlay) { item in
             VideoPlayerSheet(url: item.url, caption: item.caption)
+        }
+        .confirmationDialog("Delete this clip?",
+                            isPresented: Binding(get: { clipToDelete != nil },
+                                                 set: { if !$0 { clipToDelete = nil } }),
+                            titleVisibility: .visible) {
+            if let clip = clipToDelete {
+                // App-only delete keeps the Photos copy as backup (manual-cleanup ethos).
+                Button("Delete clip", role: .destructive) {
+                    highlightStore.delete(clip); clipToDelete = nil
+                }
+                Button("Delete clip + Photos copy", role: .destructive) {
+                    highlightStore.delete(clip, fromPhotos: true); clipToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { clipToDelete = nil }
+        } message: {
+            Text("The clip stays in your Photos unless you choose to remove it there too.")
         }
     }
 
@@ -358,6 +376,12 @@ struct PracticeStatsView: View {
                                     .stroke(Chalk.chalk.opacity(0.18), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
+                        // Long-press a clip to delete it (mirrors the game log's clip actions).
+                        .contextMenu {
+                            Button(role: .destructive) { clipToDelete = clip } label: {
+                                Label("Delete Clip", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }

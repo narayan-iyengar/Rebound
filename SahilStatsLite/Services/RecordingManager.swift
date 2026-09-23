@@ -99,6 +99,16 @@ class RecordingManager: NSObject, ObservableObject {
     nonisolated(unsafe) var isPracticeSession = false
     nonisolated(unsafe) var clipLabel: String? = nil   // freeform tag for practice clips (location/drill)
 
+    /// Snapshot of the tagging context taken when a clip is TRIGGERED — used at save
+    /// time instead of the live flags above. The file finalizes asynchronously (~15s
+    /// later), by which point leaving the screen may have already cleared the live
+    /// flags; reading them at save time mis-tagged practice clips as game clips (so
+    /// they vanished from Practice ▸ Clips) or split their session group. Captured at
+    /// trigger, one clip at a time, so save time always sees the right context.
+    private nonisolated(unsafe) var pendingIsPractice = false
+    private nonisolated(unsafe) var pendingClipGameId: String? = nil
+    private nonisolated(unsafe) var pendingClipLabel: String? = nil
+
     /// Whether the clip ring should burn the scoreboard overlay in. True for stats-only
     /// games; false for practice (no score to show).
     nonisolated(unsafe) var compositeClipOverlay = true
@@ -140,7 +150,13 @@ class RecordingManager: NSObject, ObservableObject {
             debugPrint("🎬 triggerClip ignored — clip buffer not armed")
             return
         }
-        let forward = UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 15
+        // Snapshot the tagging context NOW (at the tap), not when the file finalizes ~15s
+        // later — otherwise leaving the screen mid-clip clears the live flags first and the
+        // saved clip is mis-tagged (see pendingIsPractice/…).
+        pendingIsPractice = isPracticeSession
+        pendingClipGameId = currentClipGameId
+        pendingClipLabel = clipLabel
+        let forward = UserDefaults.standard.object(forKey: "clipForwardLength") as? Int ?? 20
         clipBuffer.startClip(forwardSeconds: Double(forward))
         // Independent main-thread failsafe: the ring's own stop runs on its capture queue,
         // which can get starved under writer backpressure and let a clip run away (the
@@ -187,9 +203,11 @@ class RecordingManager: NSObject, ObservableObject {
     /// Called (off-main) when a clip file is finalized: save to Photos + record it.
     nonisolated private func handleClipSaved(_ url: URL) {
         let s = overlayRenderer.state
-        let gameId = currentClipGameId
-        let practice = isPracticeSession
-        let label = clipLabel
+        // Use the context captured at trigger time (see triggerClip) — the live flags may
+        // have been cleared by leaving the screen while this clip was still finalizing.
+        let gameId = pendingClipGameId
+        let practice = pendingIsPractice
+        let label = pendingClipLabel
         let clipId = UUID()  // shared id so we can attach the Photos asset id below
 
         Task { @MainActor in
