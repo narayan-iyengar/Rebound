@@ -52,7 +52,15 @@ final class GimbalTrackingManager: ObservableObject {
 
     // MARK: - Published Properties
 
-    @Published var gimbalMode: GimbalMode = .track
+    // Persisted across launches so the chosen gimbal mode sticks.
+    static let gimbalModeKey = "gimbalMode"
+    @Published var gimbalMode: GimbalMode = {
+        if let raw = UserDefaults.standard.string(forKey: GimbalTrackingManager.gimbalModeKey),
+           let m = GimbalMode(rawValue: raw) { return m }
+        return .track
+    }() {
+        didSet { UserDefaults.standard.set(gimbalMode.rawValue, forKey: GimbalTrackingManager.gimbalModeKey) }
+    }
     @Published var isTrackingActive: Bool = false
     @Published var isDockKitAvailable: Bool = false
     @Published var lastError: String?

@@ -385,7 +385,15 @@ final class AutoZoomManager: ObservableObject {
 
     // MARK: - Published State
 
-    @Published var mode: AutoZoomMode = .auto
+    // Persisted across launches so turning Skynet off (or on) sticks.
+    static let modeKey = "skynetMode"
+    @Published var mode: AutoZoomMode = {
+        if let raw = UserDefaults.standard.string(forKey: AutoZoomManager.modeKey),
+           let m = AutoZoomMode(rawValue: raw) { return m }
+        return .auto
+    }() {
+        didSet { UserDefaults.standard.set(mode.rawValue, forKey: AutoZoomManager.modeKey) }
+    }
     @Published var isProcessing: Bool = false
     @Published var currentZoom: CGFloat = 1.0
     @Published var targetZoom: CGFloat = 1.0
