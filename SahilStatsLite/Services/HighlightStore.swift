@@ -88,9 +88,20 @@ final class HighlightStore: ObservableObject {
 
     @Published private(set) var highlights: [Highlight] = []
 
-    /// Clips grouped by game session (newest session first), for the Store.
+    /// Clips grouped for the Store (newest first).
+    /// - Game clips group by their game session (`gameId`).
+    /// - Practice clips group by **day + location tag**: all practice clips from the same
+    ///   calendar day AND same tag land in one card; different tags (or tagged vs untagged)
+    ///   stay separate. This is why one day can still show more than one practice card —
+    ///   it means different location tags, not different capture sessions.
     var grouped: [HighlightGroup] {
-        let byGame = Dictionary(grouping: highlights) { $0.gameId ?? $0.id.uuidString }
+        let byGame = Dictionary(grouping: highlights) { (h: Highlight) -> String in
+            if h.isPractice {
+                let loc = h.label?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return "practice|\(Self.dayKey(h.createdAt))|\(loc?.isEmpty == false ? loc! : "—")"
+            }
+            return h.gameId ?? h.id.uuidString
+        }
         return byGame.map { key, clips in
             let sorted = clips.sorted { $0.createdAt > $1.createdAt }
             let anchor = sorted[0]
@@ -107,6 +118,12 @@ final class HighlightStore: ObservableObject {
     }
 
     private let key = "savedHighlights"
+
+    /// Local-calendar day key ("yyyy-MM-dd") used to group practice clips by day.
+    private static let dayKeyFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
+    private static func dayKey(_ date: Date) -> String { dayKeyFormatter.string(from: date) }
 
     private static var highlightsDir: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
