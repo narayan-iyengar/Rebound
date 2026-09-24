@@ -182,29 +182,45 @@ struct AllGamesView: View {
 
     private func teamColor(_ name: String) -> Color { TeamPalette.color(for: name) }
 
-    /// Self-heal false upload failures without opening each game. A background upload can
-    /// succeed on YouTube but land back as ".failed" (id never captured if the app was
-    /// backgrounded during the final handoff). Once per appearance, ask YouTube whether each
-    /// such game's title is actually up; if so, flip it to uploaded with the real id. Only
-    /// touches ".failed" games with no id (normally zero or a handful), so it's quota-cheap.
+    /// Self-heal upload states that no live task will ever resolve. Two cases:
+    ///  • ".failed" with no id — a background upload can succeed on YouTube but land back as
+    ///    ".failed" (id lost if the app was backgrounded during the final handoff).
+    ///  • ".uploading" with no active task — the app was killed/reinstalled mid-upload, so the
+    ///    background task is gone and the game is frozen "uploading" forever (a zombie).
+    /// Once per appearance, ask YouTube whether each such game's title is actually up; if so,
+    /// flip it to uploaded with the real id. If a stuck ".uploading" isn't found on YouTube,
+    /// drop it to ".failed" so the user gets a Retry instead of a spinner that never ends.
+    /// Only touches these id-less games (normally zero or a handful), so it's quota-cheap.
     private func reconcileFailedUploads() async {
         guard !reconciledFailedUploads else { return }
         reconciledFailedUploads = true
-        let candidates = persistenceManager.savedGames.filter {
-            $0.youtubeStatus == .failed && $0.youtubeVideoId == nil
+        let yt = YouTubeService.shared
+        let candidates = persistenceManager.savedGames.filter { g in
+            guard g.youtubeVideoId == nil else { return false }
+            let stuckUploading = g.youtubeStatus == .uploading &&
+                !(yt.isUploading && yt.currentUploadingGameID == g.id)
+            let falseFailed = g.youtubeStatus == .failed
+            return stuckUploading || falseFailed
         }
         guard !candidates.isEmpty else { return }
         for g in candidates {
             let title = "\(g.teamName) vs \(g.opponent) - \(g.date.formatted(date: .abbreviated, time: .omitted))"
-            if let vid = await YouTubeService.shared.findUploadedVideoId(title: title) {
-                await MainActor.run {
-                    // Re-read the live game in case it changed while we searched.
-                    guard var live = persistenceManager.savedGames.first(where: { $0.id == g.id }) else { return }
+            let vid = await yt.findUploadedVideoId(title: title)
+            await MainActor.run {
+                // Re-read the live game in case it changed while we searched.
+                guard var live = persistenceManager.savedGames.first(where: { $0.id == g.id }) else { return }
+                guard live.youtubeVideoId == nil else { return }
+                if let vid {
                     live.youtubeVideoId = vid
                     live.youtubeStatus = .uploaded
-                    persistenceManager.saveGame(live)
                     debugPrint("📺 [reconcile] \(g.opponent) was actually uploaded — \(vid)")
+                } else if live.youtubeStatus == .uploading {
+                    live.youtubeStatus = .failed   // no live task, not on YouTube → let the user retry
+                    debugPrint("📺 [reconcile] \(g.opponent) was stuck 'uploading' → marked failed for retry")
+                } else {
+                    return  // a genuine .failed we couldn't find — leave it as-is
                 }
+                persistenceManager.saveGame(live)
             }
         }
     }
