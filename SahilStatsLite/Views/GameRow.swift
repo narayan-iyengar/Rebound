@@ -71,6 +71,10 @@ struct GameRow: View {
     /// Open the game detail page (stats, clips, management).
     var onOpen: (() -> Void)? = nil
 
+    // Observe the upload service so a game waiting in the queue shows a clock (and the one
+    // actively uploading shows the bouncing arrow).
+    @ObservedObject private var youtubeService = YouTubeService.shared
+
     private var localVideo: URL? { Self.resolveLocal(game) }
     private var playable: Bool { localVideo != nil || game.youtubeVideoId != nil }
     private var clipCount: Int { HighlightStore.shared.clips(forGameId: game.id).count }
@@ -177,15 +181,14 @@ struct GameRow: View {
                     }
                     .foregroundColor(Chalk.dust)
                 }
-                if game.youtubeStatus == .uploading {
-                    dot
-                    HStack(spacing: 4) {
-                        ProgressView().scaleEffect(0.6).tint(Chalk.sky)
-                        Text("Uploading").font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(Chalk.sky)
+                if youtubeService.queuedGameIDs.contains(game.id) {
+                    // Waiting its turn in the sequential upload queue.
+                    Image(systemName: "clock").font(.system(size: 14, weight: .medium)).foregroundColor(Chalk.sky)
+                } else if game.youtubeStatus == .uploading {
+                    UploadingArrow()
                 } else if game.youtubeStatus == .uploaded {
-                    Image(systemName: "checkmark.icloud.fill").font(.system(size: 14)).foregroundColor(Chalk.green)
+                    // On YouTube — a play glyph reads more like "video's up" than a cloud check.
+                    Image(systemName: "play.rectangle.fill").font(.system(size: 15)).foregroundColor(Chalk.green)
                 } else if game.youtubeStatus == .failed {
                     Image(systemName: "exclamationmark.icloud.fill").font(.system(size: 14)).foregroundColor(Chalk.coral)
                 }
@@ -196,6 +199,19 @@ struct GameRow: View {
 
     private var dot: some View {
         Text("·").font(.system(size: 14)).foregroundColor(Chalk.dust.opacity(0.7))
+    }
+
+    /// A quiet bouncing up-arrow that reads as "uploading" without the wrapping text.
+    private struct UploadingArrow: View {
+        @State private var up = false
+        var body: some View {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(Chalk.sky)
+                .offset(y: up ? -3 : 2)
+                .animation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true), value: up)
+                .onAppear { up = true }
+        }
     }
 
     private var subLine: String {

@@ -291,7 +291,15 @@ struct GameDetailSheet: View {
     /// a Retry — so a failed upload is never silent.
     @ViewBuilder
     private var uploadStatusRow: some View {
-        if youtubeService.isUploading && youtubeService.currentUploadingGameID == game.id {
+        if youtubeService.queuedGameIDs.contains(game.id) {
+            // Waiting its turn behind another upload — no second Upload button.
+            HStack(spacing: 8) {
+                Image(systemName: "clock").foregroundColor(Chalk.sky)
+                Text("Queued for upload…").font(.system(size: 14, weight: .medium)).foregroundColor(Chalk.dust)
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+        } else if youtubeService.isUploading && youtubeService.currentUploadingGameID == game.id {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.up.circle.fill").foregroundColor(Chalk.sky)

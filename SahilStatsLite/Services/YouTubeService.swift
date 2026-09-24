@@ -16,6 +16,9 @@ import Security
 import AVFoundation
 import GoogleSignIn
 import Combine
+import AuthenticationServices
+import CryptoKit
+import UIKit
 
 @MainActor
 class YouTubeService: NSObject, ObservableObject {
@@ -28,7 +31,17 @@ class YouTubeService: NSObject, ObservableObject {
     @Published var lastError: String?
     @Published var currentUploadingGameID: String?
     @Published var completedVideoID: String?
-    
+
+    // Which YouTube channel the current token uploads to — so the user can SEE and
+    // confirm it's "SahilHoops" and not their personal channel. A Google account with
+    // multiple channels picks the target at sign-in; the API can't choose it afterward.
+    @Published var connectedChannelTitle: String?
+    @Published var connectedChannelId: String?
+
+    // Holds the PKCE verifier across the ASWebAuthenticationSession round-trip.
+    private var pkceVerifier: String?
+    private var webAuthSession: ASWebAuthenticationSession?
+
     // Callback for completion (GameID, Success, VideoID?)
     var onUploadCompleted: ((String, Bool, String?) -> Void)?
 
@@ -48,15 +61,164 @@ class YouTubeService: NSObject, ObservableObject {
     // Track current upload task ID to match delegate callbacks
     private var currentTaskID: Int?
 
+    // Sequential upload queue: tapping Upload on several games lines them up and they
+    // upload one after another (safer than parallel 4K uploads over cellular). The
+    // active upload uses isUploading/currentUploadingGameID/uploadProgress above; these
+    // hold the ones still waiting so the UI can show "Queued".
+    struct QueuedUpload: Sendable { let gameID: String; let url: URL; let title: String; let description: String }
+    private var uploadQueue: [QueuedUpload] = []
+    @Published var queuedGameIDs: Set<String> = []
+
     private override init() {
         super.init()
         checkAuthorization()
+        cancelOrphanedUploads()
+    }
+
+    /// Cancel background upload tasks left over from a previous app session (app killed or
+    /// reinstalled mid-upload). Their delegate callbacks otherwise keep updating the shared
+    /// progress — the jumpy 2%→60% — and could even finish an upload to the wrong channel.
+    /// Safe to call once at launch, when no in-app upload is in flight.
+    func cancelOrphanedUploads() {
+        backgroundSession.getAllTasks { [weak self] tasks in
+            guard let self else { return }
+            guard !tasks.isEmpty else { return }
+            for t in tasks { t.cancel() }
+            debugPrint("📺 Cancelled \(tasks.count) orphaned background upload task(s) at launch")
+            Task { @MainActor in
+                self.isUploading = false
+                self.currentUploadingGameID = nil
+                self.uploadProgress = 0
+                self.currentTaskID = nil
+            }
+        }
     }
 
     // MARK: - Authorization
 
     func checkAuthorization() {
         isAuthorized = getKeychainValue(key: accessTokenKey) != nil
+        if isAuthorized { Task { await fetchConnectedChannel() } }
+    }
+
+    // MARK: - Channel-chooser sign-in (independent of the app's Google login)
+    //
+    // The app's Firebase login and YouTube share GIDSignIn.sharedInstance, so signing
+    // out to re-pick a channel would also log the user out of the app. This flow uses a
+    // SEPARATE OAuth web session (ASWebAuthenticationSession + PKCE) so it (a) never
+    // touches the app login, and (b) forces Google's account + CHANNEL chooser every
+    // time (prompt=consent select_account), which is the only way to target a Brand
+    // Account channel like "SahilHoops" instead of the personal default.
+
+    private let oauthScopes = ["https://www.googleapis.com/auth/youtube",
+                               "https://www.googleapis.com/auth/youtube.upload"]
+
+    func authorizeWithChannelChooser() async throws {
+        guard let clientId = getClientId(),
+              let reversed = getReversedClientId() else {
+            throw YouTubeError.invalidConfiguration
+        }
+        let redirectURI = "\(reversed):/oauth2redirect"
+        let callbackScheme = reversed
+
+        let verifier = Self.makeCodeVerifier()
+        pkceVerifier = verifier
+        let challenge = Self.codeChallenge(for: verifier)
+
+        var comps = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
+        comps.queryItems = [
+            .init(name: "client_id", value: clientId),
+            .init(name: "redirect_uri", value: redirectURI),
+            .init(name: "response_type", value: "code"),
+            .init(name: "scope", value: oauthScopes.joined(separator: " ")),
+            .init(name: "code_challenge", value: challenge),
+            .init(name: "code_challenge_method", value: "S256"),
+            .init(name: "access_type", value: "offline"),
+            // Force the account + channel picker and guarantee a refresh token.
+            .init(name: "prompt", value: "consent select_account")
+        ]
+        guard let authURL = comps.url else { throw YouTubeError.invalidConfiguration }
+
+        let callbackURL: URL = try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: callbackScheme) { url, error in
+                if let error = error { continuation.resume(throwing: error); return }
+                guard let url = url else { continuation.resume(throwing: YouTubeError.uploadFailed("Sign-in returned no result")); return }
+                continuation.resume(returning: url)
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false // reuse Google login, just re-pick channel
+            self.webAuthSession = session
+            session.start()
+        }
+
+        guard let code = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "code" })?.value else {
+            throw YouTubeError.uploadFailed("No authorization code returned")
+        }
+
+        try await exchangeCodeForTokens(code: code, verifier: verifier,
+                                        clientId: clientId, redirectURI: redirectURI)
+        isAuthorized = true
+        await fetchConnectedChannel()
+    }
+
+    private func exchangeCodeForTokens(code: String, verifier: String,
+                                       clientId: String, redirectURI: String) async throws {
+        var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var body = URLComponents()
+        body.queryItems = [
+            .init(name: "client_id", value: clientId),
+            .init(name: "code", value: code),
+            .init(name: "code_verifier", value: verifier),
+            .init(name: "grant_type", value: "authorization_code"),
+            .init(name: "redirect_uri", value: redirectURI)
+        ]
+        req.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let access = json["access_token"] as? String else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            throw YouTubeError.uploadFailed("Token exchange failed (\(status)): \(bodyStr.prefix(200))")
+        }
+        // A refresh token only comes back with prompt=consent; keep the old one if absent.
+        let refresh = (json["refresh_token"] as? String) ?? getKeychainValue(key: refreshTokenKey) ?? ""
+        try saveTokens(accessToken: access, refreshToken: refresh)
+    }
+
+    /// Ask YouTube which channel this token belongs to, so the UI can show it and the
+    /// user can confirm it's SahilHoops before uploading.
+    func fetchConnectedChannel() async {
+        guard let token = try? await getFreshAccessToken(),
+              let url = URL(string: "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true") else { return }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]], let first = items.first else { return }
+        connectedChannelId = first["id"] as? String
+        connectedChannelTitle = (first["snippet"] as? [String: Any])?["title"] as? String
+    }
+
+    private func getReversedClientId() -> String? {
+        guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+              let plist = NSDictionary(contentsOfFile: path) else { return nil }
+        return plist["REVERSED_CLIENT_ID"] as? String
+    }
+
+    // MARK: PKCE
+    private static func makeCodeVerifier() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return Data(bytes).base64URLEncodedString()
+    }
+    private static func codeChallenge(for verifier: String) -> String {
+        let hash = SHA256.hash(data: Data(verifier.utf8))
+        return Data(hash).base64URLEncodedString()
     }
 
     func authorize() async throws {
@@ -102,73 +264,110 @@ class YouTubeService: NSObject, ObservableObject {
         deleteKeychainValue(key: refreshTokenKey)
         deleteKeychainValue(key: tokenTimestampKey)
         isAuthorized = false
+        connectedChannelTitle = nil
+        connectedChannelId = nil
     }
 
     // MARK: - Upload
 
+    /// Enqueue a game for upload. If nothing is uploading it starts immediately; otherwise
+    /// it waits its turn and runs when the current one finishes. Tapping Upload on several
+    /// games just queues them.
     func uploadVideo(url: URL, title: String, description: String, gameID: String) async {
         guard isAuthorized else {
             debugPrint("📺 YouTube upload skipped (not authorized)")
             return
         }
+        // De-dupe: ignore if it's already the active upload or already queued.
+        if currentUploadingGameID == gameID || uploadQueue.contains(where: { $0.gameID == gameID }) {
+            debugPrint("📺 \(gameID) already uploading/queued — ignoring duplicate tap")
+            return
+        }
+        uploadQueue.append(QueuedUpload(gameID: gameID, url: url, title: title, description: description))
+        queuedGameIDs.insert(gameID)
+        debugPrint("📺 Queued upload for \(gameID) (\(uploadQueue.count) waiting)")
+        await drainQueue()
+    }
 
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            debugPrint("📺 Video file not found: \(url.path)")
-            lastError = "Video file not found"
+    /// Start the next queued upload if the pipe is free.
+    private func drainQueue() async {
+        guard !isUploading, let item = uploadQueue.first else { return }
+        uploadQueue.removeFirst()
+        queuedGameIDs.remove(item.gameID)
+
+        isUploading = true
+        currentUploadingGameID = item.gameID
+        completedVideoID = nil
+        uploadProgress = 0
+        lastError = nil
+        await performUpload(item)
+    }
+
+    private func performUpload(_ item: QueuedUpload) async {
+        guard FileManager.default.fileExists(atPath: item.url.path) else {
+            failCurrent(item, "Video file not found")
             return
         }
 
-        // Verify file is a playable video before uploading. Catches corrupt MOV
-        // files (truncated MOOV atom from app force-quit mid-write) that would
-        // upload "successfully" but get "Processing abandoned" by YouTube.
-        let asset = AVURLAsset(url: url)
+        // Verify file is a playable video before uploading. Catches corrupt MOV files
+        // (truncated MOOV atom from app force-quit mid-write) that would upload
+        // "successfully" but get "Processing abandoned" by YouTube.
+        let asset = AVURLAsset(url: item.url)
         let isPlayable = (try? await asset.load(.isPlayable)) ?? false
         let duration = (try? await asset.load(.duration)) ?? .zero
         let durationSec = CMTimeGetSeconds(duration)
         guard isPlayable, durationSec.isFinite, durationSec > 1 else {
             debugPrint("📺 Refusing to upload corrupt/empty video (playable=\(isPlayable), duration=\(durationSec)s)")
-            lastError = "Video file is corrupt or empty — recording may have ended unexpectedly. Re-record or recover from Photos."
+            failCurrent(item, "Video file is corrupt or empty — recording may have ended unexpectedly. Re-record or recover from Photos.")
             return
         }
         debugPrint("📺 Pre-upload check OK: duration=\(Int(durationSec))s, playable=\(isPlayable)")
 
-        isUploading = true
-        currentUploadingGameID = gameID
-        completedVideoID = nil
-        uploadProgress = 0
-        lastError = nil
-
         do {
             let accessToken = try await getFreshAccessToken()
-
-            // Step 1: Initialize Resumable Upload (Foreground - fast)
-            let fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as! Int
-            let uploadURL = try await initializeUpload(title: title, description: description, accessToken: accessToken, fileSize: fileSize)
-
-            // Step 2: Start Background Upload
-            startBackgroundUpload(fileURL: url, uploadURL: uploadURL)
-
+            let fileSize = try FileManager.default.attributesOfItem(atPath: item.url.path)[.size] as! Int
+            let uploadURL = try await initializeUpload(title: item.title, description: item.description, accessToken: accessToken, fileSize: fileSize)
+            startBackgroundUpload(fileURL: item.url, uploadURL: uploadURL)
+            // Completion (success/fail) + advancing to the next item happens in the
+            // URLSession delegate (didCompleteWithError).
         } catch {
             debugPrint("📺 Upload failed to start: \(error.localizedDescription)")
-            lastError = error.localizedDescription
-            isUploading = false
-            currentUploadingGameID = nil
+            failCurrent(item, error.localizedDescription)
         }
     }
 
+    /// Mark the current item failed, notify, and move on to the next queued upload so one
+    /// bad file doesn't stall the whole batch.
+    private func failCurrent(_ item: QueuedUpload, _ message: String) {
+        lastError = message
+        isUploading = false
+        currentUploadingGameID = nil
+        currentTaskID = nil
+        uploadProgress = 0
+        onUploadCompleted?(item.gameID, false, nil)
+        Task { await drainQueue() }
+    }
+
     func cancelUpload() {
-        guard let taskID = currentTaskID else { return }
-        backgroundSession.getAllTasks { tasks in
-            if let task = tasks.first(where: { $0.taskIdentifier == taskID }) {
-                task.cancel()
-                debugPrint("📺 Upload cancelled by user")
+        // Cancel the active upload…
+        if let taskID = currentTaskID {
+            backgroundSession.getAllTasks { tasks in
+                if let task = tasks.first(where: { $0.taskIdentifier == taskID }) {
+                    task.cancel()
+                    debugPrint("📺 Upload cancelled by user")
+                }
             }
         }
-        Task { @MainActor in
-            isUploading = false
-            currentUploadingGameID = nil
-            uploadProgress = 0
-        }
+        // …and drop everything still queued (a batch cancel).
+        let cancelledQueued = uploadQueue.map(\.gameID)
+        uploadQueue.removeAll()
+        queuedGameIDs.removeAll()
+        for id in cancelledQueued { onUploadCompleted?(id, false, nil) }
+
+        isUploading = false
+        currentUploadingGameID = nil
+        currentTaskID = nil
+        uploadProgress = 0
     }
 
     // MARK: - Live Broadcast Management
@@ -501,7 +700,11 @@ extension YouTubeService: URLSessionDelegate, URLSessionTaskDelegate, URLSession
     
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
         let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
+        let taskID = task.taskIdentifier
         Task { @MainActor in
+            // Ignore progress from stale/orphaned tasks (e.g. a leftover upload after a
+            // reinstall) — otherwise two tasks fight over one bar and it jumps around.
+            guard taskID == self.currentTaskID else { return }
             self.uploadProgress = progress
         }
     }
@@ -509,13 +712,19 @@ extension YouTubeService: URLSessionDelegate, URLSessionTaskDelegate, URLSession
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         let httpStatus = (task.response as? HTTPURLResponse)?.statusCode ?? 0
         let transportError = error
+        let taskID = task.taskIdentifier
         Task { @MainActor in
+            // A leftover/orphaned task (e.g. cancelled at launch after a reinstall) must not
+            // overwrite the current upload's state or a game's status.
+            if let current = self.currentTaskID, taskID != current { return }
+
             let gameID = self.currentUploadingGameID
             let videoID = self.completedVideoID
 
             self.isUploading = false
             self.currentUploadingGameID = nil
             self.completedVideoID = nil
+            self.currentTaskID = nil
 
             // Real success requires: no transport error + 2xx HTTP status + we got a video ID back.
             // Previously we only checked transport error, so HTTP 4xx (YouTube rejected) and
@@ -544,6 +753,9 @@ extension YouTubeService: URLSessionDelegate, URLSessionTaskDelegate, URLSession
                     self.onUploadCompleted?(id, false, nil)
                 }
             }
+
+            // Advance to the next queued upload, if any.
+            await self.drainQueue()
         }
     }
     
@@ -563,6 +775,29 @@ extension YouTubeService: URLSessionDelegate, URLSessionTaskDelegate, URLSession
         Task { @MainActor in
             // Call completion handler if stored from AppDelegate
         }
+    }
+}
+
+// MARK: - Web auth presentation
+
+extension YouTubeService: ASWebAuthenticationPresentationContextProviding {
+    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        // Must return synchronously on the main thread; grab the current key window.
+        MainActor.assumeIsolated {
+            let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene
+            return scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first ?? ASPresentationAnchor()
+        }
+    }
+}
+
+// MARK: - Base64URL
+
+private extension Data {
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 }
 

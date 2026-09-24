@@ -200,9 +200,22 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(Chalk.green)
-                                Text("YouTube Connected")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(Chalk.chalk)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("YouTube Connected")
+                                        .font(.system(size: 15))
+                                        .foregroundColor(Chalk.chalk)
+                                    // Show WHICH channel uploads land in, so a wrong channel
+                                    // (personal vs SahilHoops) is caught before uploading.
+                                    if let ch = youtubeService.connectedChannelTitle {
+                                        Text("Uploading to: \(ch)")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(Chalk.yellow)
+                                    } else {
+                                        Text("Checking channel…")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Chalk.dust)
+                                    }
+                                }
                                 Spacer()
                                 Button("Disconnect") {
                                     youtubeService.revokeAccess()
@@ -211,15 +224,20 @@ struct SettingsView: View {
                                 .foregroundColor(Chalk.coral)
                             }
                             .listRowBackground(Chalk.board2)
+
+                            // Re-run the chooser to move uploads to a different channel
+                            // (e.g. personal → SahilHoops) without disturbing app sign-in.
+                            Button {
+                                Task { await connectYouTube() }
+                            } label: {
+                                Label("Switch channel", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(Chalk.yellow)
+                            }
+                            .listRowBackground(Chalk.board2)
                         } else {
                             ChalkButton(title: "Connect YouTube", icon: "play.rectangle.fill", color: Chalk.coral) {
-                                Task {
-                                    do {
-                                        try await youtubeService.authorize()
-                                    } catch {
-                                        debugPrint("YouTube auth error: \(error)")
-                                    }
-                                }
+                                Task { await connectYouTube() }
                             }
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
@@ -227,7 +245,7 @@ struct SettingsView: View {
                     } header: {
                         sectionHeader("YouTube")
                     } footer: {
-                        sectionFooter("Connect to upload game videos manually from the Game Log.")
+                        sectionFooter("Uploads go to the channel you pick at sign-in. Choose SahilHoops. If \"Uploading to\" shows the wrong channel, tap Switch channel and pick again — this won't sign you out of the app.")
                     }
 
                     // My Teams Section (for smart opponent detection)
@@ -553,6 +571,10 @@ struct SettingsView: View {
             }
             .chalkBoard()
             .navigationBarHidden(true)
+            .task {
+                // Refresh the connected-channel label whenever Settings opens.
+                if youtubeService.isAuthorized { await youtubeService.fetchConnectedChannel() }
+            }
         }
     }
 
@@ -569,6 +591,16 @@ struct SettingsView: View {
         Text(text)
             .font(.system(size: 12))
             .foregroundColor(Chalk.dust)
+    }
+
+    // MARK: - YouTube
+
+    private func connectYouTube() async {
+        do {
+            try await youtubeService.authorizeWithChannelChooser()
+        } catch {
+            debugPrint("YouTube auth error: \(error)")
+        }
     }
 
     // MARK: - Calendar Selection Helpers
